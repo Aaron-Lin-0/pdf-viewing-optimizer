@@ -1,0 +1,4 @@
+interface:
+  display_name: "Optimize PDFs"
+  short_description: "Remove PDF duplicates and verify unchanged page renders"
+  default_prompt: "Use $optimize-pdfs to optimize the PDFs I specify, preserving their appearance and saving verified copies."

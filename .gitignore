@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+node_modules/
+audit-output/
+dist/
+*.pdf
+*.zip
+*.log
+.env
+.env.*
+!.env.example

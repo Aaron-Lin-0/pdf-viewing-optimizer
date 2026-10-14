@@ -1,0 +1,110 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>PDF optimizer browser verification</title>
+<link rel="stylesheet" href="/modules/pdfjs-dist/web/pdf_viewer.css">
+<style>html,body{margin:0}#container{position:absolute;inset:0;overflow:auto}</style>
+<div id="container"><div id="viewer" class="pdfViewer"></div></div>
+<script type="module">
+import * as pdfjs from '/modules/pdfjs-dist/build/pdf.mjs';
+globalThis.pdfjsLib=pdfjs;
+const {PDFViewer,PDFLinkService,EventBus,RenderingStates}=await import('/modules/pdfjs-dist/web/pdf_viewer.mjs');
+pdfjs.GlobalWorkerOptions.workerSrc='/modules/pdfjs-dist/build/pdf.worker.mjs';
+const params=new URLSearchParams(location.search),which=params.get('which')||'source';
+const send=value=>fetch('/result',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)});
+const assert=(value,message)=>{if(!value)throw new Error(message);};
+let phase='initialization';
+const wait=async fn=>{const started=performance.now();while(!fn()){if(performance.now()-started>300000)throw new Error('Browser rendering timed out: '+phase);await new Promise(r=>setTimeout(r,20));}};
+try{
+  const start=performance.now(),bus=new EventBus(),links=new PDFLinkService({eventBus:bus});
+  const viewer=new PDFViewer({container:document.querySelector('#container'),viewer:document.querySelector('#viewer'),eventBus:bus,linkService:links,imageResourcesPath:'/modules/pdfjs-dist/web/images/',enableScripting:false});
+  links.setViewer(viewer);
+  const finishedText=new Set(),finishedAnnotations=new Set(),layerErrors=[];
+  for(const [name,finished]of [['textlayerrendered',finishedText],['annotationlayerrendered',finishedAnnotations]])bus.on(name,event=>{if(event.error)layerErrors.push(String(event.error));finished.add(event.pageNumber);});
+  let initialized=false;bus.on('pagesinit',()=>{initialized=true;viewer.currentScaleValue='page-width';});
+  const doc=await pdfjs.getDocument({url:'/pdf/'+which,docBaseUrl:location.origin+'/notes.pdf',cMapUrl:'/modules/pdfjs-dist/cmaps/',cMapPacked:true,standardFontDataUrl:'/modules/pdfjs-dist/standard_fonts/',wasmUrl:'/modules/pdfjs-dist/wasm/',iccUrl:'/modules/pdfjs-dist/iccs/',stopAtErrors:true,verbosity:0}).promise;
+  assert(!doc.isPureXfa&&!await doc.hasJSActions(),'Scripted/XFA interaction cannot be verified by this harness; retain the original.');
+  viewer.setDocument(doc);links.setDocument(doc);await wait(()=>initialized);
+  // Mixed page sizes finish loading after pagesinit and can move the scroll anchor.
+  await viewer.pagesPromise;
+  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+  async function settled(number){
+    await wait(()=>viewer.currentPageNumber===number&&viewer.getPageView(number-1).renderingState===RenderingStates.FINISHED);
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+  }
+  const sequence=params.get('pages').split(',').map(Number).filter(p=>p<=doc.numPages);
+  const events=[];
+  for(const number of [...sequence,...sequence.slice().reverse()]){
+    phase='page sequence '+number+' canvas';
+    const t=performance.now();viewer.currentPageNumber=number;
+    await wait(()=>viewer.getPageView(number-1).renderingState===RenderingStates.FINISHED);
+    phase='page sequence '+number+' text/annotation layers';
+    await wait(()=>finishedText.has(number)&&finishedAnnotations.has(number));
+    assert(!layerErrors.length,'Text/annotation layer failed: '+layerErrors.join('; '));
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    events.push({page:number,wall:(performance.now()-t)/1000,textDivs:viewer.getPageView(number-1).div.querySelectorAll('.textLayer span').length,annotationElements:viewer.getPageView(number-1).div.querySelectorAll('.annotationLayer section').length});
+  }
+  const labels=await doc.getPageLabels(),destinations=await doc.getDestinations(),outlines=await doc.getOutline();
+  let tested=0;const bookmarkTrace=[];
+  async function checkOutline(items){for(const item of items||[]){if(item.dest){phase='bookmark '+item.title;const dest=typeof item.dest==='string'?await doc.getDestination(item.dest):item.dest;const target=typeof dest[0]==='object'?await doc.getPageIndex(dest[0])+1:dest[0]+1;await links.goToDestination(item.dest);await settled(target);bookmarkTrace.push({title:item.title,target,destination:[target,...dest.slice(1)],scale:viewer.currentScale});tested++;}await checkOutline(item.items);}}
+  await checkOutline(outlines);
+  const retained=[],interactive=[];
+  for(let number=1;number<=doc.numPages;number++){
+    phase='annotations on page '+number;
+    const page=await doc.getPage(number),annotations=await page.getAnnotations({intent:'display'});
+    for(const a of annotations){if(a.subtype==='Link'){
+      let normalizedDest=null;
+      if(a.dest){const d=typeof a.dest==='string'?await doc.getDestination(a.dest):a.dest;normalizedDest=[typeof d[0]==='object'?await doc.getPageIndex(d[0])+1:d[0]+1,...d.slice(1)];}
+      retained.push({page:number,url:a.url||null,unsafeUrl:a.unsafeUrl||null,dest:normalizedDest,rect:a.rect});
+      if(a.dest&&!a.hidden){const target=normalizedDest[0];viewer.currentPageNumber=number;await settled(number);await wait(()=>viewer.getPageView(number-1).div.querySelector('section[data-annotation-id="'+CSS.escape(a.id)+'"] a'));viewer.getPageView(number-1).div.querySelector('section[data-annotation-id="'+CSS.escape(a.id)+'"] a').click();await settled(target);retained.at(-1).scale=viewer.currentScale;tested++;}
+    }else if(a.subtype==='Text'||a.subtype==='Widget'){
+      const item={page:number,subtype:a.subtype,rect:a.rect,contents:a.contentsObj?.str||'',fieldName:a.fieldName||null,fieldValue:a.fieldValue??null,fieldType:a.fieldType||null,readOnly:!!a.readOnly,hidden:!!a.hidden};
+      if(a.subtype==='Text'&&item.contents&&!a.hidden){
+        viewer.currentPageNumber=number;
+        const selector='section[data-annotation-id="'+CSS.escape(a.id)+'"]';
+        await wait(()=>viewer.getPageView(number-1).div.querySelector(selector));
+        const section=viewer.getPageView(number-1).div.querySelector(selector),trigger=section.matches('.popupTriggerArea')?section:section.querySelector('.popupTriggerArea');
+        assert(trigger,'Comment popup trigger missing');trigger.dispatchEvent(new PointerEvent('pointerenter'));
+        await wait(()=>Array.from(viewer.getPageView(number-1).div.querySelectorAll('.popup')).some(p=>p.textContent.includes(item.contents)&&!p.closest('[hidden]')));
+        trigger.dispatchEvent(new PointerEvent('pointerleave'));item.popupTest=true;
+      }
+      if(['Tx','Ch'].includes(a.fieldType)||a.checkBox||a.radioButton){
+        viewer.currentPageNumber=number;
+        const selector='section[data-annotation-id="'+CSS.escape(a.id)+'"] :is(input,textarea,select)';
+        await wait(()=>viewer.getPageView(number-1).div.querySelector(selector));
+        const input=viewer.getPageView(number-1).div.querySelector(selector);
+        assert(input.disabled===!!a.readOnly,'Field read-only behavior changed');
+        if(a.hidden)assert(getComputedStyle(input).visibility==='hidden','Hidden field became visible');
+        else if(!a.readOnly){
+          if(a.fieldType==='Tx'){
+            input.value='v';input.dispatchEvent(new Event('input',{bubbles:true}));
+            assert(doc.annotationStorage.getValue(a.id,{}).value==='v','Retained text field cannot be edited');
+          }else if(a.fieldType==='Ch'){
+            assert(input.options.length,'Choice field has no options to test');
+            input.selectedIndex=input.options.length-1;input.dispatchEvent(new Event('input',{bubbles:true}));
+            const value=doc.annotationStorage.getValue(a.id,{}).value;
+            assert((Array.isArray(value)?value:[value]).includes(input.value),'Choice field does not retain its selection');
+          }else{
+            if(a.radioButton)input.checked=false;
+            input.click();
+            assert(doc.annotationStorage.getValue(a.id,{}).value===input.checked,'Button field does not retain its state');
+          }
+          item.editTest=true;
+        }else item.readOnlyTest=true;
+      }
+      interactive.push(item);
+    }}
+  }
+  async function snapshot(page,config){const viewport=page.getViewport({scale:1404/page.getViewport({scale:1}).width}),canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);await page.render({canvasContext:canvas.getContext('2d'),viewport,optionalContentConfigPromise:Promise.resolve(config)}).promise;const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',pixels))).map(b=>b.toString(16).padStart(2,'0')).join('');canvas.width=canvas.height=0;return hash;}
+  const cfg=await doc.getOptionalContentConfig(),groups=Array.from(cfg),layers=[];
+  for(let number=1;number<=doc.numPages&&groups.length;number++){
+    const page=await doc.getPage(number);
+    for(const [id,group]of groups){
+      const config=await doc.getOptionalContentConfig();config.setVisibility(id,false);
+      const offHash=await snapshot(page,config);config.setVisibility(id,true);
+      layers.push({page:number,name:group.name,offHash,onHash:await snapshot(page,config)});
+    }
+  }
+  await send({ok:true,which,version:pdfjs.version,pages:doc.numPages,wall:(performance.now()-start)/1000,events,bookmarkAndQuickLinkTargetsTested:tested,bookmarkTrace,interactive,labels,destinationNames:Object.keys(destinations),links:retained,layers});
+  await doc.destroy();
+}catch(error){await send({ok:false,which,error:String(error.message)+'\n'+String(error.stack||error)});}
+</script>

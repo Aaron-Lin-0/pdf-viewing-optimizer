@@ -1,0 +1,5516 @@
+{
+  "date": "2026-10-14",
+  "regression_tests": 72,
+  "real_published_pages_rechecked": 84,
+  "generated_matrix_pages": 27,
+  "interactive_fixture_pages": 3,
+  "environment": {
+    "platform": "Windows",
+    "browser": "Zen 1.23.2b",
+    "pdfjs": "5.6.205",
+    "pypdf": "6.10.0",
+    "pypdfium2": "5.14.0",
+    "PyMuPDF": "1.28.2",
+    "Pillow": "12.3.0",
+    "canvas": "0.1.100"
+  },
+  "corpus": {
+    "ME303": {
+      "summary": {
+        "pages": [
+          1,
+          7,
+          14,
+          29
+        ],
+        "before": {
+          "1": {
+            "cpu": 0.375,
+            "cold": 0.2365725,
+            "cached": 0.05778459999999996
+          },
+          "7": {
+            "cpu": 0.719,
+            "cold": 0.48022599999999993,
+            "cached": 0.12962310000000002
+          },
+          "14": {
+            "cpu": 7.422,
+            "cold": 6.2188207,
+            "cached": 1.7111000999999997
+          },
+          "29": {
+            "cpu": 5.406,
+            "cold": 4.297617,
+            "cached": 0.3928158999999996
+          }
+        },
+        "after": {
+          "1": {
+            "cpu": 0.312,
+            "cold": 0.1753392,
+            "cached": 0.05519279999999998
+          },
+          "7": {
+            "cpu": 0.485,
+            "cold": 0.33473300000000006,
+            "cached": 0.11897900000000004
+          },
+          "14": {
+            "cpu": 7.077,
+            "cold": 5.7363997,
+            "cached": 1.6472372999999998
+          },
+          "29": {
+            "cpu": 5.218,
+            "cold": 4.143411700000001,
+            "cached": 0.37778690000000004
+          }
+        },
+        "cold_cpu_reduction": 0.059617870995546496,
+        "latency_regression": false,
+        "source_bytes": 165860136,
+        "output_bytes": 75167115
+      },
+      "source_sha256": "2b808f28cbad7fee7be686bf65d8474517706dd39060277ea48a5cbb3a136440",
+      "output_sha256": "41596e516398187771e5e5a8a7709cc742175240555bcda6812d2a118c6f2be3",
+      "measurements": [
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1601853,
+            "cpu": 0.172
+          },
+          "rss": 401444864,
+          "cold": {
+            "wall": 0.24082900000000002,
+            "cpu": 0.437
+          },
+          "ready": {
+            "wall": 0.40182400000000007,
+            "cpu": 0.609
+          },
+          "cached": {
+            "wall": 0.062315100000000026,
+            "cpu": 0.078
+          },
+          "pixelHash": "30ff0bd62075956f847b03d060106c0240b7d924f612012ac4f9b918a8b79370",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.15993419999999997,
+            "cpu": 0.251
+          },
+          "rss": 320839680,
+          "annotations": {
+            "wall": 0.0004762999999999806,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.14075080000000004,
+            "cpu": 0.218
+          },
+          "operators": 20033,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09598460000000003,
+            "cpu": 0.109
+          },
+          "rss": 294985728,
+          "cold": {
+            "wall": 0.18044889999999997,
+            "cpu": 0.312
+          },
+          "ready": {
+            "wall": 0.27714779999999994,
+            "cpu": 0.421
+          },
+          "cached": {
+            "wall": 0.05548079999999999,
+            "cpu": 0.079
+          },
+          "pixelHash": "30ff0bd62075956f847b03d060106c0240b7d924f612012ac4f9b918a8b79370",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.0970695,
+            "cpu": 0.141
+          },
+          "rss": 194289664,
+          "annotations": {
+            "wall": 0.00046469999999999346,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.062312999999999986,
+            "cpu": 0.124
+          },
+          "operators": 18789,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.0956883,
+            "cpu": 0.094
+          },
+          "rss": 295399424,
+          "cold": {
+            "wall": 0.1753392,
+            "cpu": 0.344
+          },
+          "ready": {
+            "wall": 0.2719379,
+            "cpu": 0.438
+          },
+          "cached": {
+            "wall": 0.05537010000000003,
+            "cpu": 0.047
+          },
+          "pixelHash": "30ff0bd62075956f847b03d060106c0240b7d924f612012ac4f9b918a8b79370",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09627030000000002,
+            "cpu": 0.14
+          },
+          "rss": 194023424,
+          "annotations": {
+            "wall": 0.0005419999999999732,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.06120889999999997,
+            "cpu": 0.125
+          },
+          "operators": 18789,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.15888689999999997,
+            "cpu": 0.235
+          },
+          "rss": 401305600,
+          "cold": {
+            "wall": 0.24225260000000004,
+            "cpu": 0.343
+          },
+          "ready": {
+            "wall": 0.4019452,
+            "cpu": 0.578
+          },
+          "cached": {
+            "wall": 0.058575799999999956,
+            "cpu": 0.079
+          },
+          "pixelHash": "30ff0bd62075956f847b03d060106c0240b7d924f612012ac4f9b918a8b79370",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.15627790000000003,
+            "cpu": 0.203
+          },
+          "rss": 319610880,
+          "annotations": {
+            "wall": 0.00048200000000002776,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.14155789999999996,
+            "cpu": 0.234
+          },
+          "operators": 20033,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.16125959999999998,
+            "cpu": 0.219
+          },
+          "rss": 401018880,
+          "cold": {
+            "wall": 0.2365725,
+            "cpu": 0.453
+          },
+          "ready": {
+            "wall": 0.398552,
+            "cpu": 0.672
+          },
+          "cached": {
+            "wall": 0.05778459999999996,
+            "cpu": 0.062
+          },
+          "pixelHash": "30ff0bd62075956f847b03d060106c0240b7d924f612012ac4f9b918a8b79370",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1564593,
+            "cpu": 0.234
+          },
+          "rss": 318578688,
+          "annotations": {
+            "wall": 0.0004626999999999839,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.14424190000000003,
+            "cpu": 0.298
+          },
+          "operators": 20033,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.0983967,
+            "cpu": 0.125
+          },
+          "rss": 295104512,
+          "cold": {
+            "wall": 0.18305670000000004,
+            "cpu": 0.312
+          },
+          "ready": {
+            "wall": 0.28218669999999996,
+            "cpu": 0.437
+          },
+          "cached": {
+            "wall": 0.05519279999999998,
+            "cpu": 0.063
+          },
+          "pixelHash": "30ff0bd62075956f847b03d060106c0240b7d924f612012ac4f9b918a8b79370",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09389270000000002,
+            "cpu": 0.139
+          },
+          "rss": 194392064,
+          "annotations": {
+            "wall": 0.0004297000000000253,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.06150650000000002,
+            "cpu": 0.173
+          },
+          "operators": 18789,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 7,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1607738,
+            "cpu": 0.267
+          },
+          "rss": 450383872,
+          "cold": {
+            "wall": 0.48022599999999993,
+            "cpu": 0.796
+          },
+          "ready": {
+            "wall": 0.6418752,
+            "cpu": 1.063
+          },
+          "cached": {
+            "wall": 0.12962310000000002,
+            "cpu": 0.156
+          },
+          "pixelHash": "dea52a45c3b08c25eb3abe04e16fa54fbd65ff2400f4cd607a0246fe4db55a89",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 7,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1594523,
+            "cpu": 0.218
+          },
+          "rss": 383959040,
+          "annotations": {
+            "wall": 0.0005215000000000032,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.33960999999999997,
+            "cpu": 0.641
+          },
+          "operators": 51115,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 7,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09452529999999999,
+            "cpu": 0.141
+          },
+          "rss": 363311104,
+          "cold": {
+            "wall": 0.3377155,
+            "cpu": 0.485
+          },
+          "ready": {
+            "wall": 0.43373690000000004,
+            "cpu": 0.626
+          },
+          "cached": {
+            "wall": 0.11408650000000001,
+            "cpu": 0.124
+          },
+          "pixelHash": "dea52a45c3b08c25eb3abe04e16fa54fbd65ff2400f4cd607a0246fe4db55a89",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 7,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09238309999999998,
+            "cpu": 0.109
+          },
+          "rss": 230227968,
+          "annotations": {
+            "wall": 0.0004227999999999952,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.13389119999999996,
+            "cpu": 0.25
+          },
+          "operators": 48063,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 7,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.10105929999999998,
+            "cpu": 0.156
+          },
+          "rss": 363503616,
+          "cold": {
+            "wall": 0.33744509999999994,
+            "cpu": 0.563
+          },
+          "ready": {
+            "wall": 0.4392945,
+            "cpu": 0.719
+          },
+          "cached": {
+            "wall": 0.11914769999999998,
+            "cpu": 0.171
+          },
+          "pixelHash": "dea52a45c3b08c25eb3abe04e16fa54fbd65ff2400f4cd607a0246fe4db55a89",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 7,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.0966865,
+            "cpu": 0.109
+          },
+          "rss": 229568512,
+          "annotations": {
+            "wall": 0.00043959999999998445,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.13514189999999995,
+            "cpu": 0.251
+          },
+          "operators": 48063,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 7,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.15453119999999998,
+            "cpu": 0.187
+          },
+          "rss": 448786432,
+          "cold": {
+            "wall": 0.4863766,
+            "cpu": 0.812
+          },
+          "ready": {
+            "wall": 0.6416648,
+            "cpu": 0.999
+          },
+          "cached": {
+            "wall": 0.13235530000000006,
+            "cpu": 0.156
+          },
+          "pixelHash": "dea52a45c3b08c25eb3abe04e16fa54fbd65ff2400f4cd607a0246fe4db55a89",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 7,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.15968890000000002,
+            "cpu": 0.203
+          },
+          "rss": 375881728,
+          "annotations": {
+            "wall": 0.00044849999999996726,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.2958743,
+            "cpu": 0.484
+          },
+          "operators": 51115,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 7,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.15983619999999998,
+            "cpu": 0.172
+          },
+          "rss": 449916928,
+          "cold": {
+            "wall": 0.48274390000000006,
+            "cpu": 0.718
+          },
+          "ready": {
+            "wall": 0.6433591,
+            "cpu": 0.89
+          },
+          "cached": {
+            "wall": 0.13379539999999998,
+            "cpu": 0.188
+          },
+          "pixelHash": "dea52a45c3b08c25eb3abe04e16fa54fbd65ff2400f4cd607a0246fe4db55a89",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 7,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.16065739999999998,
+            "cpu": 0.219
+          },
+          "rss": 374509568,
+          "annotations": {
+            "wall": 0.0005321999999999889,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.29416710000000007,
+            "cpu": 0.515
+          },
+          "operators": 51115,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 7,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.0981334,
+            "cpu": 0.124
+          },
+          "rss": 362557440,
+          "cold": {
+            "wall": 0.33473300000000006,
+            "cpu": 0.454
+          },
+          "ready": {
+            "wall": 0.43368019999999996,
+            "cpu": 0.578
+          },
+          "cached": {
+            "wall": 0.11897900000000004,
+            "cpu": 0.187
+          },
+          "pixelHash": "dea52a45c3b08c25eb3abe04e16fa54fbd65ff2400f4cd607a0246fe4db55a89",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 7,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09789590000000004,
+            "cpu": 0.204
+          },
+          "rss": 229584896,
+          "annotations": {
+            "wall": 0.000501199999999983,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.13740300000000003,
+            "cpu": 0.25
+          },
+          "operators": 48063,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 14,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.16461320000000002,
+            "cpu": 0.296
+          },
+          "rss": 1468805120,
+          "cold": {
+            "wall": 6.5868663,
+            "cpu": 7.454
+          },
+          "ready": {
+            "wall": 6.7522529,
+            "cpu": 7.75
+          },
+          "cached": {
+            "wall": 1.7644895999999999,
+            "cpu": 1.765
+          },
+          "pixelHash": "8e75afcf1d9570ca08e21402cb9a2652703b6cb59b2e1764a2ef898f2e9cdaa5",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 14,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1577112,
+            "cpu": 0.188
+          },
+          "rss": 1262284800,
+          "annotations": {
+            "wall": 0.0004682999999999993,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 4.386449299999999,
+            "cpu": 5.501
+          },
+          "operators": 483697,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 14,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.0964699,
+            "cpu": 0.094
+          },
+          "rss": 1417990144,
+          "cold": {
+            "wall": 6.0048523000000005,
+            "cpu": 7.126
+          },
+          "ready": {
+            "wall": 6.1022321999999996,
+            "cpu": 7.22
+          },
+          "cached": {
+            "wall": 1.6586275000000006,
+            "cpu": 1.718
+          },
+          "pixelHash": "8e75afcf1d9570ca08e21402cb9a2652703b6cb59b2e1764a2ef898f2e9cdaa5",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 14,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09605670000000001,
+            "cpu": 0.093
+          },
+          "rss": 1208422400,
+          "annotations": {
+            "wall": 0.0004211999999999989,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 4.0535179,
+            "cpu": 5.173
+          },
+          "operators": 475171,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 14,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.10105009999999999,
+            "cpu": 0.142
+          },
+          "rss": 1459212288,
+          "cold": {
+            "wall": 6.1180851,
+            "cpu": 7.077
+          },
+          "ready": {
+            "wall": 6.2200939,
+            "cpu": 7.219
+          },
+          "cached": {
+            "wall": 1.6691800000000003,
+            "cpu": 1.719
+          },
+          "pixelHash": "8e75afcf1d9570ca08e21402cb9a2652703b6cb59b2e1764a2ef898f2e9cdaa5",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 14,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09564999999999997,
+            "cpu": 0.125
+          },
+          "rss": 1218777088,
+          "annotations": {
+            "wall": 0.0004510999999999967,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 4.0652494,
+            "cpu": 5.281
+          },
+          "operators": 475171,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 14,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.15993269999999998,
+            "cpu": 0.219
+          },
+          "rss": 1541931008,
+          "cold": {
+            "wall": 6.4987303,
+            "cpu": 7.422
+          },
+          "ready": {
+            "wall": 6.6594555,
+            "cpu": 7.656
+          },
+          "cached": {
+            "wall": 1.7111000999999997,
+            "cpu": 1.672
+          },
+          "pixelHash": "8e75afcf1d9570ca08e21402cb9a2652703b6cb59b2e1764a2ef898f2e9cdaa5",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 14,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1652676,
+            "cpu": 0.25
+          },
+          "rss": 1265029120,
+          "annotations": {
+            "wall": 0.0004738999999999578,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 4.395671999999999,
+            "cpu": 5.906
+          },
+          "operators": 483697,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 14,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1509441,
+            "cpu": 0.249
+          },
+          "rss": 1475866624,
+          "cold": {
+            "wall": 6.1797597,
+            "cpu": 7.282
+          },
+          "ready": {
+            "wall": 6.3314908999999995,
+            "cpu": 7.531
+          },
+          "cached": {
+            "wall": 1.6570337,
+            "cpu": 1.75
+          },
+          "pixelHash": "8e75afcf1d9570ca08e21402cb9a2652703b6cb59b2e1764a2ef898f2e9cdaa5",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 14,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1524922,
+            "cpu": 0.235
+          },
+          "rss": 1295872000,
+          "annotations": {
+            "wall": 0.00045420000000001435,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 4.196803399999999,
+            "cpu": 5.452
+          },
+          "operators": 483697,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 14,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.08990429999999998,
+            "cpu": 0.109
+          },
+          "rss": 1460514816,
+          "cold": {
+            "wall": 5.7363997,
+            "cpu": 7
+          },
+          "ready": {
+            "wall": 5.8270916999999995,
+            "cpu": 7.109
+          },
+          "cached": {
+            "wall": 1.5843509999999996,
+            "cpu": 1.609
+          },
+          "pixelHash": "8e75afcf1d9570ca08e21402cb9a2652703b6cb59b2e1764a2ef898f2e9cdaa5",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 14,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.0918947,
+            "cpu": 0.141
+          },
+          "rss": 1172066304,
+          "annotations": {
+            "wall": 0.0004192999999999927,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 3.8836572,
+            "cpu": 5.359
+          },
+          "operators": 475171,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 29,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1536688,
+            "cpu": 0.187
+          },
+          "rss": 1340407808,
+          "cold": {
+            "wall": 4.3331694,
+            "cpu": 5.391
+          },
+          "ready": {
+            "wall": 4.4876173,
+            "cpu": 5.578
+          },
+          "cached": {
+            "wall": 0.3928158999999996,
+            "cpu": 0.406
+          },
+          "pixelHash": "ee289baba4ebfbdc60aaf10fca164316922815bb5cc0cd77da69b95a43a00b7d",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 29,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1558036,
+            "cpu": 0.249
+          },
+          "rss": 1097674752,
+          "annotations": {
+            "wall": 0.0004350999999999772,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 3.9526384,
+            "cpu": 4.797
+          },
+          "operators": 190260,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 29,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09377419999999997,
+            "cpu": 0.125
+          },
+          "rss": 1128677376,
+          "cold": {
+            "wall": 4.143411700000001,
+            "cpu": 5.218
+          },
+          "ready": {
+            "wall": 4.2379892,
+            "cpu": 5.343
+          },
+          "cached": {
+            "wall": 0.3812478000000001,
+            "cpu": 0.423
+          },
+          "pixelHash": "ee289baba4ebfbdc60aaf10fca164316922815bb5cc0cd77da69b95a43a00b7d",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 29,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09141450000000001,
+            "cpu": 0.109
+          },
+          "rss": 1085620224,
+          "annotations": {
+            "wall": 0.0004202999999999975,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 3.700065,
+            "cpu": 4.672
+          },
+          "operators": 186519,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 29,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09173060000000001,
+            "cpu": 0.171
+          },
+          "rss": 1214222336,
+          "cold": {
+            "wall": 4.164936199999999,
+            "cpu": 5.204
+          },
+          "ready": {
+            "wall": 4.2574176,
+            "cpu": 5.375
+          },
+          "cached": {
+            "wall": 0.3745729000000001,
+            "cpu": 0.406
+          },
+          "pixelHash": "ee289baba4ebfbdc60aaf10fca164316922815bb5cc0cd77da69b95a43a00b7d",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 29,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.08864699999999999,
+            "cpu": 0.157
+          },
+          "rss": 1091739648,
+          "annotations": {
+            "wall": 0.0004305999999999983,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 3.6721741,
+            "cpu": 4.375
+          },
+          "operators": 186519,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 29,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1496945,
+            "cpu": 0.188
+          },
+          "rss": 1334628352,
+          "cold": {
+            "wall": 4.376007500000001,
+            "cpu": 5.14
+          },
+          "ready": {
+            "wall": 4.526516,
+            "cpu": 5.328
+          },
+          "cached": {
+            "wall": 0.4048110999999999,
+            "cpu": 0.422
+          },
+          "pixelHash": "ee289baba4ebfbdc60aaf10fca164316922815bb5cc0cd77da69b95a43a00b7d",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 29,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1546355,
+            "cpu": 0.203
+          },
+          "rss": 1134882816,
+          "annotations": {
+            "wall": 0.00044959999999997537,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 3.8089917000000004,
+            "cpu": 4.827
+          },
+          "operators": 190260,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 29,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.15263509999999997,
+            "cpu": 0.188
+          },
+          "rss": 1430036480,
+          "cold": {
+            "wall": 4.273619100000001,
+            "cpu": 5.531
+          },
+          "ready": {
+            "wall": 4.427078299999999,
+            "cpu": 5.719
+          },
+          "cached": {
+            "wall": 0.38772429999999986,
+            "cpu": 0.39
+          },
+          "pixelHash": "ee289baba4ebfbdc60aaf10fca164316922815bb5cc0cd77da69b95a43a00b7d",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 29,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.14722890000000002,
+            "cpu": 0.234
+          },
+          "rss": 1172127744,
+          "annotations": {
+            "wall": 0.0005346000000000117,
+            "cpu": 0.016,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 3.8372093,
+            "cpu": 4.86
+          },
+          "operators": 190260,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 29,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09082370000000001,
+            "cpu": 0.079
+          },
+          "rss": 1245114368,
+          "cold": {
+            "wall": 4.0868437,
+            "cpu": 5.437
+          },
+          "ready": {
+            "wall": 4.1787152,
+            "cpu": 5.563
+          },
+          "cached": {
+            "wall": 0.3687759999999998,
+            "cpu": 0.469
+          },
+          "pixelHash": "ee289baba4ebfbdc60aaf10fca164316922815bb5cc0cd77da69b95a43a00b7d",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 29,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.08958610000000002,
+            "cpu": 0.11
+          },
+          "rss": 1093054464,
+          "annotations": {
+            "wall": 0.00043280000000004294,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 3.588217,
+            "cpu": 4.844
+          },
+          "operators": 186519,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09337440000000001,
+            "cpu": 0.156
+          },
+          "rss": 296013824,
+          "cold": {
+            "wall": 0.17125439999999997,
+            "cpu": 0.266
+          },
+          "ready": {
+            "wall": 0.2653737,
+            "cpu": 0.422
+          },
+          "cached": {
+            "wall": 0.04998479999999995,
+            "cpu": 0.047
+          },
+          "pixelHash": "30ff0bd62075956f847b03d060106c0240b7d924f612012ac4f9b918a8b79370",
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.08931570000000003,
+            "cpu": 0.126
+          },
+          "rss": 193953792,
+          "annotations": {
+            "wall": 0.0004291000000000054,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.060691800000000004,
+            "cpu": 0.077
+          },
+          "operators": 18789,
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1518737,
+            "cpu": 0.172
+          },
+          "rss": 400674816,
+          "cold": {
+            "wall": 0.22956130000000002,
+            "cpu": 0.359
+          },
+          "ready": {
+            "wall": 0.3822071,
+            "cpu": 0.531
+          },
+          "cached": {
+            "wall": 0.05369560000000001,
+            "cpu": 0.062
+          },
+          "pixelHash": "30ff0bd62075956f847b03d060106c0240b7d924f612012ac4f9b918a8b79370",
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1481856,
+            "cpu": 0.219
+          },
+          "rss": 320217088,
+          "annotations": {
+            "wall": 0.00043199999999995954,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.1355944,
+            "cpu": 0.297
+          },
+          "operators": 20033,
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1518605,
+            "cpu": 0.219
+          },
+          "rss": 400982016,
+          "cold": {
+            "wall": 0.22574480000000005,
+            "cpu": 0.375
+          },
+          "ready": {
+            "wall": 0.3782944,
+            "cpu": 0.594
+          },
+          "cached": {
+            "wall": 0.0532772,
+            "cpu": 0.062
+          },
+          "pixelHash": "30ff0bd62075956f847b03d060106c0240b7d924f612012ac4f9b918a8b79370",
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.15870180000000003,
+            "cpu": 0.188
+          },
+          "rss": 319455232,
+          "annotations": {
+            "wall": 0.00044650000000001454,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.1332708,
+            "cpu": 0.218
+          },
+          "operators": 20033,
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.08993430000000001,
+            "cpu": 0.141
+          },
+          "rss": 294522880,
+          "cold": {
+            "wall": 0.16884939999999998,
+            "cpu": 0.234
+          },
+          "ready": {
+            "wall": 0.2595965,
+            "cpu": 0.375
+          },
+          "cached": {
+            "wall": 0.05229570000000001,
+            "cpu": 0.062
+          },
+          "pixelHash": "30ff0bd62075956f847b03d060106c0240b7d924f612012ac4f9b918a8b79370",
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.0924291,
+            "cpu": 0.109
+          },
+          "rss": 193810432,
+          "annotations": {
+            "wall": 0.0004550000000000125,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.05897410000000002,
+            "cpu": 0.11
+          },
+          "operators": 18789,
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 7,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09241409999999999,
+            "cpu": 0.187
+          },
+          "rss": 361873408,
+          "cold": {
+            "wall": 0.3201153,
+            "cpu": 0.5
+          },
+          "ready": {
+            "wall": 0.41328729999999997,
+            "cpu": 0.687
+          },
+          "cached": {
+            "wall": 0.10991189999999995,
+            "cpu": 0.109
+          },
+          "pixelHash": "dea52a45c3b08c25eb3abe04e16fa54fbd65ff2400f4cd607a0246fe4db55a89",
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 7,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09039269999999999,
+            "cpu": 0.172
+          },
+          "rss": 230051840,
+          "annotations": {
+            "wall": 0.0004198999999999842,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.1295929,
+            "cpu": 0.281
+          },
+          "operators": 48063,
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 7,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.14940040000000002,
+            "cpu": 0.172
+          },
+          "rss": 447807488,
+          "cold": {
+            "wall": 0.4546931,
+            "cpu": 0.719
+          },
+          "ready": {
+            "wall": 0.6048619,
+            "cpu": 0.891
+          },
+          "cached": {
+            "wall": 0.12865880000000005,
+            "cpu": 0.125
+          },
+          "pixelHash": "dea52a45c3b08c25eb3abe04e16fa54fbd65ff2400f4cd607a0246fe4db55a89",
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 7,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1537302,
+            "cpu": 0.234
+          },
+          "rss": 380649472,
+          "annotations": {
+            "wall": 0.0004429000000000087,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.27244979999999996,
+            "cpu": 0.423
+          },
+          "operators": 51115,
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 7,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.15033860000000002,
+            "cpu": 0.219
+          },
+          "rss": 446074880,
+          "cold": {
+            "wall": 0.4475937,
+            "cpu": 0.609
+          },
+          "ready": {
+            "wall": 0.5986845000000001,
+            "cpu": 0.828
+          },
+          "cached": {
+            "wall": 0.12769230000000004,
+            "cpu": 0.125
+          },
+          "pixelHash": "dea52a45c3b08c25eb3abe04e16fa54fbd65ff2400f4cd607a0246fe4db55a89",
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 7,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.15115759999999998,
+            "cpu": 0.202
+          },
+          "rss": 379551744,
+          "annotations": {
+            "wall": 0.0005971999999999867,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.27662760000000003,
+            "cpu": 0.469
+          },
+          "operators": 51115,
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 7,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09251659999999998,
+            "cpu": 0.094
+          },
+          "rss": 363503616,
+          "cold": {
+            "wall": 0.3289505,
+            "cpu": 0.484
+          },
+          "ready": {
+            "wall": 0.4224901,
+            "cpu": 0.578
+          },
+          "cached": {
+            "wall": 0.12056720000000007,
+            "cpu": 0.156
+          },
+          "pixelHash": "dea52a45c3b08c25eb3abe04e16fa54fbd65ff2400f4cd607a0246fe4db55a89",
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 7,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.0922823,
+            "cpu": 0.125
+          },
+          "rss": 230395904,
+          "annotations": {
+            "wall": 0.0004270000000000209,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 0.12697570000000002,
+            "cpu": 0.36
+          },
+          "operators": 48063,
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 14,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09202199999999999,
+            "cpu": 0.14
+          },
+          "rss": 1429151744,
+          "cold": {
+            "wall": 5.7111849,
+            "cpu": 7.079
+          },
+          "ready": {
+            "wall": 5.8039946,
+            "cpu": 7.219
+          },
+          "cached": {
+            "wall": 1.5902194,
+            "cpu": 1.625
+          },
+          "pixelHash": "8e75afcf1d9570ca08e21402cb9a2652703b6cb59b2e1764a2ef898f2e9cdaa5",
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 14,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.0901915,
+            "cpu": 0.156
+          },
+          "rss": 1358389248,
+          "annotations": {
+            "wall": 0.00048449999999999703,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 3.8354244000000004,
+            "cpu": 4.64
+          },
+          "operators": 475171,
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 14,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1486544,
+            "cpu": 0.25
+          },
+          "rss": 1472024576,
+          "cold": {
+            "wall": 6.0815237,
+            "cpu": 7.157
+          },
+          "ready": {
+            "wall": 6.2310469,
+            "cpu": 7.407
+          },
+          "cached": {
+            "wall": 1.7620112999999993,
+            "cpu": 1.764
+          },
+          "pixelHash": "8e75afcf1d9570ca08e21402cb9a2652703b6cb59b2e1764a2ef898f2e9cdaa5",
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 14,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.143654,
+            "cpu": 0.265
+          },
+          "rss": 1295642624,
+          "annotations": {
+            "wall": 0.0004411999999999807,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 4.1411014999999995,
+            "cpu": 5.312
+          },
+          "operators": 483697,
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 14,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1513465,
+            "cpu": 0.187
+          },
+          "rss": 1476698112,
+          "cold": {
+            "wall": 6.2188207,
+            "cpu": 7.547
+          },
+          "ready": {
+            "wall": 6.3709613,
+            "cpu": 7.734
+          },
+          "cached": {
+            "wall": 1.6534790999999995,
+            "cpu": 1.719
+          },
+          "pixelHash": "8e75afcf1d9570ca08e21402cb9a2652703b6cb59b2e1764a2ef898f2e9cdaa5",
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 14,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.153782,
+            "cpu": 0.203
+          },
+          "rss": 1267867648,
+          "annotations": {
+            "wall": 0.00044709999999997764,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 4.183895,
+            "cpu": 5.766
+          },
+          "operators": 483697,
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 14,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.0912826,
+            "cpu": 0.126
+          },
+          "rss": 1375969280,
+          "cold": {
+            "wall": 5.7247082,
+            "cpu": 6.875
+          },
+          "ready": {
+            "wall": 5.8167419,
+            "cpu": 7.001
+          },
+          "cached": {
+            "wall": 1.6472372999999998,
+            "cpu": 1.75
+          },
+          "pixelHash": "8e75afcf1d9570ca08e21402cb9a2652703b6cb59b2e1764a2ef898f2e9cdaa5",
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 14,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.10736330000000001,
+            "cpu": 0.156
+          },
+          "rss": 1315700736,
+          "annotations": {
+            "wall": 0.0005731999999999857,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 3.8304745,
+            "cpu": 4.86
+          },
+          "operators": 475171,
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 29,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.0976293,
+            "cpu": 0.203
+          },
+          "rss": 1193586688,
+          "cold": {
+            "wall": 4.1093315,
+            "cpu": 5.391
+          },
+          "ready": {
+            "wall": 4.2078885999999995,
+            "cpu": 5.594
+          },
+          "cached": {
+            "wall": 0.37778690000000004,
+            "cpu": 0.391
+          },
+          "pixelHash": "ee289baba4ebfbdc60aaf10fca164316922815bb5cc0cd77da69b95a43a00b7d",
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 29,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09153040000000001,
+            "cpu": 0.078
+          },
+          "rss": 1108496384,
+          "annotations": {
+            "wall": 0.00044959999999997537,
+            "cpu": 0.016,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 3.5880532,
+            "cpu": 4.515
+          },
+          "operators": 186519,
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 29,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1518302,
+            "cpu": 0.188
+          },
+          "rss": 1355567104,
+          "cold": {
+            "wall": 4.297617,
+            "cpu": 5.719
+          },
+          "ready": {
+            "wall": 4.4501659,
+            "cpu": 5.907
+          },
+          "cached": {
+            "wall": 0.3924271999999992,
+            "cpu": 0.422
+          },
+          "pixelHash": "ee289baba4ebfbdc60aaf10fca164316922815bb5cc0cd77da69b95a43a00b7d",
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 29,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.14805620000000003,
+            "cpu": 0.202
+          },
+          "rss": 1166491648,
+          "annotations": {
+            "wall": 0.0004513999999999783,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 3.7476289,
+            "cpu": 4.954
+          },
+          "operators": 190260,
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 29,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.15117309999999998,
+            "cpu": 0.204
+          },
+          "rss": 1273663488,
+          "cold": {
+            "wall": 4.2813637,
+            "cpu": 5.406
+          },
+          "ready": {
+            "wall": 4.4333461,
+            "cpu": 5.61
+          },
+          "cached": {
+            "wall": 0.40334110000000056,
+            "cpu": 0.437
+          },
+          "pixelHash": "ee289baba4ebfbdc60aaf10fca164316922815bb5cc0cd77da69b95a43a00b7d",
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.pdf",
+          "page": 29,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.15233970000000002,
+            "cpu": 0.188
+          },
+          "rss": 1093152768,
+          "annotations": {
+            "wall": 0.0004379999999999882,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 3.8504751,
+            "cpu": 4.719
+          },
+          "operators": 190260,
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 29,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09097799999999998,
+            "cpu": 0.109
+          },
+          "rss": 1137754112,
+          "cold": {
+            "wall": 4.1546171,
+            "cpu": 5.094
+          },
+          "ready": {
+            "wall": 4.2464163,
+            "cpu": 5.203
+          },
+          "cached": {
+            "wall": 0.3834393999999993,
+            "cpu": 0.391
+          },
+          "pixelHash": "ee289baba4ebfbdc60aaf10fca164316922815bb5cc0cd77da69b95a43a00b7d",
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 303 notes.viewing.pdf",
+          "page": 29,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.0926867,
+            "cpu": 0.126
+          },
+          "rss": 982593536,
+          "annotations": {
+            "wall": 0.00041569999999998685,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 3.6731146,
+            "cpu": 4.453
+          },
+          "operators": 186519,
+          "run": 5
+        }
+      ]
+    },
+    "ME505": {
+      "summary": {
+        "pages": [
+          1,
+          7,
+          29,
+          31
+        ],
+        "before": {
+          "1": {
+            "cpu": 3.141,
+            "cold": 2.3385362,
+            "cached": 0.41408889999999976
+          },
+          "7": {
+            "cpu": 9.109,
+            "cold": 7.341628000000001,
+            "cached": 0.9403378999999995
+          },
+          "29": {
+            "cpu": 8.766,
+            "cold": 7.1478202,
+            "cached": 1.116885799999999
+          },
+          "31": {
+            "cpu": 3.735,
+            "cold": 2.9655956999999997,
+            "cached": 1.0656534000000006
+          }
+        },
+        "after": {
+          "1": {
+            "cpu": 3.156,
+            "cold": 2.1349549999999997,
+            "cached": 0.38892790000000016
+          },
+          "7": {
+            "cpu": 8.468,
+            "cold": 6.9299097000000005,
+            "cached": 0.8471760000000004
+          },
+          "29": {
+            "cpu": 8.156,
+            "cold": 6.4749843,
+            "cached": 1.0210916000000005
+          },
+          "31": {
+            "cpu": 3.077,
+            "cold": 2.4168049000000003,
+            "cached": 1.0278922000000001
+          }
+        },
+        "cold_cpu_reduction": 0.076522160720779,
+        "latency_regression": false,
+        "source_bytes": 259298791,
+        "output_bytes": 105170455
+      },
+      "source_sha256": "d0a490a47b7dd48419ce33e9b3d4242f425db3beab92edea9ca28b84e1a11b49",
+      "output_sha256": "3c310a7c7f2c1cdb910fbd96b2265af22e83600a2f27450d11ce1aa06bc0dd89",
+      "measurements": [
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.2020257,
+            "cpu": 0.313
+          },
+          "rss": 976060416,
+          "cold": {
+            "wall": 2.3317778,
+            "cpu": 3.141
+          },
+          "ready": {
+            "wall": 2.5346575000000002,
+            "cpu": 3.454
+          },
+          "cached": {
+            "wall": 0.41408889999999976,
+            "cpu": 0.468
+          },
+          "pixelHash": "896f50d703543a175066d33477b987b958990c75d83d0503b58f0e112255dd76",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1981073,
+            "cpu": 0.281
+          },
+          "rss": 823652352,
+          "annotations": {
+            "wall": 0.0004338999999999942,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 1.7986849999999999,
+            "cpu": 2.485
+          },
+          "operators": 177274,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1084921,
+            "cpu": 0.156
+          },
+          "rss": 909221888,
+          "cold": {
+            "wall": 2.1349549999999997,
+            "cpu": 3.156
+          },
+          "ready": {
+            "wall": 2.2442169,
+            "cpu": 3.312
+          },
+          "cached": {
+            "wall": 0.4190264000000002,
+            "cpu": 0.47
+          },
+          "pixelHash": "896f50d703543a175066d33477b987b958990c75d83d0503b58f0e112255dd76",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.09798410000000002,
+            "cpu": 0.125
+          },
+          "rss": 730206208,
+          "annotations": {
+            "wall": 0.00038700000000000046,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 1.5404653,
+            "cpu": 1.985
+          },
+          "operators": 173350,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1035855,
+            "cpu": 0.141
+          },
+          "rss": 849575936,
+          "cold": {
+            "wall": 2.0912691,
+            "cpu": 2.937
+          },
+          "ready": {
+            "wall": 2.1956659,
+            "cpu": 3.078
+          },
+          "cached": {
+            "wall": 0.38892790000000016,
+            "cpu": 0.406
+          },
+          "pixelHash": "896f50d703543a175066d33477b987b958990c75d83d0503b58f0e112255dd76",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.10871950000000001,
+            "cpu": 0.125
+          },
+          "rss": 782434304,
+          "annotations": {
+            "wall": 0.0004141999999999939,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 1.6541995,
+            "cpu": 2.344
+          },
+          "operators": 173350,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.20404440000000001,
+            "cpu": 0.203
+          },
+          "rss": 991309824,
+          "cold": {
+            "wall": 2.3527489999999998,
+            "cpu": 3.015
+          },
+          "ready": {
+            "wall": 2.5575072999999997,
+            "cpu": 3.218
+          },
+          "cached": {
+            "wall": 0.41394459999999983,
+            "cpu": 0.438
+          },
+          "pixelHash": "896f50d703543a175066d33477b987b958990c75d83d0503b58f0e112255dd76",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.19420769999999998,
+            "cpu": 0.234
+          },
+          "rss": 911065088,
+          "annotations": {
+            "wall": 0.0004581999999999766,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 1.8125099999999998,
+            "cpu": 2.641
+          },
+          "operators": 177274,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.20000569999999998,
+            "cpu": 0.296
+          },
+          "rss": 1046773760,
+          "cold": {
+            "wall": 2.3385362,
+            "cpu": 3.454
+          },
+          "ready": {
+            "wall": 2.5392339,
+            "cpu": 3.75
+          },
+          "cached": {
+            "wall": 0.41664850000000025,
+            "cpu": 0.406
+          },
+          "pixelHash": "896f50d703543a175066d33477b987b958990c75d83d0503b58f0e112255dd76",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1975164,
+            "cpu": 0.234
+          },
+          "rss": 882544640,
+          "annotations": {
+            "wall": 0.0004429999999999836,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 1.8084065000000002,
+            "cpu": 2.547
+          },
+          "operators": 177274,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.10769150000000002,
+            "cpu": 0.172
+          },
+          "rss": 908013568,
+          "cold": {
+            "wall": 2.1483081000000004,
+            "cpu": 3.156
+          },
+          "ready": {
+            "wall": 2.2567510000000004,
+            "cpu": 3.328
+          },
+          "cached": {
+            "wall": 0.38544470000000003,
+            "cpu": 0.422
+          },
+          "pixelHash": "896f50d703543a175066d33477b987b958990c75d83d0503b58f0e112255dd76",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.10862080000000003,
+            "cpu": 0.157
+          },
+          "rss": 756191232,
+          "annotations": {
+            "wall": 0.00046940000000000734,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 1.6198907999999999,
+            "cpu": 2.39
+          },
+          "operators": 173350,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 7,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.19893210000000003,
+            "cpu": 0.281
+          },
+          "rss": 1955074048,
+          "cold": {
+            "wall": 7.6690071,
+            "cpu": 9.517
+          },
+          "ready": {
+            "wall": 7.868677900000001,
+            "cpu": 9.798
+          },
+          "cached": {
+            "wall": 0.8986521999999996,
+            "cpu": 0.999
+          },
+          "pixelHash": "f94fe28a762bd5a75f948ac9038521f8b027310334eef56f553d473296f22138",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 7,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.2009209,
+            "cpu": 0.266
+          },
+          "rss": 1888026624,
+          "annotations": {
+            "wall": 0.00046680000000003477,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 6.195025800000001,
+            "cpu": 7.39
+          },
+          "operators": 465797,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 7,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1094116,
+            "cpu": 0.124
+          },
+          "rss": 1798381568,
+          "cold": {
+            "wall": 6.966512499999999,
+            "cpu": 8.344
+          },
+          "ready": {
+            "wall": 7.077052000000001,
+            "cpu": 8.468
+          },
+          "cached": {
+            "wall": 0.8471760000000004,
+            "cpu": 0.954
+          },
+          "pixelHash": "f94fe28a762bd5a75f948ac9038521f8b027310334eef56f553d473296f22138",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 7,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.10590120000000001,
+            "cpu": 0.094
+          },
+          "rss": 1560604672,
+          "annotations": {
+            "wall": 0.0004269999999999641,
+            "cpu": 0.016,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 5.9316682,
+            "cpu": 7.297
+          },
+          "operators": 455388,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 7,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.10582319999999999,
+            "cpu": 0.125
+          },
+          "rss": 1791287296,
+          "cold": {
+            "wall": 6.870777599999999,
+            "cpu": 8.563
+          },
+          "ready": {
+            "wall": 6.9773562,
+            "cpu": 8.688
+          },
+          "cached": {
+            "wall": 0.8423074999999999,
+            "cpu": 0.875
+          },
+          "pixelHash": "f94fe28a762bd5a75f948ac9038521f8b027310334eef56f553d473296f22138",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 7,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1118042,
+            "cpu": 0.172
+          },
+          "rss": 1550127104,
+          "annotations": {
+            "wall": 0.0004827999999999975,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 5.8262616,
+            "cpu": 7.501
+          },
+          "operators": 455388,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 7,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.2043036,
+            "cpu": 0.266
+          },
+          "rss": 2018242560,
+          "cold": {
+            "wall": 7.320877500000001,
+            "cpu": 8.937
+          },
+          "ready": {
+            "wall": 7.5260041,
+            "cpu": 9.203
+          },
+          "cached": {
+            "wall": 0.9403378999999995,
+            "cpu": 1.328
+          },
+          "pixelHash": "f94fe28a762bd5a75f948ac9038521f8b027310334eef56f553d473296f22138",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 7,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1988987,
+            "cpu": 0.297
+          },
+          "rss": 1745883136,
+          "annotations": {
+            "wall": 0.00043940000000003464,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 6.2095096,
+            "cpu": 7.672
+          },
+          "operators": 465797,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 7,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.2036601,
+            "cpu": 0.235
+          },
+          "rss": 1997438976,
+          "cold": {
+            "wall": 7.341628000000001,
+            "cpu": 9.109
+          },
+          "ready": {
+            "wall": 7.546010999999999,
+            "cpu": 9.344
+          },
+          "cached": {
+            "wall": 0.9519012999999995,
+            "cpu": 1.25
+          },
+          "pixelHash": "f94fe28a762bd5a75f948ac9038521f8b027310334eef56f553d473296f22138",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 7,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.2002097,
+            "cpu": 0.234
+          },
+          "rss": 1804918784,
+          "annotations": {
+            "wall": 0.000434599999999989,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 6.1975949,
+            "cpu": 7.937
+          },
+          "operators": 465797,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 7,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.10622189999999998,
+            "cpu": 0.141
+          },
+          "rss": 1766379520,
+          "cold": {
+            "wall": 6.9299097000000005,
+            "cpu": 8.468
+          },
+          "ready": {
+            "wall": 7.036879,
+            "cpu": 8.609
+          },
+          "cached": {
+            "wall": 0.9218420000000006,
+            "cpu": 1.391
+          },
+          "pixelHash": "f94fe28a762bd5a75f948ac9038521f8b027310334eef56f553d473296f22138",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 7,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.10701140000000003,
+            "cpu": 0.156
+          },
+          "rss": 1464070144,
+          "annotations": {
+            "wall": 0.0004134999999999991,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 5.798394200000001,
+            "cpu": 6.953
+          },
+          "operators": 455388,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 29,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.20944619999999997,
+            "cpu": 0.25
+          },
+          "rss": 1893736448,
+          "cold": {
+            "wall": 7.1478202,
+            "cpu": 8.766
+          },
+          "ready": {
+            "wall": 7.3580121,
+            "cpu": 9.016
+          },
+          "cached": {
+            "wall": 1.0529222999999992,
+            "cpu": 1.5
+          },
+          "pixelHash": "095fbe9de4a59f46e6dfb4fef73b3970cd92fa501ddb04b1603aaecd5e76a593",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 29,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1996653,
+            "cpu": 0.218
+          },
+          "rss": 1778331648,
+          "annotations": {
+            "wall": 0.0004415000000000191,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 5.551971000000001,
+            "cpu": 7.156
+          },
+          "operators": 489129,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 29,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.10458810000000003,
+            "cpu": 0.109
+          },
+          "rss": 1633611776,
+          "cold": {
+            "wall": 6.4749843,
+            "cpu": 8.156
+          },
+          "ready": {
+            "wall": 6.5803561,
+            "cpu": 8.265
+          },
+          "cached": {
+            "wall": 1.0336264000000002,
+            "cpu": 1.078
+          },
+          "pixelHash": "095fbe9de4a59f46e6dfb4fef73b3970cd92fa501ddb04b1603aaecd5e76a593",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 29,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.10608429999999998,
+            "cpu": 0.156
+          },
+          "rss": 1526423552,
+          "annotations": {
+            "wall": 0.0004104000000000383,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 5.195352799999999,
+            "cpu": 6.61
+          },
+          "operators": 478541,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 29,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.11016410000000001,
+            "cpu": 0.157
+          },
+          "rss": 1706385408,
+          "cold": {
+            "wall": 6.5876357,
+            "cpu": 8.234
+          },
+          "ready": {
+            "wall": 6.698550600000001,
+            "cpu": 8.391
+          },
+          "cached": {
+            "wall": 0.9750129999999999,
+            "cpu": 1.093
+          },
+          "pixelHash": "095fbe9de4a59f46e6dfb4fef73b3970cd92fa501ddb04b1603aaecd5e76a593",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 29,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1072124,
+            "cpu": 0.172
+          },
+          "rss": 1468379136,
+          "annotations": {
+            "wall": 0.0004201999999999657,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 5.3599569,
+            "cpu": 6.797
+          },
+          "operators": 478541,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 29,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.19410349999999998,
+            "cpu": 0.391
+          },
+          "rss": 1870245888,
+          "cold": {
+            "wall": 6.9421017,
+            "cpu": 8.5
+          },
+          "ready": {
+            "wall": 7.1369527,
+            "cpu": 8.891
+          },
+          "cached": {
+            "wall": 1.1273105000000005,
+            "cpu": 1.531
+          },
+          "pixelHash": "095fbe9de4a59f46e6dfb4fef73b3970cd92fa501ddb04b1603aaecd5e76a593",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 29,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1992862,
+            "cpu": 0.25
+          },
+          "rss": 1785790464,
+          "annotations": {
+            "wall": 0.00043360000000001265,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 6.150916199999999,
+            "cpu": 7.859
+          },
+          "operators": 489129,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 29,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.20074940000000002,
+            "cpu": 0.282
+          },
+          "rss": 1879101440,
+          "cold": {
+            "wall": 7.5188592,
+            "cpu": 8.859
+          },
+          "ready": {
+            "wall": 7.7203923,
+            "cpu": 9.141
+          },
+          "cached": {
+            "wall": 1.116885799999999,
+            "cpu": 1.719
+          },
+          "pixelHash": "095fbe9de4a59f46e6dfb4fef73b3970cd92fa501ddb04b1603aaecd5e76a593",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 29,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.19812639999999998,
+            "cpu": 0.266
+          },
+          "rss": 1706901504,
+          "annotations": {
+            "wall": 0.0004594999999999914,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 5.511516,
+            "cpu": 6.952
+          },
+          "operators": 489129,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 29,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.10305960000000002,
+            "cpu": 0.11
+          },
+          "rss": 1534087168,
+          "cold": {
+            "wall": 6.426234099999999,
+            "cpu": 8.047
+          },
+          "ready": {
+            "wall": 6.5300526,
+            "cpu": 8.157
+          },
+          "cached": {
+            "wall": 1.0210916000000005,
+            "cpu": 1.093
+          },
+          "pixelHash": "095fbe9de4a59f46e6dfb4fef73b3970cd92fa501ddb04b1603aaecd5e76a593",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 29,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.10524739999999998,
+            "cpu": 0.156
+          },
+          "rss": 1516363776,
+          "annotations": {
+            "wall": 0.0004175999999999931,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 5.1663003,
+            "cpu": 6.782
+          },
+          "operators": 478541,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 31,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.19819810000000002,
+            "cpu": 0.266
+          },
+          "rss": 1011122176,
+          "cold": {
+            "wall": 2.9555783,
+            "cpu": 3.828
+          },
+          "ready": {
+            "wall": 3.1545137999999997,
+            "cpu": 4.094
+          },
+          "cached": {
+            "wall": 1.0656534000000006,
+            "cpu": 1.093
+          },
+          "pixelHash": "e84bdccb31c11301bf6bbc9679ec9c6537c804f21b2d0a596b997685dbffb9be",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 31,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.19412249999999998,
+            "cpu": 0.235
+          },
+          "rss": 863383552,
+          "annotations": {
+            "wall": 0.00043219999999996616,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 1.4832272,
+            "cpu": 2.093
+          },
+          "operators": 518892,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 31,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.10495039999999997,
+            "cpu": 0.157
+          },
+          "rss": 923353088,
+          "cold": {
+            "wall": 2.4547369,
+            "cpu": 3.077
+          },
+          "ready": {
+            "wall": 2.5609027,
+            "cpu": 3.234
+          },
+          "cached": {
+            "wall": 1.0533536999999997,
+            "cpu": 1.172
+          },
+          "pixelHash": "e84bdccb31c11301bf6bbc9679ec9c6537c804f21b2d0a596b997685dbffb9be",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 31,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1079129,
+            "cpu": 0.11
+          },
+          "rss": 668635136,
+          "annotations": {
+            "wall": 0.0006544999999999845,
+            "cpu": 0.031,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 1.0974395,
+            "cpu": 1.672
+          },
+          "operators": 507302,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 31,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.10682240000000001,
+            "cpu": 0.156
+          },
+          "rss": 922083328,
+          "cold": {
+            "wall": 2.4168049000000003,
+            "cpu": 3.187
+          },
+          "ready": {
+            "wall": 2.5244009000000003,
+            "cpu": 3.343
+          },
+          "cached": {
+            "wall": 1.0278922000000001,
+            "cpu": 1.11
+          },
+          "pixelHash": "e84bdccb31c11301bf6bbc9679ec9c6537c804f21b2d0a596b997685dbffb9be",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 31,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.10463899999999998,
+            "cpu": 0.141
+          },
+          "rss": 668274688,
+          "annotations": {
+            "wall": 0.0006745999999999981,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 1.0827701000000003,
+            "cpu": 1.531
+          },
+          "operators": 507302,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 31,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1959519,
+            "cpu": 0.218
+          },
+          "rss": 1011527680,
+          "cold": {
+            "wall": 2.9655956999999997,
+            "cpu": 3.735
+          },
+          "ready": {
+            "wall": 3.162286,
+            "cpu": 3.953
+          },
+          "cached": {
+            "wall": 1.0695593000000003,
+            "cpu": 1.14
+          },
+          "pixelHash": "e84bdccb31c11301bf6bbc9679ec9c6537c804f21b2d0a596b997685dbffb9be",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 31,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.1969084,
+            "cpu": 0.234
+          },
+          "rss": 859119616,
+          "annotations": {
+            "wall": 0.0004341000000000008,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 1.4789965,
+            "cpu": 1.938
+          },
+          "operators": 518892,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 31,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.20197130000000002,
+            "cpu": 0.25
+          },
+          "rss": 1017094144,
+          "cold": {
+            "wall": 3.0124607,
+            "cpu": 3.703
+          },
+          "ready": {
+            "wall": 3.2151626,
+            "cpu": 3.953
+          },
+          "cached": {
+            "wall": 1.0576033999999994,
+            "cpu": 1.109
+          },
+          "pixelHash": "e84bdccb31c11301bf6bbc9679ec9c6537c804f21b2d0a596b997685dbffb9be",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.pdf",
+          "page": 31,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.20507620000000004,
+            "cpu": 0.266
+          },
+          "rss": 844664832,
+          "annotations": {
+            "wall": 0.0004374000000000251,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 1.5353311,
+            "cpu": 1.89
+          },
+          "operators": 518892,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 31,
+          "mode": "render",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.10645489999999998,
+            "cpu": 0.14
+          },
+          "rss": 919801856,
+          "cold": {
+            "wall": 2.4167462,
+            "cpu": 2.985
+          },
+          "ready": {
+            "wall": 2.5239514999999995,
+            "cpu": 3.125
+          },
+          "cached": {
+            "wall": 1.0188282,
+            "cpu": 1.093
+          },
+          "pixelHash": "e84bdccb31c11301bf6bbc9679ec9c6537c804f21b2d0a596b997685dbffb9be",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "ME 505.viewing.pdf",
+          "page": 31,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1872,
+          "load": {
+            "wall": 0.11081170000000003,
+            "cpu": 0.109
+          },
+          "rss": 684314624,
+          "annotations": {
+            "wall": 0.0004334999999999809,
+            "cpu": 0,
+            "count": 0
+          },
+          "prepare": {
+            "wall": 1.0911544,
+            "cpu": 1.625
+          },
+          "operators": 507302,
+          "run": 3
+        }
+      ]
+    },
+    "Goodnotes": {
+      "summary": {
+        "pages": [
+          1,
+          2,
+          3,
+          6
+        ],
+        "before": {
+          "1": {
+            "cpu": 0.234,
+            "cold": 0.12300119999999998,
+            "cached": 0.021789300000000025
+          },
+          "2": {
+            "cpu": 0.265,
+            "cold": 0.13750420000000002,
+            "cached": 0.023181899999999984
+          },
+          "3": {
+            "cpu": 0.234,
+            "cold": 0.13486889999999999,
+            "cached": 0.022352800000000003
+          },
+          "6": {
+            "cpu": 0.141,
+            "cold": 0.09782399999999998,
+            "cached": 0.018963999999999998
+          }
+        },
+        "after": {
+          "1": {
+            "cpu": 0.218,
+            "cold": 0.12160309999999998,
+            "cached": 0.022316100000000005
+          },
+          "2": {
+            "cpu": 0.265,
+            "cold": 0.1386367,
+            "cached": 0.02335289999999998
+          },
+          "3": {
+            "cpu": 0.219,
+            "cold": 0.13289199999999998,
+            "cached": 0.02235669999999999
+          },
+          "6": {
+            "cpu": 0.188,
+            "cold": 0.0967407,
+            "cached": 0.01900830000000002
+          }
+        },
+        "cold_cpu_reduction": -0.01830663615560635,
+        "latency_regression": false,
+        "source_bytes": 1392571,
+        "output_bytes": 1388783
+      },
+      "source_sha256": "80c06019c20e2a8b573ddce73bdc6100c6b3f7b1c957b7c5962f7c6d8331c1a3",
+      "output_sha256": "654894c215f29f92a8fb38f9f68bae74cebff59300c4fa1ea92ec6ad998c5191",
+      "measurements": [
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.045608500000000024,
+            "cpu": 0.062
+          },
+          "rss": 180989952,
+          "cold": {
+            "wall": 0.11948930000000002,
+            "cpu": 0.25
+          },
+          "ready": {
+            "wall": 0.16576429999999998,
+            "cpu": 0.312
+          },
+          "cached": {
+            "wall": 0.022674300000000015,
+            "cpu": 0.015
+          },
+          "pixelHash": "5fda70ae01477478e4d795615e447ff54d4183329610cafc8d5c0dd79ba98156",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.044840400000000016,
+            "cpu": 0.031
+          },
+          "rss": 119193600,
+          "annotations": {
+            "wall": 0.07616600000000003,
+            "cpu": 0.203,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.02996769999999998,
+            "cpu": 0.062
+          },
+          "operators": 2976,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.046691400000000015,
+            "cpu": 0.047
+          },
+          "rss": 180744192,
+          "cold": {
+            "wall": 0.12160309999999998,
+            "cpu": 0.187
+          },
+          "ready": {
+            "wall": 0.16894979999999998,
+            "cpu": 0.234
+          },
+          "cached": {
+            "wall": 0.022316100000000005,
+            "cpu": 0.047
+          },
+          "pixelHash": "5fda70ae01477478e4d795615e447ff54d4183329610cafc8d5c0dd79ba98156",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04473759999999999,
+            "cpu": 0.063
+          },
+          "rss": 115503104,
+          "annotations": {
+            "wall": 0.0750998,
+            "cpu": 0.14,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.029040500000000007,
+            "cpu": 0.063
+          },
+          "operators": 2976,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04508449999999999,
+            "cpu": 0.046
+          },
+          "rss": 180654080,
+          "cold": {
+            "wall": 0.11896959999999998,
+            "cpu": 0.281
+          },
+          "ready": {
+            "wall": 0.1648183,
+            "cpu": 0.327
+          },
+          "cached": {
+            "wall": 0.022536400000000015,
+            "cpu": 0.016
+          },
+          "pixelHash": "5fda70ae01477478e4d795615e447ff54d4183329610cafc8d5c0dd79ba98156",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.046524299999999984,
+            "cpu": 0.047
+          },
+          "rss": 116367360,
+          "annotations": {
+            "wall": 0.07659429999999998,
+            "cpu": 0.14,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.0301284,
+            "cpu": 0.047
+          },
+          "operators": 2976,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04398230000000001,
+            "cpu": 0.031
+          },
+          "rss": 179830784,
+          "cold": {
+            "wall": 0.1246261,
+            "cpu": 0.157
+          },
+          "ready": {
+            "wall": 0.16927559999999997,
+            "cpu": 0.188
+          },
+          "cached": {
+            "wall": 0.02128340000000003,
+            "cpu": 0.031
+          },
+          "pixelHash": "5fda70ae01477478e4d795615e447ff54d4183329610cafc8d5c0dd79ba98156",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.044721699999999996,
+            "cpu": 0.062
+          },
+          "rss": 116490240,
+          "annotations": {
+            "wall": 0.07908700000000002,
+            "cpu": 0.157,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.02951339999999999,
+            "cpu": 0.063
+          },
+          "operators": 2976,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.046384199999999993,
+            "cpu": 0.078
+          },
+          "rss": 180830208,
+          "cold": {
+            "wall": 0.12227420000000001,
+            "cpu": 0.204
+          },
+          "ready": {
+            "wall": 0.16931529999999997,
+            "cpu": 0.282
+          },
+          "cached": {
+            "wall": 0.021596000000000004,
+            "cpu": 0.015
+          },
+          "pixelHash": "5fda70ae01477478e4d795615e447ff54d4183329610cafc8d5c0dd79ba98156",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04630759999999998,
+            "cpu": 0.032
+          },
+          "rss": 119480320,
+          "annotations": {
+            "wall": 0.0761041,
+            "cpu": 0.125,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.03069569999999999,
+            "cpu": 0.079
+          },
+          "operators": 2976,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.05134870000000001,
+            "cpu": 0.063
+          },
+          "rss": 180105216,
+          "cold": {
+            "wall": 0.1261381,
+            "cpu": 0.171
+          },
+          "ready": {
+            "wall": 0.17831819999999998,
+            "cpu": 0.234
+          },
+          "cached": {
+            "wall": 0.021456799999999988,
+            "cpu": 0.016
+          },
+          "pixelHash": "5fda70ae01477478e4d795615e447ff54d4183329610cafc8d5c0dd79ba98156",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.045927700000000016,
+            "cpu": 0.047
+          },
+          "rss": 116019200,
+          "annotations": {
+            "wall": 0.07722820000000001,
+            "cpu": 0.063,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.028776700000000006,
+            "cpu": 0.125
+          },
+          "operators": 2976,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 2,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04702750000000001,
+            "cpu": 0.063
+          },
+          "rss": 181661696,
+          "cold": {
+            "wall": 0.1371146,
+            "cpu": 0.265
+          },
+          "ready": {
+            "wall": 0.18487579999999998,
+            "cpu": 0.328
+          },
+          "cached": {
+            "wall": 0.02300319999999999,
+            "cpu": 0.016
+          },
+          "pixelHash": "0bc546dd896bf42fff7f4faca4b0336c0db38b050e6540e3a88953468131109f",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 2,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.045963499999999984,
+            "cpu": 0.046
+          },
+          "rss": 116219904,
+          "annotations": {
+            "wall": 0.08604290000000003,
+            "cpu": 0.156,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.032562299999999995,
+            "cpu": 0.094
+          },
+          "operators": 3513,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 2,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.0456294,
+            "cpu": 0.047
+          },
+          "rss": 181854208,
+          "cold": {
+            "wall": 0.14017480000000002,
+            "cpu": 0.313
+          },
+          "ready": {
+            "wall": 0.1866579,
+            "cpu": 0.36
+          },
+          "cached": {
+            "wall": 0.023397899999999992,
+            "cpu": 0.015
+          },
+          "pixelHash": "0bc546dd896bf42fff7f4faca4b0336c0db38b050e6540e3a88953468131109f",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 2,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.045378299999999996,
+            "cpu": 0.062
+          },
+          "rss": 116113408,
+          "annotations": {
+            "wall": 0.08768319999999998,
+            "cpu": 0.126,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.03215660000000003,
+            "cpu": 0.046
+          },
+          "operators": 3513,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 2,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04737439999999998,
+            "cpu": 0.047
+          },
+          "rss": 182038528,
+          "cold": {
+            "wall": 0.136897,
+            "cpu": 0.281
+          },
+          "ready": {
+            "wall": 0.1849944,
+            "cpu": 0.328
+          },
+          "cached": {
+            "wall": 0.022741100000000018,
+            "cpu": 0.016
+          },
+          "pixelHash": "0bc546dd896bf42fff7f4faca4b0336c0db38b050e6540e3a88953468131109f",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 2,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.0455394,
+            "cpu": 0.047
+          },
+          "rss": 116027392,
+          "annotations": {
+            "wall": 0.08525360000000001,
+            "cpu": 0.157,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.03136779999999999,
+            "cpu": 0.077
+          },
+          "operators": 3513,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 2,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04584009999999998,
+            "cpu": 0.047
+          },
+          "rss": 181477376,
+          "cold": {
+            "wall": 0.1377701,
+            "cpu": 0.297
+          },
+          "ready": {
+            "wall": 0.1844053,
+            "cpu": 0.344
+          },
+          "cached": {
+            "wall": 0.02329329999999999,
+            "cpu": 0.016
+          },
+          "pixelHash": "0bc546dd896bf42fff7f4faca4b0336c0db38b050e6540e3a88953468131109f",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 2,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04501849999999999,
+            "cpu": 0.031
+          },
+          "rss": 116137984,
+          "annotations": {
+            "wall": 0.0865059,
+            "cpu": 0.188,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.03304670000000005,
+            "cpu": 0.078
+          },
+          "operators": 3513,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 2,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04741799999999998,
+            "cpu": 0.063
+          },
+          "rss": 181432320,
+          "cold": {
+            "wall": 0.13750420000000002,
+            "cpu": 0.265
+          },
+          "ready": {
+            "wall": 0.1856371,
+            "cpu": 0.343
+          },
+          "cached": {
+            "wall": 0.023181899999999984,
+            "cpu": 0.047
+          },
+          "pixelHash": "0bc546dd896bf42fff7f4faca4b0336c0db38b050e6540e3a88953468131109f",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 2,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04595670000000001,
+            "cpu": 0.063
+          },
+          "rss": 115998720,
+          "annotations": {
+            "wall": 0.09115739999999997,
+            "cpu": 0.187,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.03286869999999999,
+            "cpu": 0.063
+          },
+          "operators": 3513,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 2,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.044798599999999994,
+            "cpu": 0.031
+          },
+          "rss": 181239808,
+          "cold": {
+            "wall": 0.13933969999999998,
+            "cpu": 0.235
+          },
+          "ready": {
+            "wall": 0.18484720000000002,
+            "cpu": 0.266
+          },
+          "cached": {
+            "wall": 0.023900199999999983,
+            "cpu": 0.03
+          },
+          "pixelHash": "0bc546dd896bf42fff7f4faca4b0336c0db38b050e6540e3a88953468131109f",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 2,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04621520000000001,
+            "cpu": 0.062
+          },
+          "rss": 115974144,
+          "annotations": {
+            "wall": 0.0897877,
+            "cpu": 0.109,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.031136300000000006,
+            "cpu": 0.047
+          },
+          "operators": 3513,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 3,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.0458724,
+            "cpu": 0.062
+          },
+          "rss": 180551680,
+          "cold": {
+            "wall": 0.1314199,
+            "cpu": 0.188
+          },
+          "ready": {
+            "wall": 0.17802789999999996,
+            "cpu": 0.25
+          },
+          "cached": {
+            "wall": 0.022091900000000008,
+            "cpu": 0.03
+          },
+          "pixelHash": "4e61e8d57d404989e065d964d4444ecebc41fbf07ab5bcd300670e1749fe1bb6",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 3,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04481050000000002,
+            "cpu": 0.047
+          },
+          "rss": 117223424,
+          "annotations": {
+            "wall": 0.0814224,
+            "cpu": 0.203,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.03135310000000004,
+            "cpu": 0.063
+          },
+          "operators": 3284,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 3,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.0448115,
+            "cpu": 0.062
+          },
+          "rss": 180174848,
+          "cold": {
+            "wall": 0.13289199999999998,
+            "cpu": 0.188
+          },
+          "ready": {
+            "wall": 0.1784011,
+            "cpu": 0.25
+          },
+          "cached": {
+            "wall": 0.02227589999999998,
+            "cpu": 0.031
+          },
+          "pixelHash": "4e61e8d57d404989e065d964d4444ecebc41fbf07ab5bcd300670e1749fe1bb6",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 3,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04379519999999999,
+            "cpu": 0.079
+          },
+          "rss": 115544064,
+          "annotations": {
+            "wall": 0.08007750000000001,
+            "cpu": 0.155,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.030503199999999994,
+            "cpu": 0.063
+          },
+          "operators": 3284,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 3,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04738970000000001,
+            "cpu": 0.063
+          },
+          "rss": 179527680,
+          "cold": {
+            "wall": 0.13292259999999995,
+            "cpu": 0.204
+          },
+          "ready": {
+            "wall": 0.1810348,
+            "cpu": 0.267
+          },
+          "cached": {
+            "wall": 0.022973100000000045,
+            "cpu": 0.015
+          },
+          "pixelHash": "4e61e8d57d404989e065d964d4444ecebc41fbf07ab5bcd300670e1749fe1bb6",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 3,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04641040000000001,
+            "cpu": 0.047
+          },
+          "rss": 115916800,
+          "annotations": {
+            "wall": 0.08030470000000002,
+            "cpu": 0.109,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.029611299999999972,
+            "cpu": 0.016
+          },
+          "operators": 3284,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 3,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04537100000000001,
+            "cpu": 0.047
+          },
+          "rss": 180932608,
+          "cold": {
+            "wall": 0.1323442,
+            "cpu": 0.25
+          },
+          "ready": {
+            "wall": 0.17847449999999998,
+            "cpu": 0.312
+          },
+          "cached": {
+            "wall": 0.022352800000000003,
+            "cpu": 0.016
+          },
+          "pixelHash": "4e61e8d57d404989e065d964d4444ecebc41fbf07ab5bcd300670e1749fe1bb6",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 3,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04819410000000002,
+            "cpu": 0.047
+          },
+          "rss": 116789248,
+          "annotations": {
+            "wall": 0.0793727,
+            "cpu": 0.125,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.031687700000000006,
+            "cpu": 0.078
+          },
+          "operators": 3284,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 3,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.045181299999999994,
+            "cpu": 0.078
+          },
+          "rss": 180596736,
+          "cold": {
+            "wall": 0.13870400000000005,
+            "cpu": 0.234
+          },
+          "ready": {
+            "wall": 0.18459319999999999,
+            "cpu": 0.312
+          },
+          "cached": {
+            "wall": 0.02444490000000002,
+            "cpu": 0.032
+          },
+          "pixelHash": "4e61e8d57d404989e065d964d4444ecebc41fbf07ab5bcd300670e1749fe1bb6",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 3,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04598429999999999,
+            "cpu": 0.048
+          },
+          "rss": 117293056,
+          "annotations": {
+            "wall": 0.07891380000000003,
+            "cpu": 0.125,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.03210300000000001,
+            "cpu": 0.046
+          },
+          "operators": 3284,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 3,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04593530000000001,
+            "cpu": 0.047
+          },
+          "rss": 180604928,
+          "cold": {
+            "wall": 0.1369456,
+            "cpu": 0.281
+          },
+          "ready": {
+            "wall": 0.18360039999999997,
+            "cpu": 0.328
+          },
+          "cached": {
+            "wall": 0.025749700000000018,
+            "cpu": 0.063
+          },
+          "pixelHash": "4e61e8d57d404989e065d964d4444ecebc41fbf07ab5bcd300670e1749fe1bb6",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 3,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04431799999999998,
+            "cpu": 0.048
+          },
+          "rss": 117133312,
+          "annotations": {
+            "wall": 0.08003270000000001,
+            "cpu": 0.156,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.030776800000000038,
+            "cpu": 0.063
+          },
+          "operators": 3284,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 6,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.044849400000000005,
+            "cpu": 0.063
+          },
+          "rss": 170307584,
+          "cold": {
+            "wall": 0.09782399999999998,
+            "cpu": 0.14
+          },
+          "ready": {
+            "wall": 0.14334059999999998,
+            "cpu": 0.203
+          },
+          "cached": {
+            "wall": 0.022685599999999966,
+            "cpu": 0.031
+          },
+          "pixelHash": "980fde17a3464a6b8df3fa058e6cbe242866be8878d5e0905a7e75fce955fc37",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 6,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.0439896,
+            "cpu": 0.047
+          },
+          "rss": 113713152,
+          "annotations": {
+            "wall": 0.05908869999999999,
+            "cpu": 0.093,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.0227637,
+            "cpu": 0.031
+          },
+          "operators": 1594,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 6,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.045089,
+            "cpu": 0.047
+          },
+          "rss": 168640512,
+          "cold": {
+            "wall": 0.09759760000000003,
+            "cpu": 0.25
+          },
+          "ready": {
+            "wall": 0.1434649,
+            "cpu": 0.297
+          },
+          "cached": {
+            "wall": 0.020194500000000004,
+            "cpu": 0.015
+          },
+          "pixelHash": "980fde17a3464a6b8df3fa058e6cbe242866be8878d5e0905a7e75fce955fc37",
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 6,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04531020000000001,
+            "cpu": 0.047
+          },
+          "rss": 113307648,
+          "annotations": {
+            "wall": 0.05610650000000001,
+            "cpu": 0.14,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.02080989999999997,
+            "cpu": 0.062
+          },
+          "operators": 1594,
+          "run": 1
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 6,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.044971000000000004,
+            "cpu": 0.062
+          },
+          "rss": 169062400,
+          "cold": {
+            "wall": 0.0967407,
+            "cpu": 0.157
+          },
+          "ready": {
+            "wall": 0.14239149999999998,
+            "cpu": 0.219
+          },
+          "cached": {
+            "wall": 0.018893500000000018,
+            "cpu": 0.015
+          },
+          "pixelHash": "980fde17a3464a6b8df3fa058e6cbe242866be8878d5e0905a7e75fce955fc37",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 6,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04657330000000002,
+            "cpu": 0.047
+          },
+          "rss": 113217536,
+          "annotations": {
+            "wall": 0.06073950000000002,
+            "cpu": 0.11,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.021043499999999996,
+            "cpu": 0.032
+          },
+          "operators": 1594,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 6,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.0465427,
+            "cpu": 0.062
+          },
+          "rss": 169287680,
+          "cold": {
+            "wall": 0.0969634,
+            "cpu": 0.141
+          },
+          "ready": {
+            "wall": 0.1441587,
+            "cpu": 0.203
+          },
+          "cached": {
+            "wall": 0.019227100000000007,
+            "cpu": 0.015
+          },
+          "pixelHash": "980fde17a3464a6b8df3fa058e6cbe242866be8878d5e0905a7e75fce955fc37",
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 6,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04691749999999999,
+            "cpu": 0.062
+          },
+          "rss": 113823744,
+          "annotations": {
+            "wall": 0.06247749999999999,
+            "cpu": 0.078,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.021967700000000038,
+            "cpu": 0.032
+          },
+          "operators": 1594,
+          "run": 2
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 6,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04488480000000001,
+            "cpu": 0.063
+          },
+          "rss": 168771584,
+          "cold": {
+            "wall": 0.0977456,
+            "cpu": 0.14
+          },
+          "ready": {
+            "wall": 0.1432982,
+            "cpu": 0.203
+          },
+          "cached": {
+            "wall": 0.018686500000000023,
+            "cpu": 0.016
+          },
+          "pixelHash": "980fde17a3464a6b8df3fa058e6cbe242866be8878d5e0905a7e75fce955fc37",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 6,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04585849999999999,
+            "cpu": 0.047
+          },
+          "rss": 112025600,
+          "annotations": {
+            "wall": 0.06024929999999998,
+            "cpu": 0.141,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.024994399999999986,
+            "cpu": 0.094
+          },
+          "operators": 1594,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 6,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.0451876,
+            "cpu": 0.062
+          },
+          "rss": 168841216,
+          "cold": {
+            "wall": 0.09554800000000001,
+            "cpu": 0.203
+          },
+          "ready": {
+            "wall": 0.14140799999999998,
+            "cpu": 0.265
+          },
+          "cached": {
+            "wall": 0.01900830000000002,
+            "cpu": 0.016
+          },
+          "pixelHash": "980fde17a3464a6b8df3fa058e6cbe242866be8878d5e0905a7e75fce955fc37",
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 6,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.0442483,
+            "cpu": 0.032
+          },
+          "rss": 113332224,
+          "annotations": {
+            "wall": 0.0583904,
+            "cpu": 0.094,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.02158189999999999,
+            "cpu": 0.063
+          },
+          "operators": 1594,
+          "run": 3
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04617010000000002,
+            "cpu": 0.047
+          },
+          "rss": 181239808,
+          "cold": {
+            "wall": 0.12028799999999998,
+            "cpu": 0.218
+          },
+          "ready": {
+            "wall": 0.16728620000000002,
+            "cpu": 0.265
+          },
+          "cached": {
+            "wall": 0.02261239999999998,
+            "cpu": 0.031
+          },
+          "pixelHash": "5fda70ae01477478e4d795615e447ff54d4183329610cafc8d5c0dd79ba98156",
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.0467296,
+            "cpu": 0.077
+          },
+          "rss": 116400128,
+          "annotations": {
+            "wall": 0.07591809999999997,
+            "cpu": 0.173,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.028732399999999984,
+            "cpu": 0.078
+          },
+          "operators": 2976,
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04519899999999998,
+            "cpu": 0.078
+          },
+          "rss": 181186560,
+          "cold": {
+            "wall": 0.1251144,
+            "cpu": 0.266
+          },
+          "ready": {
+            "wall": 0.1710953,
+            "cpu": 0.344
+          },
+          "cached": {
+            "wall": 0.022067200000000012,
+            "cpu": 0.015
+          },
+          "pixelHash": "5fda70ae01477478e4d795615e447ff54d4183329610cafc8d5c0dd79ba98156",
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04852699999999999,
+            "cpu": 0.063
+          },
+          "rss": 116101120,
+          "annotations": {
+            "wall": 0.08146520000000002,
+            "cpu": 0.109,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.029127200000000016,
+            "cpu": 0.125
+          },
+          "operators": 2976,
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.0490308,
+            "cpu": 0.047
+          },
+          "rss": 180039680,
+          "cold": {
+            "wall": 0.12300119999999998,
+            "cpu": 0.234
+          },
+          "ready": {
+            "wall": 0.1726888,
+            "cpu": 0.281
+          },
+          "cached": {
+            "wall": 0.021789300000000025,
+            "cpu": 0.015
+          },
+          "pixelHash": "5fda70ae01477478e4d795615e447ff54d4183329610cafc8d5c0dd79ba98156",
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04546090000000001,
+            "cpu": 0.047
+          },
+          "rss": 115937280,
+          "annotations": {
+            "wall": 0.07627659999999997,
+            "cpu": 0.155,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.031240800000000037,
+            "cpu": 0.078
+          },
+          "operators": 2976,
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 1,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04457570000000001,
+            "cpu": 0.078
+          },
+          "rss": 180088832,
+          "cold": {
+            "wall": 0.1259643,
+            "cpu": 0.219
+          },
+          "ready": {
+            "wall": 0.1712099,
+            "cpu": 0.297
+          },
+          "cached": {
+            "wall": 0.021472399999999992,
+            "cpu": 0.016
+          },
+          "pixelHash": "5fda70ae01477478e4d795615e447ff54d4183329610cafc8d5c0dd79ba98156",
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 1,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04537540000000001,
+            "cpu": 0.062
+          },
+          "rss": 115458048,
+          "annotations": {
+            "wall": 0.08355619999999998,
+            "cpu": 0.125,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.028845500000000017,
+            "cpu": 0.079
+          },
+          "operators": 2976,
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 2,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04618459999999999,
+            "cpu": 0.047
+          },
+          "rss": 181518336,
+          "cold": {
+            "wall": 0.1386367,
+            "cpu": 0.265
+          },
+          "ready": {
+            "wall": 0.18552949999999999,
+            "cpu": 0.312
+          },
+          "cached": {
+            "wall": 0.02335289999999998,
+            "cpu": 0.031
+          },
+          "pixelHash": "0bc546dd896bf42fff7f4faca4b0336c0db38b050e6540e3a88953468131109f",
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 2,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.045389599999999974,
+            "cpu": 0.046
+          },
+          "rss": 116477952,
+          "annotations": {
+            "wall": 0.08085659999999999,
+            "cpu": 0.157,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.03164960000000002,
+            "cpu": 0.093
+          },
+          "operators": 3513,
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 2,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04746469999999999,
+            "cpu": 0.047
+          },
+          "rss": 180260864,
+          "cold": {
+            "wall": 0.1474257,
+            "cpu": 0.265
+          },
+          "ready": {
+            "wall": 0.19562110000000002,
+            "cpu": 0.312
+          },
+          "cached": {
+            "wall": 0.024937299999999992,
+            "cpu": 0.016
+          },
+          "pixelHash": "0bc546dd896bf42fff7f4faca4b0336c0db38b050e6540e3a88953468131109f",
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 2,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.045165300000000005,
+            "cpu": 0.048
+          },
+          "rss": 116609024,
+          "annotations": {
+            "wall": 0.0853103,
+            "cpu": 0.203,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.03217220000000003,
+            "cpu": 0.109
+          },
+          "operators": 3513,
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 2,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04648829999999998,
+            "cpu": 0.046
+          },
+          "rss": 181657600,
+          "cold": {
+            "wall": 0.1374519,
+            "cpu": 0.25
+          },
+          "ready": {
+            "wall": 0.1846688,
+            "cpu": 0.296
+          },
+          "cached": {
+            "wall": 0.023027000000000044,
+            "cpu": 0.048
+          },
+          "pixelHash": "0bc546dd896bf42fff7f4faca4b0336c0db38b050e6540e3a88953468131109f",
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 2,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.047441299999999985,
+            "cpu": 0.062
+          },
+          "rss": 115830784,
+          "annotations": {
+            "wall": 0.08890989999999996,
+            "cpu": 0.188,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.03497270000000003,
+            "cpu": 0.031
+          },
+          "operators": 3513,
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 2,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.0509273,
+            "cpu": 0.046
+          },
+          "rss": 181723136,
+          "cold": {
+            "wall": 0.1349473,
+            "cpu": 0.235
+          },
+          "ready": {
+            "wall": 0.18657180000000004,
+            "cpu": 0.281
+          },
+          "cached": {
+            "wall": 0.023044700000000036,
+            "cpu": 0.078
+          },
+          "pixelHash": "0bc546dd896bf42fff7f4faca4b0336c0db38b050e6540e3a88953468131109f",
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 2,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04474259999999998,
+            "cpu": 0.047
+          },
+          "rss": 116056064,
+          "annotations": {
+            "wall": 0.0876243,
+            "cpu": 0.203,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.031611699999999986,
+            "cpu": 0.109
+          },
+          "operators": 3513,
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 3,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.045284600000000015,
+            "cpu": 0.047
+          },
+          "rss": 179507200,
+          "cold": {
+            "wall": 0.13129460000000004,
+            "cpu": 0.219
+          },
+          "ready": {
+            "wall": 0.17729930000000002,
+            "cpu": 0.266
+          },
+          "cached": {
+            "wall": 0.02235669999999999,
+            "cpu": 0.016
+          },
+          "pixelHash": "4e61e8d57d404989e065d964d4444ecebc41fbf07ab5bcd300670e1749fe1bb6",
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 3,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04553020000000001,
+            "cpu": 0.047
+          },
+          "rss": 116695040,
+          "annotations": {
+            "wall": 0.08183579999999997,
+            "cpu": 0.125,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.030710499999999967,
+            "cpu": 0.062
+          },
+          "operators": 3284,
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 3,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.05315440000000001,
+            "cpu": 0.079
+          },
+          "rss": 180576256,
+          "cold": {
+            "wall": 0.13486889999999999,
+            "cpu": 0.234
+          },
+          "ready": {
+            "wall": 0.18877390000000002,
+            "cpu": 0.313
+          },
+          "cached": {
+            "wall": 0.022346699999999997,
+            "cpu": 0.031
+          },
+          "pixelHash": "4e61e8d57d404989e065d964d4444ecebc41fbf07ab5bcd300670e1749fe1bb6",
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 3,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04620740000000001,
+            "cpu": 0.063
+          },
+          "rss": 116981760,
+          "annotations": {
+            "wall": 0.08578219999999999,
+            "cpu": 0.25,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.03086379999999997,
+            "cpu": 0.078
+          },
+          "operators": 3284,
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 3,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.047357400000000015,
+            "cpu": 0.062
+          },
+          "rss": 180486144,
+          "cold": {
+            "wall": 0.140388,
+            "cpu": 0.265
+          },
+          "ready": {
+            "wall": 0.1885708,
+            "cpu": 0.327
+          },
+          "cached": {
+            "wall": 0.023624199999999974,
+            "cpu": 0.016
+          },
+          "pixelHash": "4e61e8d57d404989e065d964d4444ecebc41fbf07ab5bcd300670e1749fe1bb6",
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 3,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04567070000000001,
+            "cpu": 0.047
+          },
+          "rss": 117530624,
+          "annotations": {
+            "wall": 0.07792510000000001,
+            "cpu": 0.172,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.030642999999999972,
+            "cpu": 0.047
+          },
+          "operators": 3284,
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 3,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.046543199999999986,
+            "cpu": 0.063
+          },
+          "rss": 181190656,
+          "cold": {
+            "wall": 0.1292739,
+            "cpu": 0.233
+          },
+          "ready": {
+            "wall": 0.17652050000000002,
+            "cpu": 0.296
+          },
+          "cached": {
+            "wall": 0.022157899999999984,
+            "cpu": 0.016
+          },
+          "pixelHash": "4e61e8d57d404989e065d964d4444ecebc41fbf07ab5bcd300670e1749fe1bb6",
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 3,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04549159999999998,
+            "cpu": 0.046
+          },
+          "rss": 116813824,
+          "annotations": {
+            "wall": 0.08226950000000002,
+            "cpu": 0.156,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.03166730000000001,
+            "cpu": 0.079
+          },
+          "operators": 3284,
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 6,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04748050000000001,
+            "cpu": 0.047
+          },
+          "rss": 168308736,
+          "cold": {
+            "wall": 0.10412480000000002,
+            "cpu": 0.188
+          },
+          "ready": {
+            "wall": 0.15226989999999999,
+            "cpu": 0.235
+          },
+          "cached": {
+            "wall": 0.020655900000000033,
+            "cpu": 0.016
+          },
+          "pixelHash": "980fde17a3464a6b8df3fa058e6cbe242866be8878d5e0905a7e75fce955fc37",
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 6,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.047481300000000004,
+            "cpu": 0.062
+          },
+          "rss": 113606656,
+          "annotations": {
+            "wall": 0.05946550000000002,
+            "cpu": 0.11,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.02181450000000001,
+            "cpu": 0.062
+          },
+          "operators": 1594,
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 6,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.0467184,
+            "cpu": 0.047
+          },
+          "rss": 168099840,
+          "cold": {
+            "wall": 0.10427519999999998,
+            "cpu": 0.172
+          },
+          "ready": {
+            "wall": 0.1516549,
+            "cpu": 0.219
+          },
+          "cached": {
+            "wall": 0.018700400000000002,
+            "cpu": 0.046
+          },
+          "pixelHash": "980fde17a3464a6b8df3fa058e6cbe242866be8878d5e0905a7e75fce955fc37",
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 6,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.046325800000000014,
+            "cpu": 0.095
+          },
+          "rss": 113459200,
+          "annotations": {
+            "wall": 0.057412100000000035,
+            "cpu": 0.093,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.021846899999999947,
+            "cpu": 0.063
+          },
+          "operators": 1594,
+          "run": 4
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 6,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04774870000000001,
+            "cpu": 0.063
+          },
+          "rss": 168546304,
+          "cold": {
+            "wall": 0.10153880000000001,
+            "cpu": 0.171
+          },
+          "ready": {
+            "wall": 0.1499744,
+            "cpu": 0.234
+          },
+          "cached": {
+            "wall": 0.018963999999999998,
+            "cpu": 0.016
+          },
+          "pixelHash": "980fde17a3464a6b8df3fa058e6cbe242866be8878d5e0905a7e75fce955fc37",
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.pdf",
+          "page": 6,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.0460255,
+            "cpu": 0.063
+          },
+          "rss": 114012160,
+          "annotations": {
+            "wall": 0.0623783,
+            "cpu": 0.156,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.022293199999999957,
+            "cpu": 0.063
+          },
+          "operators": 1594,
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 6,
+          "mode": "render",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04725890000000001,
+            "cpu": 0.047
+          },
+          "rss": 169369600,
+          "cold": {
+            "wall": 0.09495489999999998,
+            "cpu": 0.156
+          },
+          "ready": {
+            "wall": 0.14289020000000002,
+            "cpu": 0.203
+          },
+          "cached": {
+            "wall": 0.018951900000000025,
+            "cpu": 0.016
+          },
+          "pixelHash": "980fde17a3464a6b8df3fa058e6cbe242866be8878d5e0905a7e75fce955fc37",
+          "run": 5
+        },
+        {
+          "version": "5.6.205",
+          "file": "HW1 Solution.viewing.pdf",
+          "page": 6,
+          "mode": "prepare",
+          "width": 1404,
+          "height": 1816,
+          "load": {
+            "wall": 0.04415910000000002,
+            "cpu": 0.047
+          },
+          "rss": 113172480,
+          "annotations": {
+            "wall": 0.057180499999999995,
+            "cpu": 0.093,
+            "count": 1
+          },
+          "prepare": {
+            "wall": 0.021543499999999993,
+            "cpu": 0.063
+          },
+          "operators": 1594,
+          "run": 5
+        }
+      ]
+    }
+  },
+  "limits": [
+    "No universal renderer/zoom guarantee",
+    "JBIG2 fixture not tested",
+    "Scripted/XFA interaction is unsupported",
+    "External action targets were not opened",
+    "Browser checks use installed PDF.js, not Zen bundled viewer or live extensions"
+  ]
+}
