@@ -45,6 +45,8 @@ Runs are sequential, with alternating source/candidate order: three runs per pag
 - Size growth: requires a measured speed improvement.
 - No qualifier: save reports only and retain the original as the viewing file.
 
+If cold-render CPU rounds to zero for the baseline, the report marks the reduction as unresolved. It cannot classify a speedup; a smaller exact copy may qualify only if its measured CPU is also zero and the latency gate passes.
+
 ## Limits
 
 The optimizer does not promise maximum compression, universal renderer equivalence or faster scrolling. Unique handwriting still requires drawing work. Bitmap content is not resampled or converted to a lossy codec. Unknown content is preserved or rejected conservatively.

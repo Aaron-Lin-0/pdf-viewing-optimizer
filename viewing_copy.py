@@ -221,8 +221,9 @@ def choose_candidate(source,candidates,results):
         if not measured or set(measured)!=set(baseline):continue
         regression=any(measured[p][key]>baseline[p][key]+max(baseline[p][key]*.1,.05)
                        for p in baseline for key in ['cold','cached'])
-        cpu=sum(v['cpu'] for v in measured.values());speedup=1-cpu/base_cpu
-        candidate.update({'median':measured,'cpu_reduction':speedup,'regression':regression})
+        cpu=sum(v['cpu'] for v in measured.values());speedup=1-cpu/base_cpu if base_cpu else 0
+        candidate.update({'median':measured,'cpu_reduction':speedup,'regression':regression,
+                          'cpu_resolution_limited':not base_cpu})
         if not regression and (speedup>=.1 or (candidate['exact'] and Path(candidate['path']).stat().st_size<Path(source).stat().st_size and cpu<=base_cpu*1.05)):
             eligible.append(candidate)
     if not eligible:return None
@@ -315,7 +316,8 @@ def build_candidate(source,destination,kind):
 def report_text(report):
     lines=['# Vector viewing-copy report','',f"Status: {report['status']}",f"Classification: {report.get('classification','no qualifying improvement')}",f"Original: {report['source']}",f"Original bytes: {report.get('source_bytes','see source file')}",f"Original SHA256: {report['source_sha256']}",'','OCR/search text retained. If ink annotations are converted, only the viewing copy loses their individual annotation editing. Originals remain unchanged.','', '| Candidate | Bytes | Exact tested appearance | CPU reduction | Regression |','| --- | ---: | --- | ---: | --- |']
     for c in report.get('candidates',[]):
-        lines.append(f"| {c['kind']} | {c['bytes']} | {c.get('exact')} | {c.get('cpu_reduction',0)*100:.1f}% | {c.get('regression','unmeasured')} |")
+        reduction='unresolved (timer resolution)' if c.get('cpu_resolution_limited') else f"{c.get('cpu_reduction',0)*100:.1f}%"
+        lines.append(f"| {c['kind']} | {c['bytes']} | {c.get('exact')} | {reduction} | {c.get('regression','unmeasured')} |")
     lines.extend(['','Rejected/skipped passes:']+[f"- {r['kind']}: {r['reason']}" for r in report.get('rejected',[])])
     rows=report.get('measurements',[])
     if rows:

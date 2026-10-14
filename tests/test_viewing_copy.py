@@ -269,5 +269,19 @@ class ViewingTests(unittest.TestCase):
                 if r['file']==str(fast.absolute()):r['cached']['wall']=1
             self.assertEqual(choose_candidate(base,candidates,records)['path'],str(small))
 
+    def test_zero_cpu_timer_resolution_does_not_claim_speed_or_crash(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            base,small=[Path(folder)/name for name in ['base.pdf','small.pdf']]
+            base.write_bytes(b'0'*100);small.write_bytes(b'0'*80)
+            records=[{'file':str(path.absolute()),'page':1,'mode':'render',
+                      'cold':{'wall':.01,'cpu':0},'cached':{'wall':.001}} for path in [base,small]]
+            candidate={'path':str(small),'exact':True}
+            chosen=choose_candidate(base,[candidate],records)
+            self.assertIs(chosen,candidate)
+            self.assertEqual(chosen['cpu_reduction'],0)
+            self.assertTrue(chosen['cpu_resolution_limited'])
+            records[1]['cold']['cpu']=.015625
+            self.assertIsNone(choose_candidate(base,[candidate],records))
+
 
 if __name__=='__main__':unittest.main()
