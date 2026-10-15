@@ -4,10 +4,12 @@ Audit date: 2026-10-14. The source repository contains generated tests and these
 
 ## Verified results
 
-- 72 unit/regression tests pass both in the original workspace and from the repository layout.
+- The 72-test suite passed both in the original workspace and from the repository layout. The added zero-CPU timer regression also passes locally.
+- A fresh Windows checkout on GitHub passed dependency installation, all 73 tests, generated compatibility fixtures and release packaging. [CI run](https://github.com/Aaron-Lin-0/pdf-viewing-optimizer/actions/runs/38638985624).
 - All 84 published pages (ME303, ME505 and Goodnotes) were rechecked: identical pixels in PDFium at 144 DPI and PDF.js at a 1404-pixel page width; strengthened geometry/resource and raw navigation comparisons pass.
 - The 27-page generated vector/bitmap/mixed matrix renders identically in both engines. Its browser navigation checks pass, including all 27 bookmarks.
 - The three-page interaction fixture passes internal-link zoom, editable/read-only/hidden fields, checkboxes, radio buttons, choices, comment popup and every-page layer toggles.
+- The full command completed on the generated matrix and correctly published reports only: the smaller exact candidate failed the CPU-selection rule. Repository test, fixture, browser and packaging commands were exercised locally.
 - The earlier 149-page corpus run included all 65 ME304 pages. Published copies also passed 288 DPI, print-mode and 576 DPI detail-crop checks; ME303 retains 13 bookmarks, ME505 retains 24, and Goodnotes retains six URL link annotations.
 
 ## Refreshed rendering measurements
@@ -59,12 +61,31 @@ Preparation and cold rendering are measured in different processes and must not 
 - Private page data, retained annotation appearances and orphan field parents protect referenced handwriting objects from conversion. Private Form metadata keeps its original Form call.
 - Viewing-copy batching checks nested direct dictionaries as well as indirect objects for transparency; inherited masks retain separate paint operations.
 - Candidate builders release page snapshots and readers between phases. A regression test proves that a previous writer is collectable before another writer is built.
+- Zero CPU timings on very simple pages cannot cause division by zero or an unmeasurable speedup claim; the report marks the timer-resolution limit.
 - Source hashes are captured before preflight; failed final candidates cannot leave successful acceptance fields in a no-improvement report.
 - Browser navigation waits for rendering, reports the stalled phase, tests layer states on every page and uses the correct scrolling container for mixed-size pages.
 - Repository-relative tests, local Node dependency lookup, portable launchers and one-source release/skill packaging remove workspace-specific requirements.
 
-## ME304 and remaining limits
+## Completed ME304 stress run
 
-The earlier ME304 annotation/consolidation candidates retained geometry and passed PDFium, but failed the strict PDF.js one-pixel edge-band rule. Smaller packed originals regressed in rendering. No ME304 replacement was published. The current full stress rerun is pending; this report does not claim it has completed.
+The full CLI run completed with exit code 0 and **no improvement**. Seven candidates passed ordered geometry, navigation and all 65 PDFium page comparisons at 144 DPI with identical pixels. With the 84 published pages above, all 149 corpus pages received fresh structural/PDFium checks during this audit.
+
+The annotation passes retained only 686 eligible conversions after appearance preflight; pages failing PDFium/PDF.js preflight kept their original annotations. The surviving candidates did not qualify on performance/size. Final all-page PDF.js, high-resolution and browser acceptance therefore did not run for ME304, and no viewing PDF was published. The original hash is unchanged.
+
+| ME304 candidate | MB | Cold-render CPU reduction | Latency regression |
+| --- | ---: | ---: | --- |
+| dedup | 266.942 | -4.3% | No |
+| annotations | 265.379 | -1.5% | Yes |
+| consolidated | 265.323 | -3.9% | Yes |
+| packed-original-packed | 212.402 | -5.0% | Yes |
+| dedup-packed | 212.693 | -1.7% | Yes |
+| annotations-packed | 211.840 | -6.5% | Yes |
+| consolidated-packed | 211.823 | -1.3% | Yes |
+
+Samples were pages 1, 7, 18 and 29, with five fresh-process runs per version. Negative reductions are regressions. The uncompressed deduplication result also grew beyond the original 244.698 MB. Known broken BOOX optional-content references (-1, 0 and 1738407840) are recorded in each candidate verification.
+
+Memory sampling recorded 656 observations, with a maximum process working set of 5.20 GiB. This is sampled optimizer-process memory, not a guaranteed peak or a system-wide total. The writer-lifetime regression test and observed drops between stages confirm that earlier writer state is released.
+
+## Remaining limits
 
 JBIG2-specific fixtures, every malformed export, live Zen profile/extensions, Zen bundled viewer behavior, and other platforms were not tested. Scripted/XFA forms remain unsupported by acceptance; external URI/file targets are compared structurally without opening them. Keep originals as the reference and editable copies.
