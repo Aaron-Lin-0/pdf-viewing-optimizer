@@ -61,12 +61,18 @@ See [design and acceptance rules](docs/design.md), [test instructions](docs/test
 
 ## Develop and package
 
+For Codex, add this Git checkout as a local project named **PDF Viewing Optimizer**. Select the folder containing `optimize_pdf.py` and `AGENTS.md` as the primary folder. Project instructions, preservation requirements and the source map are in [AGENTS.md](https://github.com/Aaron-Lin-0/pdf-viewing-optimizer/blob/main/AGENTS.md). See the [Codex project guide](https://learn.chatgpt.com/docs/projects?surface=app) for the folder controls.
+
+Set up an isolated development environment from the repository root:
+
 ```powershell
+python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+npm ci
 .\.venv\Scripts\python.exe -m unittest discover -s tests -p 'test_*.py'
-.\.venv\Scripts\python.exe tools/build_release.py
+.\.venv\Scripts\python.exe tools/build_release.py --output dist/RELEASE_NAME
 ```
 
-The repository root is the maintained implementation. The packaging script copies those same files into a ZIP and a Codex skill, then compares their bytes. Generated releases go under `dist/` and are not committed. No duplicate implementation is maintained inside the skill source directory.
+Choose a release directory that does not already exist. The repository root is the maintained implementation. The packaging script copies those same files into a ZIP and a Codex skill, then compares their bytes. Generated releases go under `dist/` and are not committed. No duplicate implementation is maintained inside the skill source directory. `.venv/`, `node_modules/` and local test results are also excluded from Git. Codex uses your existing model and permission settings; this project does not override them.
 
 Tests cannot guarantee identical behavior in every viewer, zoom level or interactive state. Scripted/XFA forms are outside the viewing-copy acceptance harness, and external action targets are compared without opening them. Keep originals as the reference and editable copies.
