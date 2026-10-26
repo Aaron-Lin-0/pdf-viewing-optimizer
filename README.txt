@@ -11,8 +11,38 @@ compression, but a smaller file is not necessarily faster to draw.
 
 Viewing copy (recommended for measured rendering cost)
 
+After extracting the ZIP, open Setup Dependencies.cmd once. It creates a private
+.venv and installs the pinned Python and PDF.js packages. Python 3.10+, Node.js
+22.13+ and Zen/Firefox must already be installed; missing components are explained
+without changing any PDF. All launchers prefer the private environment afterward.
+
+On Windows, open Create Viewing Copies.cmd and select one or more PDFs. Files run
+one at a time after you review and confirm each source-to-output mapping. Duplicate
+selections collapse to one job. Stop after current preserves the active result and
+skips queued files. Accepted copies
+and reports are placed beside each source as
+NAME.optimized.*, using NAME.optimized-2.* and higher rather than overwriting.
+Failures and no-improvement results do not stop later files.
+The reviewed source hash is rechecked at child startup and before publication.
+Interrupted jobs reuse only exact completed generation, preservation and timing
+stages from NAME.optimized.checkpoint. Final browser acceptance and publication
+always run again. The GUI shows stage age and applies a six-hour/10-GiB limit per file.
+It checks required components before selection. Keyboard shortcuts: Alt+S setup,
+Alt+P choose PDFs, Alt+T stop after current, Ctrl+L activity log. Long paths remain
+available in a resizable, scrollable review window.
+The progress bar advances by completed reviewed files; the status line shows the
+active file and stage without inventing a percentage for variable-length checks.
+Choose 1 through the detected logical CPU count for verification before review.
+The default is two (or one on a one-CPU system). Startup and review show total and
+available RAM plus a conservative 2 GiB + 3 GiB/worker planning estimate. Workers
+may use multiple CPU threads; the selection neither reserves nor caps CPU cores.
+
 Drag one original PDF onto Optimize Viewing PDF.cmd, or run:
   python optimize_pdf.py "input.pdf" "input.viewing.pdf" --viewing-copy
+
+Use --verification-workers N to select page-verification processes. CLI-only limits
+are available as --time-budget-seconds and --disk-budget-bytes;
+--checkpoint selects an adjacent checkpoint directory.
 
 Creates NAME.viewing.pdf plus readable .md and machine-readable .json reports.
 If no candidate meets the preservation/performance rules, only reports are saved.
@@ -55,6 +85,10 @@ Exact transformations require identical pixels. Edge-changing passes require
 unchanged geometry, differences only in a one-pixel band around the original ink
 mask (gray threshold 250), peak channel difference <=96 and page mean <=1.5/255.
 These strict bounds can reject copies that look indistinguishable to a person.
+Within one run, lossless source renders and source geometry are reused across
+candidates. Selected spawned workers compare PDFium pages; verification-only
+PDF.js workers retain both documents across assigned pages. Workers stop before
+the unchanged sequential fresh-process benchmarks, browser checks and publication.
 
 Benchmarks use sequential fresh processes and alternating file order, three runs
 per page/version, extended to five for noisy CPU results. Samples include pages
@@ -85,16 +119,18 @@ gates. OCR removal is explicit and loses search/copy from verified invisible tex
 blocks. Visible or unrecognized text remains. Structure packing is optional with
 legacy modes; viewing-copy mode selects its own passes and cannot combine flags.
 
-Dependencies (Python 3.10+, Node.js compatible with PDF.js 5.6.205)
+Dependencies (Python 3.10+, Node.js 22.13+, PDF.js 6.4.299)
 
   python -m pip install "pypdf>=6.10" "pypdfium2>=5.14" Pillow "pymupdf>=1.28"
-  npm install pdfjs-dist@5.6.205 @napi-rs/canvas
+  npm install pdfjs-dist@6.4.299 @napi-rs/canvas@1.0.13
 
 Legacy non-packing modes do not need PyMuPDF/Node/browser. Viewing-copy mode needs
 all dependencies and installed Zen/Firefox. Set PDF_PYTHON to select the launcher's Python interpreter. Otherwise it tries
 the current user's bundled Codex runtime, then Python on PATH. Install the
 dependencies in the interpreter you choose.
 Use PDF_NODE, PDF_NODE_MODULES or PDF_BROWSER to select other installed runtimes.
+If qpdf is installed, viewing-copy mode also tests its lossless Flate/object-stream
+rewrite. Set PDF_QPDF to select a specific qpdf executable.
 Missing dependencies produce an error and never publish an unchecked PDF.
 Keep the complete pdfjs-dist package: its cmaps, standard_fonts, iccs and wasm
 directories are needed for image/font decoding. The harness stops on parsing

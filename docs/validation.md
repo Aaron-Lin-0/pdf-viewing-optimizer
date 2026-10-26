@@ -1,5 +1,10 @@
 # Implementation audit
 
+**Historical evidence, not live status or the roadmap.** These results belong to
+the dated audit below. Future priorities are maintained in the
+[main improvement plan](roadmap.md); later local comparison results must be read
+from their own completed reports and source/output hashes.
+
 Audit date: 2026-10-14. The source repository contains generated tests and these results; personal PDFs and local filesystem paths are excluded.
 
 ## Verified results

@@ -9,7 +9,8 @@ import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
 PROGRAM=['optimize_pdf.py','handwriting.py','invisible_text.py','navigation.py','geometry.py',
-         'annotation_ink.py','viewing_copy.py','browser_check.py','pdfjs_benchmark.mjs','browser_harness.html']
+         'annotation_ink.py','viewing_copy.py','batch_workflow.py','viewing_copy_gui.py','browser_check.py',
+         'pdfjs_benchmark.mjs','browser_harness.html','verification_worker.py','tools/evidence_cache.py']
 
 
 def build(destination):
@@ -28,7 +29,9 @@ def build(destination):
         skill=staged/'optimize-pdfs'
         shutil.copytree(ROOT/'skill',skill)
         (skill/'scripts').mkdir()
-        for name in PROGRAM:shutil.copyfile(ROOT/name,skill/'scripts'/name)
+        for name in PROGRAM:
+            target=skill/'scripts'/name;target.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copyfile(ROOT/name,target)
         with zipfile.ZipFile(archive_path) as archive:
             if set(archive.namelist())!=set(files):raise ValueError('Release file list mismatch.')
             for name in files:

@@ -27,7 +27,7 @@ def profile_directory(parent):
                 time.sleep(.25)
 
 
-def check_browser(source,candidate,pages=(1,7,29)):
+def check_browser(source,candidate,pages=(1,7,29),timeout=1200):
     browser=os.environ.get('PDF_BROWSER') or r'C:\Program Files\Zen Browser\zen.exe'
     if not Path(browser).is_file():raise ValueError('Set PDF_BROWSER to Zen/Firefox for browser acceptance checks.')
     local=Path(__file__).resolve().parent/'node_modules'
@@ -74,6 +74,7 @@ def check_browser(source,candidate,pages=(1,7,29)):
     server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
     thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     try:
+        deadline=time.monotonic()+timeout
         for which in ['source','candidate']:
             with profile_directory(Path(candidate).parent) as profile:
                 Path(profile,'user.js').write_text('user_pref("browser.shell.checkDefaultBrowser", false);\nuser_pref("browser.startup.page", 0);\nuser_pref("browser.aboutwelcome.enabled", false);\nuser_pref("toolkit.telemetry.enabled", false);\n')
@@ -82,7 +83,6 @@ def check_browser(source,candidate,pages=(1,7,29)):
                 log=log_path.open('wb')
                 process=subprocess.Popen([browser,'--headless','--no-remote','--profile',profile,url],stdout=log,stderr=log,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
                 try:
-                    deadline=time.monotonic()+600
                     while which not in result:
                         if process.poll() is not None:
                             log.flush()
@@ -93,7 +93,8 @@ def check_browser(source,candidate,pages=(1,7,29)):
                 finally:
                     if process.poll() is None:
                         if os.name=='nt':
-                            subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+                            subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'],stdout=subprocess.DEVNULL,
+                                           stderr=subprocess.DEVNULL,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
                         else:process.terminate()
                         try:process.wait(timeout=10)
                         except subprocess.TimeoutExpired:process.kill();process.wait()
@@ -104,7 +105,7 @@ def check_browser(source,candidate,pages=(1,7,29)):
                             probe=Path(profile,'browser.log');probe.unlink(missing_ok=True);break
                         except PermissionError:time.sleep(.1)
         before,after=result['source'],result['candidate']
-        for key in ['pages','labels','destinationNames','links','layers','bookmarkTrace','interactive']:
+        for key in ['pages','labels','destinationNames','links','layers','bookmarkTrace','interactive','resourceCleanups']:
             if before[key]!=after[key]:
                 detail=''
                 if isinstance(before[key],list) and isinstance(after[key],list):

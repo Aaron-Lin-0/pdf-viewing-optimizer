@@ -335,7 +335,7 @@ class CompatibilityTests(unittest.TestCase):
                  patch('viewing_copy.shutil.copyfileobj',side_effect=interrupted):
                 with contextlib.redirect_stdout(io.StringIO()),self.assertRaises(KeyboardInterrupt):
                     optimize_viewing(source,out)
-            self.assertEqual(list(Path(folder).iterdir()),[source])
+            self.assertEqual(sorted(path.name for path in Path(folder).iterdir()),['out.checkpoint','source.pdf'])
             self.assertEqual(source.read_bytes(),original)
 
     def test_rejected_candidate_does_not_leave_success_checks_in_final_report(self):

@@ -1,9 +1,12 @@
 __pycache__/
 *.py[cod]
 .venv/
+.setup-temp/
+comparison-tools.local.json
 node_modules/
 audit-output/
 dist/
+*.checkpoint/
 *.pdf
 *.zip
 *.log

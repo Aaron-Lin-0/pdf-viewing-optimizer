@@ -4,13 +4,29 @@
 
 This repository creates verified viewing copies of vector, bitmap/scanned and mixed PDFs. Reducing rendering work is the priority; file size is secondary. Read `docs/design.md` before changing PDF transformations or acceptance rules. `docs/validation.md` records measured results and limits, not promises for every PDF.
 
+**Main improvement plan: [docs/roadmap.md](docs/roadmap.md).** Start future
+improvement work there and maintain its ordered milestones. It is the primary
+roadmap for adaptive optimizer selection; the old comparison handoff is historical
+requirements context, not an active task list. Planned features are not current
+behavior: `docs/design.md` still defines production acceptance, and
+`docs/comparison.md` describes the existing research runner.
+
+Private assessment snapshots and run progress belong under ignored `audit-output/`.
+Read a run's actual status, completed records and hashes before making claims;
+partial timings or readable outputs do not establish preservation or a winner.
+Do not copy live run status into the roadmap or change executable files during
+an active comparison. Documentation-only maintenance may proceed.
+
 Maintain the implementation in the repository root:
 
 - `optimize_pdf.py`: public CLI, legacy Python API, input checks and publication.
+- `batch_workflow.py`: reviewed batch planning, source identity and sequential child lifecycle.
+- `viewing_copy_gui.py`: thin Windows multi-file picker and lifecycle display.
 - `viewing_copy.py`: candidate generation, preservation checks and performance selection.
 - `handwriting.py`, `annotation_ink.py`, `invisible_text.py`: drawing transformations and explicit OCR removal.
 - `navigation.py`, `geometry.py`: preservation signatures.
 - `pdfjs_benchmark.mjs`, `browser_check.py`, `browser_harness.html`: rendering measurements and browser checks.
+- `tools/compare_optimizers.py`, `tools/firefox_measure.py`, `tools/comparison_metrics.py`, `tools/feature_loss.py`: separate comparison execution, native-viewer measurements and descriptive evidence.
 - `tests/`: regression tests and generated compatibility fixtures.
 - `tools/build_release.py`: ZIP and installed-skill packaging from the maintained source.
 

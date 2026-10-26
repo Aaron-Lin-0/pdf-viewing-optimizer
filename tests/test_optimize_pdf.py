@@ -27,6 +27,10 @@ def make_pdf(path, color="1 0 0", encrypted=False):
 
 
 class OptimizerTests(unittest.TestCase):
+    def test_verification_workers_are_viewing_copy_only(self):
+        with self.assertRaisesRegex(ValueError,'viewing-copy mode'):
+            optimizer.optimize('unused.pdf','unused-output.pdf',verification_workers=2)
+
     def test_structure_compression_keeps_exact_commands(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
             source, output = Path(folder) / "source.pdf", Path(folder) / "output.pdf"

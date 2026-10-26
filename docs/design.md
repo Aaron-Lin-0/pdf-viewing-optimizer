@@ -1,10 +1,50 @@
 # Design and acceptance rules
 
+**Scope: current production behavior.** This document defines the existing
+optimizer's transformations and publication gates. The
+[main improvement plan](roadmap.md) describes future adaptive tool selection;
+those proposals do not change these rules. The separate research runner and its
+native Firefox protocol are documented in [comparison.md](comparison.md).
+
 ## Candidate pipeline
 
 `optimize_pdf.py` keeps the legacy CLI and Python API. `viewing_copy.py` builds candidates, checks preservation, measures rendering cost and publishes only a qualifying result. `annotation_ink.py` handles eligible BOOX appearances; `handwriting.py` handles supported drawing containers and batching. `geometry.py` and `navigation.py` compare saved structures independently of rendering.
 
-Pages are recognized by their drawing structure, not their filename or producer label. Candidate passes include duplicate-object removal, static annotation conversion, consolidation of eligible appearances, exact inlining and same-width segment batching. Optional structure packing is compared separately. Already deduplicated candidates do not receive another all-stream duplicate scan during packing.
+The Windows batch GUI is a thin adapter over the headless controller in
+`batch_workflow.py` and a separate `optimize_pdf.py --viewing-copy` process for
+each selected file. Planning collapses duplicate selections, rejects unsafe inputs,
+snapshots the source SHA256 and reserves an unused adjacent `NAME.optimized[-N].*`
+set before displaying every source-to-output mapping for confirmation. The controller
+rechecks sources and targets before each sequential launch, validates terminal reports
+and hashes, isolates per-file failures and supports stop-after-current. Window close
+is blocked while a child or its terminal result is being handled; closing between
+jobs skips the remaining queue. The optimizer independently checks the confirmed
+source hash at startup and before publication. The GUI does not implement a separate
+transformation or acceptance path.
+
+Production checkpoints reuse completed candidate generation, full preservation
+verification and balanced timing only when their source, candidate, maintained-code,
+tool, renderer and operation contexts match exactly. Completion markers are written
+last and payload hashes are rechecked. A restarted batch reconstructs a terminal job
+only from validated reports and otherwise resumes an incomplete job at its reviewed
+output path. Final PDF.js/browser acceptance and publication are never cached.
+Within one document, run-local source geometry and lossless 144-DPI PDFium renders
+are reused across candidate checks. PDFium and final PDF.js page comparisons use
+the reviewed verification-worker count; each worker owns its renderer handles and
+all workers stop before performance timing, browser checks and publication. Final
+acceptance remains fresh. Documents and all benchmark runs remain sequential.
+The GUI displays stage age and reports time and disk budget exhaustion as distinct
+terminal states.
+
+Before selection, the GUI checks the pinned Python packages, Node/PDF.js/canvas and
+configured Zen/Firefox executable once; qpdf remains an optional candidate. Blocking
+diagnostics include a local corrective action and never bypass acceptance. The native
+review dialog is resizable and scrollable for long paths, and all primary controls
+have keyboard access. Dynamic status is mirrored in the window title. Batch progress
+is determinate and counts terminal reviewed files; per-file stage age remains separate
+because candidate and browser work varies by document.
+
+Pages are recognized by their drawing structure, not their filename or producer label. Candidate passes include duplicate-object removal, static annotation conversion, consolidation of eligible appearances, exact inlining and same-width segment batching. Optional structure packing is compared separately. When qpdf is installed or selected with `PDF_QPDF`, viewing-copy mode also compares its lossless Flate/object-stream rewrite under the same preservation, rendering and publication gates. Already deduplicated candidates do not receive another all-stream duplicate scan during packing.
 
 Annotation conversion preserves placement, appearance matrices, bounding-box clipping, colors, layer membership and paint order. Only a leading sequence of eligible painted annotations is converted. Links, comments, forms, attachments, action-bearing objects, replies and protected references remain. Missing/state-dependent appearances, special zoom/rotation flags, transparency groups and unsupported layer expressions are skipped. Unfamiliar or transformed appearances retain ordinary Form calls.
 

@@ -13,7 +13,7 @@ const params=new URLSearchParams(location.search),which=params.get('which')||'so
 const send=value=>fetch('/result',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)});
 const assert=(value,message)=>{if(!value)throw new Error(message);};
 let phase='initialization';
-const wait=async fn=>{const started=performance.now();while(!fn()){if(performance.now()-started>300000)throw new Error('Browser rendering timed out: '+phase);await new Promise(r=>setTimeout(r,20));}};
+const wait=async (fn,detail=()=>"")=>{const started=performance.now();while(!fn()){if(performance.now()-started>300000)throw new Error('Browser rendering timed out: '+phase+' '+detail());await new Promise(r=>setTimeout(r,20));}};
 try{
   const start=performance.now(),bus=new EventBus(),links=new PDFLinkService({eventBus:bus});
   const viewer=new PDFViewer({container:document.querySelector('#container'),viewer:document.querySelector('#viewer'),eventBus:bus,linkService:links,imageResourcesPath:'/modules/pdfjs-dist/web/images/',enableScripting:false});
@@ -21,14 +21,25 @@ try{
   const finishedText=new Set(),finishedAnnotations=new Set(),layerErrors=[];
   for(const [name,finished]of [['textlayerrendered',finishedText],['annotationlayerrendered',finishedAnnotations]])bus.on(name,event=>{if(event.error)layerErrors.push(String(event.error));finished.add(event.pageNumber);});
   let initialized=false;bus.on('pagesinit',()=>{initialized=true;viewer.currentScaleValue='page-width';});
-  const doc=await pdfjs.getDocument({url:'/pdf/'+which,docBaseUrl:location.origin+'/notes.pdf',cMapUrl:'/modules/pdfjs-dist/cmaps/',cMapPacked:true,standardFontDataUrl:'/modules/pdfjs-dist/standard_fonts/',wasmUrl:'/modules/pdfjs-dist/wasm/',iccUrl:'/modules/pdfjs-dist/iccs/',stopAtErrors:true,verbosity:0}).promise;
+  const loadingTask=pdfjs.getDocument({url:'/pdf/'+which,docBaseUrl:location.origin+'/notes.pdf',cMapUrl:'/modules/pdfjs-dist/cmaps/',cMapPacked:true,standardFontDataUrl:'/modules/pdfjs-dist/standard_fonts/',wasmUrl:'/modules/pdfjs-dist/wasm/',iccUrl:'/modules/pdfjs-dist/iccs/',stopAtErrors:true,verbosity:0});
+  const doc=await loadingTask.promise;
   assert(!doc.isPureXfa&&!await doc.hasJSActions(),'Scripted/XFA interaction cannot be verified by this harness; retain the original.');
   viewer.setDocument(doc);links.setDocument(doc);await wait(()=>initialized);
   // Mixed page sizes finish loading after pagesinit and can move the scroll anchor.
   await viewer.pagesPromise;
   await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+  let resourceCleanups=0;
+  async function releasePages(){
+    for(let index=0;index<doc.numPages;index++)viewer.getPageView(index).reset();
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    for(let attempt=0;attempt<120;attempt++){
+      try{await doc.cleanup(true);resourceCleanups++;return;}
+      catch(error){if(!String(error.message).startsWith('startCleanup:')||attempt===119)throw error;await new Promise(r=>setTimeout(r,250));}
+    }
+  }
   async function settled(number){
-    await wait(()=>viewer.currentPageNumber===number&&viewer.getPageView(number-1).renderingState===RenderingStates.FINISHED);
+    await wait(()=>viewer.currentPageNumber===number&&viewer.getPageView(number-1).renderingState===RenderingStates.FINISHED,
+      ()=>`target=${number} current=${viewer.currentPageNumber} state=${viewer.getPageView(number-1).renderingState}`);
     await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
   }
   const sequence=params.get('pages').split(',').map(Number).filter(p=>p<=doc.numPages);
@@ -43,9 +54,10 @@ try{
     await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
     events.push({page:number,wall:(performance.now()-t)/1000,textDivs:viewer.getPageView(number-1).div.querySelectorAll('.textLayer span').length,annotationElements:viewer.getPageView(number-1).div.querySelectorAll('.annotationLayer section').length});
   }
+  phase='release page-sequence resources';await releasePages();
   const labels=await doc.getPageLabels(),destinations=await doc.getDestinations(),outlines=await doc.getOutline();
   let tested=0;const bookmarkTrace=[];
-  async function checkOutline(items){for(const item of items||[]){if(item.dest){phase='bookmark '+item.title;const dest=typeof item.dest==='string'?await doc.getDestination(item.dest):item.dest;const target=typeof dest[0]==='object'?await doc.getPageIndex(dest[0])+1:dest[0]+1;await links.goToDestination(item.dest);await settled(target);bookmarkTrace.push({title:item.title,target,destination:[target,...dest.slice(1)],scale:viewer.currentScale});tested++;}await checkOutline(item.items);}}
+  async function checkOutline(items){for(const item of items||[]){if(item.dest){phase='bookmark '+item.title;const dest=typeof item.dest==='string'?await doc.getDestination(item.dest):item.dest;const target=typeof dest[0]==='object'?await doc.getPageIndex(dest[0])+1:dest[0]+1;await links.goToDestination(item.dest);await settled(target);bookmarkTrace.push({title:item.title,target,destination:[target,...dest.slice(1)],scale:viewer.currentScale});tested++;phase='release bookmark '+item.title;await releasePages();}await checkOutline(item.items);}}
   await checkOutline(outlines);
   const retained=[],interactive=[];
   for(let number=1;number<=doc.numPages;number++){
@@ -104,7 +116,8 @@ try{
       layers.push({page:number,name:group.name,offHash,onHash:await snapshot(page,config)});
     }
   }
-  await send({ok:true,which,version:pdfjs.version,pages:doc.numPages,wall:(performance.now()-start)/1000,events,bookmarkAndQuickLinkTargetsTested:tested,bookmarkTrace,interactive,labels,destinationNames:Object.keys(destinations),links:retained,layers});
-  await doc.destroy();
+  assert(resourceCleanups>0,'Browser resource cleanup did not run.');
+  await send({ok:true,which,version:pdfjs.version,pages:doc.numPages,wall:(performance.now()-start)/1000,events,bookmarkAndQuickLinkTargetsTested:tested,resourceCleanups,bookmarkTrace,interactive,labels,destinationNames:Object.keys(destinations),links:retained,layers});
+  await loadingTask.destroy();
 }catch(error){await send({ok:false,which,error:String(error.message)+'\n'+String(error.stack||error)});}
 </script>

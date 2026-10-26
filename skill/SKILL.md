@@ -39,7 +39,7 @@ Describe the check as identical rendering at 144 DPI in PDFium, not a guarantee 
 Use an explicit output path in the current deliverables folder and run one document
 at a time. Add `--viewing-copy` without other mode flags. Keep all bundled helper
 Python files, `pdfjs_benchmark.mjs` and `browser_harness.html` beside the optimizer.
-This mode additionally requires PyMuPDF >=1.28, Node.js, pdfjs-dist 5.6.205,
+This mode additionally requires PyMuPDF >=1.28, Node.js 22.13+, pdfjs-dist 6.4.299,
 @napi-rs/canvas and installed Zen/Firefox. Locate available runtimes; use a task-local
 dependency folder/environment when a dependency is missing. Set PDF_NODE,
 PDF_NODE_MODULES or PDF_BROWSER only when selecting alternative installed tools.

@@ -5,13 +5,17 @@ import sys
 import tempfile
 import unittest
 import json
+import shutil
 from unittest.mock import patch
 sys.path[:0]=[str(Path(__file__).resolve().parents[1]),str(Path(__file__).resolve().parent)]
 from pypdf import PdfReader,PdfWriter
 from pypdf.generic import ArrayObject,DictionaryObject,NameObject,NumberObject,TextStringObject,DecodedStreamObject
 from annotation_ink import flatten_ink,consolidate_ink,verify_flattened,verify_consolidated
 from navigation import navigation_fingerprint
-from viewing_copy import verify_candidate,choose_candidate,visual_delta,reader_for,build_candidate,benchmark_pages,optimize_viewing
+from viewing_copy import (verify_candidate,choose_candidate,visual_delta,reader_for,build_candidate,
+                          build_qpdf_candidate,benchmark_pages,benchmark_worker,optimize_viewing,
+                          verify_pdfjs_page,node_identity,RunBudget,TimeBudgetExceeded,_run,_store_candidate,
+                          VerificationSession,verification_resources,verify_pdfjs)
 from test_inline_handwriting import fixture
 from PIL import Image
 
@@ -29,6 +33,113 @@ def annotation_fixture():
 
 
 class ViewingTests(unittest.TestCase):
+    def test_verification_session_reuses_source_evidence_with_one_and_two_workers(self):
+        for workers in (1,2):
+            with self.subTest(workers=workers), tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+                root=Path(folder);source=root/'source.pdf';first=root/'first.pdf';second=root/'second.pdf'
+                writer=PdfWriter();writer.add_blank_page(width=60,height=60);writer.add_blank_page(width=90,height=60)
+                writer.write(source);shutil.copyfile(source,first);shutil.copyfile(source,second)
+                session=VerificationSession(source,root/'evidence',workers)
+                try:
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        one=verify_candidate(source,first,{'converted':{},'evidence':[]},session=session)
+                        two=verify_candidate(source,second,{'converted':{},'evidence':[]},session=session)
+                    self.assertEqual(one,two)
+                    self.assertEqual(session.stats['source_renders_created'],2)
+                    self.assertEqual(session.stats['source_renders_reused'],2)
+                    self.assertEqual(session.stats['source_signatures_created'],2)
+                    self.assertEqual(session.stats['source_signatures_reused'],2)
+                finally:session.close(force=True)
+
+    def test_worker_selection_rejects_invalid_values(self):
+        with patch('viewing_copy.logical_cpu_count',return_value=4):
+            self.assertEqual(verification_resources(None)['effective_workers'],2)
+            self.assertEqual(verification_resources(4)['estimated_ram_bytes'],14*1024**3)
+            for value in (0,5,True,1.5):
+                with self.subTest(value=value),self.assertRaises(ValueError):verification_resources(value)
+
+    def test_pdfjs_worker_missing_result_fails_closed(self):
+        class Child:
+            returncode=0
+            def communicate(self,_input,timeout):return '', ''
+            def poll(self):return 0
+            def wait(self):return 0
+        with patch('viewing_copy.subprocess.Popen',return_value=Child()):
+            with self.assertRaisesRegex(ValueError,'missing result'):
+                verify_pdfjs('source.pdf','candidate.pdf',1,workers=1,node='node')
+
+    def test_pdfjs_verification_worker_keeps_results_in_page_order(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            source=Path(folder)/'source.pdf';candidate=Path(folder)/'candidate.pdf'
+            writer=PdfWriter();writer.add_blank_page(width=60,height=60);writer.add_blank_page(width=80,height=60)
+            writer.write(source);shutil.copyfile(source,candidate)
+            with contextlib.redirect_stdout(io.StringIO()):
+                rows=verify_pdfjs(source,candidate,2,workers=2)
+            self.assertEqual([row['page'] for row in rows],[1,2])
+            self.assertTrue(all(row['exact'] for row in rows))
+
+    def test_budget_timeout_is_distinct_from_tool_timeout(self):
+        timeout=__import__('subprocess').TimeoutExpired(['tool'],1)
+        with patch('viewing_copy.subprocess.run',side_effect=timeout):
+            budget=RunBudget(seconds=10);budget.started-=9
+            with self.assertRaisesRegex(TimeBudgetExceeded,'during timed stage'):
+                _run(['tool'],300,budget,'timed stage')
+            with self.assertRaisesRegex(ValueError,'timed out after 300'):
+                _run(['tool'],300,None,'tool stage')
+
+    def test_node_identity_changes_when_executable_bytes_change(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            node=Path(folder)/'node.exe';node.write_bytes(b'first')
+            completed=__import__('subprocess').CompletedProcess([],0,'v22.13.0\n','')
+            with patch('viewing_copy.subprocess.run',return_value=completed):
+                first=node_identity(str(node))
+                node.write_bytes(b'second')
+                second=node_identity(str(node))
+            self.assertEqual(first['version'],second['version'])
+            self.assertNotEqual(first['sha256'],second['sha256'])
+
+    def test_interrupted_candidate_metadata_uses_completed_payload(self):
+        from tools.evidence_cache import EvidenceCache
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            root=Path(folder);cache=EvidenceCache(root/'cache')
+            context={'operation':'candidate','source_sha256':'a'*64,'candidate_sha256':'b'*64,
+                     'page':None,'crop':None,'renderer':'repository','renderer_version':'1',
+                     'geometry':None,'resolution':{},'background':None,'thresholds':None,'metric_version':'1'}
+            old,new=root/'old.pdf',root/'new.pdf';old.write_bytes(b'completed');new.write_bytes(b'regenerated')
+            cache.store_file(context,old)
+            digest=_store_candidate(cache,context,new)
+            self.assertEqual(new.read_bytes(),b'completed')
+            self.assertEqual(digest,__import__('hashlib').sha256(b'completed').hexdigest())
+
+    def test_qpdf_candidate_uses_pinned_lossless_profile(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            source,destination=Path(folder)/'source.pdf',Path(folder)/'output.pdf'
+            source.write_bytes(b'pdf')
+            def run(command,**kwargs):
+                if '--version' in command:
+                    return __import__('subprocess').CompletedProcess(command,0,'qpdf version 12.4.2\n','')
+                destination.write_bytes(source.read_bytes())
+                return __import__('subprocess').CompletedProcess(command,0,'','')
+            with patch.dict('os.environ',{'PDF_QPDF':'qpdf-test'}),\
+                 patch('viewing_copy.shutil.which',return_value='qpdf-test'),\
+                 patch('viewing_copy.subprocess.run',side_effect=run) as process:
+                self.assertEqual(build_qpdf_candidate(source,destination),'qpdf version 12.4.2')
+            command=process.call_args_list[1].args[0]
+            self.assertTrue(all(call.kwargs['creationflags'] == getattr(__import__('subprocess'),'CREATE_NO_WINDOW',0)
+                                for call in process.call_args_list))
+            self.assertIn('--recompress-flate',command)
+            self.assertIn('--object-streams=generate',command)
+            self.assertNotIn('--linearize',command)
+
+    def test_pdfjs_children_do_not_open_command_windows(self):
+        completed=__import__('subprocess').CompletedProcess([],0,'{"exact": true}\n','')
+        with patch('viewing_copy.runtime_node',return_value='node'),\
+             patch('viewing_copy.subprocess.run',return_value=completed) as process:
+            benchmark_worker('source.pdf',1,'render')
+            verify_pdfjs_page('source.pdf','candidate.pdf',1)
+        self.assertTrue(all(call.kwargs['creationflags'] == getattr(__import__('subprocess'),'CREATE_NO_WINDOW',0)
+                            for call in process.call_args_list))
+
     def test_nonpainted_link_retained_between_converted_strokes(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
             a,b=Path(folder)/'a.pdf',Path(folder)/'b.pdf';w,page,ann=annotation_fixture()
@@ -116,6 +227,50 @@ class ViewingTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,'missing canvas'):optimize_viewing(a,b)
             self.assertEqual(list(Path(folder).iterdir()),[a]);self.assertEqual(a.read_bytes(),original)
 
+    def test_completed_production_stages_resume_only_from_exact_checkpoint(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            source=Path(folder)/'source.pdf';first=Path(folder)/'first.pdf';second=Path(folder)/'second.pdf'
+            checkpoint=Path(folder)/'run.checkpoint';w=PdfWriter();w.add_blank_page(width=60,height=60);w.write(source)
+            calls={'build':0,'verify':0,'timing':0,'pdfjs':0,'browser':0}
+            def build(src,dst,kind):
+                calls['build']+=1;shutil.copyfile(src,dst)
+                return {'converted':{},'evidence':[],'count':0,'kind':kind}
+            def verify(*args,**kwargs):
+                calls['verify']+=1
+                return {'exact':True,'pages':[],'normalized_missing_OC':False,'full':True,'checks':{}}
+            def timing(paths,pages,**kwargs):
+                calls['timing']+=1;rows=[]
+                for path in paths:
+                    for mode in ('render','prepare'):
+                        rows.append({'file':str(Path(path).absolute()),'page':1,'mode':mode,'run':1,
+                                     'load':{'wall':.01},'prepare':{'wall':.01},
+                                     'cold':{'wall':.01,'cpu':.01},'cached':{'wall':.01},
+                                     'ready':{'wall':.01,'cpu':.01},'rss':1,'operators':0,
+                                     'annotations':{'count':0}})
+                return rows
+            def choose(source,candidates,results):
+                candidate=candidates[0];candidate.update(cpu_reduction=.2,regression=False,median={})
+                return candidate
+            def pdfjs(*args,**kwargs):calls['pdfjs']+=1;return []
+            def browser(*args,**kwargs):calls['browser']+=1;return {}
+            with patch('viewing_copy.benchmark_worker',return_value={}),\
+                 patch('viewing_copy.node_identity',return_value={'path':'node','version':'fixture','sha256':'f'*64}),\
+                 patch('viewing_copy.build_candidate',side_effect=build),\
+                 patch('viewing_copy.verify_candidate',side_effect=verify),\
+                 patch('viewing_copy.benchmarks',side_effect=timing),\
+                 patch('viewing_copy.choose_candidate',side_effect=choose),\
+                 patch('viewing_copy.verify_pdfjs',side_effect=pdfjs),\
+                 patch('browser_check.check_browser',side_effect=browser),\
+                 patch('viewing_copy.qpdf_identity',side_effect=ValueError('unavailable')),\
+                 patch('pymupdf.open',side_effect=ValueError('packing unavailable')):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    optimize_viewing(source,first,checkpoint=checkpoint)
+                    optimize_viewing(source,second,checkpoint=checkpoint)
+            self.assertEqual(calls,{'build':3,'verify':3,'timing':1,'pdfjs':2,'browser':2})
+            report=json.loads(second.with_suffix('.json').read_text())
+            self.assertTrue(report['checkpoint']['resumed'])
+            self.assertGreater(report['checkpoint']['stats']['hits'],0)
+
     def test_interrupted_report_write_cleans_only_its_new_files(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
             a,b=Path(folder)/'a.pdf',Path(folder)/'b.pdf'
@@ -126,7 +281,8 @@ class ViewingTests(unittest.TestCase):
                 return native_open(path,*args,**kwargs)
             with patch('viewing_copy.benchmark_worker',return_value={}),patch('viewing_copy.build_candidate',side_effect=ValueError('unsupported')),patch('pymupdf.open',side_effect=ValueError('packing unsupported')),patch.object(Path,'open',interrupted):
                 with contextlib.redirect_stdout(io.StringIO()),self.assertRaises(KeyboardInterrupt):optimize_viewing(a,b)
-            self.assertEqual(list(Path(folder).iterdir()),[a]);self.assertEqual(a.read_bytes(),original)
+            self.assertEqual(sorted(path.name for path in Path(folder).iterdir()),['a.pdf','b.checkpoint'])
+            self.assertEqual(a.read_bytes(),original)
 
     def test_unknown_broken_layer_blocks_transform(self):
         from pypdf.generic import IndirectObject

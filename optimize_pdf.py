@@ -52,12 +52,18 @@ def verify_pages(original, candidate):
     return count
 
 
-def optimize(source, destination, compact_structure=False, fast_handwriting=False, remove_invisible_text=False, inline_handwriting=False, viewing_copy=False):
+def optimize(source, destination, compact_structure=False, fast_handwriting=False, remove_invisible_text=False,
+             inline_handwriting=False, viewing_copy=False, expected_source_sha256=None,
+             checkpoint=None,time_budget_seconds=None,disk_budget_bytes=None,verification_workers=None):
     if viewing_copy:
         if any((compact_structure, fast_handwriting, remove_invisible_text, inline_handwriting)):
             raise ValueError('Viewing-copy mode selects its own passes; run other modes separately.')
         from viewing_copy import optimize_viewing
-        return optimize_viewing(source, destination)
+        return optimize_viewing(source, destination, expected_source_sha256,checkpoint,
+                                time_budget_seconds,disk_budget_bytes,verification_workers)
+    if any(value is not None for value in (expected_source_sha256,checkpoint,time_budget_seconds,
+                                            disk_budget_bytes,verification_workers)):
+        raise ValueError('Expected-source checking, checkpoints, budgets and verification workers are available only in viewing-copy mode.')
     if sum((fast_handwriting, remove_invisible_text, inline_handwriting)) > 1:
         raise ValueError('Run handwriting, OCR removal and inlining modes as separate passes.')
     if compact_structure:
@@ -166,6 +172,16 @@ def main():
                        help='Consolidate supported BOOX handwriting Forms, preserving drawing bytes and clipping.')
     modes.add_argument('--viewing-copy', action='store_true',
                        help='Select a verified faster vector viewing copy; converts static BOOX ink annotations.')
+    parser.add_argument('--expected-source-sha256',
+                        help='Fail without publication unless the viewing-copy input matches this SHA256.')
+    parser.add_argument('--checkpoint',type=Path,
+                        help='Resume exact completed viewing-copy stages from this adjacent directory.')
+    parser.add_argument('--time-budget-seconds',type=float,
+                        help='Stop this viewing-copy run when its elapsed-time budget is exhausted.')
+    parser.add_argument('--disk-budget-bytes',type=int,
+                        help='Stop this viewing-copy run when checkpoint and working files exceed this budget.')
+    parser.add_argument('--verification-workers',type=int,
+                        help='Viewing-copy PDF verification processes (default: 2, limited by logical CPUs).')
     args = parser.parse_args()
     suffix = '.viewing.pdf' if args.viewing_copy else ('.inlined.pdf' if args.inline_handwriting else ('.no-ocr.pdf' if args.remove_invisible_text else '.optimized.pdf'))
     destination = args.output or args.input.with_name(args.input.stem + suffix)
@@ -173,9 +189,15 @@ def main():
         optimize(args.input, destination, compact_structure=args.compact_structure,
                  fast_handwriting=args.fast_handwriting,
                  remove_invisible_text=args.remove_invisible_text,
-                 inline_handwriting=args.inline_handwriting, viewing_copy=args.viewing_copy)
+                 inline_handwriting=args.inline_handwriting, viewing_copy=args.viewing_copy,
+                 expected_source_sha256=args.expected_source_sha256,checkpoint=args.checkpoint,
+                 time_budget_seconds=args.time_budget_seconds,disk_budget_bytes=args.disk_budget_bytes,
+                 verification_workers=args.verification_workers)
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
+        from viewing_copy import TimeBudgetExceeded,DiskBudgetExceeded
+        if isinstance(exc,TimeBudgetExceeded):return 2
+        if isinstance(exc,DiskBudgetExceeded):return 3
         return 1
     return 0
 

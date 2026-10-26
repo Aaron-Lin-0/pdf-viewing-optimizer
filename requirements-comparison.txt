@@ -1,0 +1,8 @@
+# Tested with CPython 3.13 on Windows; comparison tools support Python 3.10+.
+-r requirements-dev.txt
+selenium==4.51.0
+psutil==7.2.2
+numpy==2.2.6
+scipy==1.15.3
+scikit-image==0.25.2
+matplotlib==3.10.3

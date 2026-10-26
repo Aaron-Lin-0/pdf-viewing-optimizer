@@ -20,21 +20,10 @@ const documentOptions={
 };
 const [file,pageNumber,mode='render',widthArg='1404',png]=process.argv.slice(2);
 const number=Number(pageNumber),width=Number(widthArg);
-if(!Number.isInteger(number)||number<1||!Number.isInteger(width)||width<1)throw new Error('Invalid benchmark page/width.');
-if(mode==='preflight'){console.log(JSON.stringify({version:pdfjs.version,dependencies:'ready'}));}
-else if(mode==='compare'){
-  async function snapshot(name){
-    const d=await pdfjs.getDocument({...documentOptions,data:new Uint8Array(fs.readFileSync(name))}).promise;
-    const p=await d.getPage(number),initial=p.getViewport({scale:1}),v=p.getViewport({scale:width/initial.width});
-    const canvas=createCanvas(Math.ceil(v.width),Math.ceil(v.height));
-    await p.render({canvasContext:canvas.getContext('2d'),viewport:v,annotationMode:pdfjs.AnnotationMode.ENABLE}).promise;
-    const result={width:canvas.width,height:canvas.height,data:canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data};
-    await d.destroy();return result;
-  }
-  const a=await snapshot(file);globalThis.gc?.();const b=await snapshot(png);
+if(mode!=='compare-worker'&&(!Number.isInteger(number)||number<1||!Number.isInteger(width)||width<1))throw new Error('Invalid benchmark page/width.');
+const compareSnapshots=(a,b,page,allow)=>{
   if(a.width!==b.width||a.height!==b.height)throw new Error('PDF.js dimensions changed.');
-  let peak=0,sum=0,outside=0;const allow=process.argv[7]==='edges';
-  const ink=new Uint8Array(a.width*a.height);
+  let peak=0,sum=0,outside=0;const ink=new Uint8Array(a.width*a.height);
   for(let i=0;i<ink.length;i++)ink[i]=Math.round(.299*a.data[i*4]+.587*a.data[i*4+1]+.114*a.data[i*4+2])<250?1:0;
   for(let i=0;i<ink.length;i++){
     let changed=false;
@@ -45,12 +34,47 @@ else if(mode==='compare'){
     }
   }
   const mean=sum/(ink.length*3),ok=peak===0||(allow&&peak<=96&&mean<=1.5&&outside===0);
-  console.log(JSON.stringify({page:number,width:a.width,height:a.height,ok,exact:peak===0,peak,mean,outsideEdgeBand:outside}));
-  process.exitCode=ok?0:1;
+  return {page,width:a.width,height:a.height,ok,exact:peak===0,peak,mean,outsideEdgeBand:outside};
+};
+if(mode==='preflight'){console.log(JSON.stringify({version:pdfjs.version,dependencies:'ready'}));}
+else if(mode==='compare-worker'){
+  const candidate=pageNumber,workerWidth=Number(widthArg),allow=png==='edges';
+  if(!Number.isInteger(workerWidth)||workerWidth<1)throw new Error('Invalid verification width.');
+  const tasks=[file,candidate].map(name=>pdfjs.getDocument({...documentOptions,data:new Uint8Array(fs.readFileSync(name))}));
+  const [sourceDocument,candidateDocument]=await Promise.all(tasks.map(task=>task.promise));
+  async function snapshot(document,page){
+    const p=await document.getPage(page),initial=p.getViewport({scale:1}),v=p.getViewport({scale:workerWidth/initial.width});
+    const canvas=createCanvas(Math.ceil(v.width),Math.ceil(v.height));
+    await p.render({canvasContext:canvas.getContext('2d'),viewport:v,annotationMode:pdfjs.AnnotationMode.ENABLE}).promise;
+    return {width:canvas.width,height:canvas.height,data:canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data};
+  }
+  process.stdin.setEncoding('utf8');let pending='';
+  for await(const chunk of process.stdin){pending+=chunk;let split;
+    while((split=pending.indexOf('\n'))>=0){const line=pending.slice(0,split).trim();pending=pending.slice(split+1);if(!line)continue;
+      const page=Number(line);
+      try{const a=await snapshot(sourceDocument,page);const b=await snapshot(candidateDocument,page);console.log(JSON.stringify(compareSnapshots(a,b,page,allow)));}
+      catch(error){console.log(JSON.stringify({page,error:String(error?.message||error)}));}
+    }
+  }
+  await Promise.all(tasks.map(task=>task.destroy()));
+}
+else if(mode==='compare'){
+  async function snapshot(name){
+    const task=pdfjs.getDocument({...documentOptions,data:new Uint8Array(fs.readFileSync(name))}),d=await task.promise;
+    const p=await d.getPage(number),initial=p.getViewport({scale:1}),v=p.getViewport({scale:width/initial.width});
+    const canvas=createCanvas(Math.ceil(v.width),Math.ceil(v.height));
+    await p.render({canvasContext:canvas.getContext('2d'),viewport:v,annotationMode:pdfjs.AnnotationMode.ENABLE}).promise;
+    const result={width:canvas.width,height:canvas.height,data:canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data};
+    await task.destroy();return result;
+  }
+  const a=await snapshot(file);globalThis.gc?.();const b=await snapshot(png);
+  const result=compareSnapshots(a,b,number,process.argv[7]==='edges');console.log(JSON.stringify(result));
+  process.exitCode=result.ok?0:1;
 }else{
 const measure=async fn=>{const t=performance.now(),cpu=process.cpuUsage();const result=await fn();const c=process.cpuUsage(cpu);return {result,wall:(performance.now()-t)/1000,cpu:(c.user+c.system)/1e6,rss:process.memoryUsage().rss};};
 const start=performance.now(),startCPU=process.cpuUsage();
-const loaded=await measure(()=>pdfjs.getDocument({...documentOptions,data:new Uint8Array(fs.readFileSync(file))}).promise);
+const task=pdfjs.getDocument({...documentOptions,data:new Uint8Array(fs.readFileSync(file))});
+const loaded=await measure(()=>task.promise);
 const doc=loaded.result,page=await doc.getPage(number),view=page.getViewport({scale:1});
 const viewport=page.getViewport({scale:width/view.width});
 const output={version:pdfjs.version,file,page:number,mode,width,height:Math.ceil(viewport.height),load:{wall:loaded.wall,cpu:loaded.cpu},rss:loaded.rss};
@@ -70,5 +94,5 @@ if(mode==='prepare'){
   output.pixelHash=createHash('sha256').update(canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data).digest('hex');
   if(png)fs.writeFileSync(png,canvas.toBuffer('image/png'));
 }
-console.log(JSON.stringify(output));await doc.destroy();
+console.log(JSON.stringify(output));await task.destroy();
 }
