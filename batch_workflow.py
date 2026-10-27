@@ -165,6 +165,16 @@ def _save_job(job):
 
 
 def _process_alive(pid):
+    if sys.platform == 'win32':
+        kernel32=ctypes.WinDLL('kernel32',use_last_error=True)
+        kernel32.OpenProcess.argtypes=(ctypes.c_ulong,ctypes.c_int,ctypes.c_ulong)
+        kernel32.OpenProcess.restype=ctypes.c_void_p
+        kernel32.CloseHandle.argtypes=(ctypes.c_void_p,)
+        handle=kernel32.OpenProcess(0x100000,False,pid)  # SYNCHRONIZE
+        if handle:
+            kernel32.CloseHandle(handle)
+            return True
+        return ctypes.get_last_error()!=87  # ERROR_INVALID_PARAMETER means no such PID.
     try:os.kill(pid,0);return True
     except PermissionError:return True
     except OSError:return False

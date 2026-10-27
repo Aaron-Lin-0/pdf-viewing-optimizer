@@ -1,5 +1,7 @@
 import json
+import os
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from dataclasses import replace
@@ -8,7 +10,7 @@ from pypdf import PdfWriter
 from viewing_copy_gui import progress_text
 
 from batch_workflow import (BatchController, JobAlreadyRunning, JobBudgetExceeded, JobTimeout,
-                            _claim_job, _release_claim, _save_job, confirmation_text,
+                            _claim_job, _process_alive, _release_claim, _save_job, confirmation_text,
                             dependency_diagnostics, dependency_report, filehash, plan_batch,
                             resource_summary, run_optimizer)
 
@@ -93,6 +95,12 @@ class ViewingCopyGuiTests(unittest.TestCase):
             try:
                 with self.assertRaisesRegex(JobAlreadyRunning,'already being optimized'):_claim_job(job)
             finally:_release_claim(claim)
+
+    @unittest.skipUnless(sys.platform == 'win32','Windows process probe')
+    def test_process_probe_does_not_signal_the_process(self):
+        from unittest.mock import patch
+        with patch('batch_workflow.os.kill',side_effect=AssertionError('must not signal')):
+            self.assertTrue(_process_alive(os.getpid()))
 
     def test_checkpoint_symlink_is_rejected(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
