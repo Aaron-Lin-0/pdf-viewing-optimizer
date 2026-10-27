@@ -37,10 +37,13 @@ Describe the check as identical rendering at 144 DPI in PDFium, not a guarantee 
 ## Viewing-copy mode
 
 Use an explicit output path in the current deliverables folder and run one document
-at a time. Add `--viewing-copy` without other mode flags. Keep all bundled helper
+at a time. Add `--viewing-copy` without other mode flags. `--parallel-candidates`
+may build independent built-in candidates concurrently when extra RAM and disk
+bandwidth are available; it does not parallelize documents, benchmarks or publication. Keep all bundled helper
 Python files, `pdfjs_benchmark.mjs` and `browser_harness.html` beside the optimizer.
 This mode additionally requires PyMuPDF >=1.28, Node.js 22.13+, pdfjs-dist 6.4.299,
-@napi-rs/canvas and installed Zen/Firefox. Locate available runtimes; use a task-local
+@napi-rs/canvas and installed Zen/Firefox. The Windows skill includes qpdf 12.4.2
+under `scripts/vendor/qpdf`; `PDF_QPDF` may select another executable. Locate available runtimes; use a task-local
 dependency folder/environment when a dependency is missing. Set PDF_NODE,
 PDF_NODE_MODULES or PDF_BROWSER only when selecting alternative installed tools.
 Never substitute an unchecked PDF when a dependency or renderer fails.

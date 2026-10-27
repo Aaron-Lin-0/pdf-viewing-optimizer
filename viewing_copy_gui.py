@@ -13,6 +13,15 @@ def progress_text(completed, total):
     return 'No batch running' if not total else f'{completed} of {total} files complete'
 
 
+def collect_pdf_paths(pick,add_more):
+    selected=[]
+    while True:
+        batch=pick()
+        if not batch:return tuple(selected)
+        selected.extend(batch)
+        if not add_more(len(selected)):return tuple(selected)
+
+
 def review_jobs(parent, text):
     import tkinter as tk
     from tkinter import ttk
@@ -46,8 +55,9 @@ def main():
     frame=ttk.Frame(root,padding=16);frame.grid(sticky='nsew');root.columnconfigure(0,weight=1);root.rowconfigure(0,weight=1)
     frame.columnconfigure(0,weight=1);frame.rowconfigure(5,weight=1)
     ttk.Label(frame,text='Verified viewing copies',font=heading).grid(row=0,column=0,sticky='w')
-    ttk.Label(frame,text='Select PDFs, review every output path, then process one file at a time.',wraplength=760).grid(row=1,column=0,sticky='ew',pady=(3,12))
+    ttk.Label(frame,text='Select PDFs from one or more folders, review every output path, then process one file at a time.',wraplength=760).grid(row=1,column=0,sticky='ew',pady=(3,12))
     resources=system_resources();worker_count=tk.IntVar(value=default_verification_workers())
+    parallel_candidates=tk.BooleanVar(value=False)
     resource_text=tk.StringVar(value=resource_summary(worker_count.get(),resources))
     ttk.Label(frame,textvariable=resource_text,wraplength=760).grid(row=2,column=0,sticky='ew',pady=(0,8))
     current=tk.StringVar(value='Checking setup…');current_label=ttk.Label(frame,textvariable=current,wraplength=760)
@@ -92,8 +102,10 @@ def main():
         if not setup_ready:
             messagebox.showerror('Setup needs attention','Run Check setup and follow the listed fix before selecting PDFs.')
             return
-        selected = filedialog.askopenfilenames(
-            title="Choose PDFs to optimize", filetypes=(("PDF files", "*.pdf"),))
+        selected=collect_pdf_paths(
+            lambda:filedialog.askopenfilenames(title="Choose PDFs to add",filetypes=(("PDF files","*.pdf"),)),
+            lambda count:messagebox.askyesno('Add PDFs from another folder?',
+                f'{count} {"PDF" if count==1 else "PDFs"} selected. Add PDFs from another folder?'))
         if not selected:
             return
         jobs = plan_batch(selected)
@@ -104,8 +116,10 @@ def main():
         if not 1<=workers<=resources['logical_cpu_count']:
             messagebox.showerror('Verification workers',f'Choose a whole number from 1 through {resources["logical_cpu_count"]}.')
             return
-        controller = BatchController(jobs, lambda *event: events.put(event),verification_workers=workers)
-        if not review_jobs(root,confirmation_text(jobs,workers,resources)):
+        parallel=parallel_candidates.get()
+        controller = BatchController(jobs, lambda *event: events.put(event),verification_workers=workers,
+                                     parallel_candidates=parallel)
+        if not review_jobs(root,confirmation_text(jobs,workers,resources,parallel)):
             controller.cancel()
             write("Cancelled; no optimizer was started.")
             return
@@ -124,6 +138,7 @@ def main():
         progress.configure(maximum=max(1,batch_total),value=0);progress_status.set(progress_text(0,batch_total))
         choose_button.configure(state='disabled');setup_button.configure(state='disabled');stop_button.configure(state='normal')
         worker_selector.configure(state='disabled')
+        parallel_selector.configure(state='disabled')
         write(f"Reviewed {len(jobs)} unique PDF(s).")
 
         def work():
@@ -170,6 +185,7 @@ def main():
                     setup_button.configure(state="normal")
                     stop_button.configure(state="disabled")
                     worker_selector.configure(state='normal')
+                    parallel_selector.configure(state='normal')
                     set_status("Complete")
                     counts = {status: sum(item.status == status for item in value)
                               for status in ("optimized", "no improvement", "failed", "timeout", "budget exhausted", "rejected", "skipped")}
@@ -191,15 +207,19 @@ def main():
             return
         root.destroy()
 
+    parallel_selector=ttk.Checkbutton(controls,text='Parallel candidate generation (more RAM)',underline=19,
+                                      variable=parallel_candidates)
+    parallel_selector.grid(row=0,column=3,columnspan=3,sticky='e')
     setup_button=ttk.Button(controls,text='Check setup',underline=6,command=check_setup)
-    setup_button.grid(row=0,column=3,padx=(0,8))
+    setup_button.grid(row=1,column=3,padx=(0,8),pady=(8,0))
     choose_button=ttk.Button(controls,text='Choose PDFs…',underline=7,command=choose,state='disabled')
-    choose_button.grid(row=0,column=4,padx=(0,8))
+    choose_button.grid(row=1,column=4,padx=(0,8),pady=(8,0))
     stop_button=ttk.Button(controls,text='Stop after current',underline=0,command=stop,state='disabled')
-    stop_button.grid(row=0,column=5)
+    stop_button.grid(row=1,column=5,pady=(8,0))
     root.bind('<Alt-s>',lambda _event:check_setup())
     root.bind('<Alt-p>',lambda _event:choose() if str(choose_button['state'])!='disabled' else None)
     root.bind('<Alt-t>',lambda _event:stop())
+    root.bind('<Alt-g>',lambda _event:parallel_selector.invoke() if parallel_selector.instate(['!disabled']) else None)
     root.bind('<Control-l>',lambda _event:log.focus_set())
     root.bind('<Configure>',lambda event:current_label.configure(wraplength=max(360,event.width-60)) if event.widget is root else None)
     root.protocol("WM_DELETE_WINDOW", close)

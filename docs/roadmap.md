@@ -877,6 +877,32 @@ new optimizer settings. P12 retains broader accessibility and dependency-preflig
   sequential before/after runtime runs are completed. No speedup is claimed; no
   private PDF was used.
 
+### Bundled qpdf refinement — 2026-10-27
+
+- The Windows ZIP and installed skill now include the qpdf 12.4.2 runtime and license.
+  Runtime discovery prefers that maintained copy while retaining `PDF_QPDF` as an
+  explicit override. Setup and GUI preflight fail closed when qpdf is missing or
+  damaged; its candidate still passes the existing preservation, rendering,
+  performance and browser gates before publication.
+
+### Selection and runtime refinement — 2026-10-27
+
+- The native picker can accumulate PDFs from multiple folders before one reviewed
+  batch. Duplicate collapse, adjacent output reservation, hashes and sequential
+  execution remain controller-owned.
+- The RAM warning now uses a 4 GiB baseline plus 0.5 GiB per verification worker,
+  replacing the uncalibrated 3 GiB/worker allowance. It remains advisory rather than
+  a measured peak.
+- Verification workers retain the shared source but release the previous candidate
+  document when advancing. Render timing keeps its three/five alternating samples;
+  descriptive operator preparation runs once. Sampling uses page 1 plus the three
+  highest-density non-first pages instead of fixed page numbers. All-page PDFium and
+  final PDF.js acceptance are unchanged.
+- An opt-in reviewed toggle and `--parallel-candidates` generate independent built-in
+  base candidates in separate processes, capped by the verification-worker count.
+  Dependent packing, preservation, timing, document order and publication remain
+  sequential so acceptance and performance evidence are unchanged.
+
 Follow [testing.md](testing.md) and the comparison-specific checks in
 [comparison.md](comparison.md#validation). A future product-mode/API or external
 publication-policy change needs explicit design documentation and its own tests.

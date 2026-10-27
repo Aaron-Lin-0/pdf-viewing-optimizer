@@ -14,6 +14,10 @@ if not defined PDF_BOOTSTRAP (
 )
 if not defined PDF_BOOTSTRAP goto :python_missing
 
+if not exist "vendor\qpdf\bin\qpdf.exe" goto :qpdf_missing
+"vendor\qpdf\bin\qpdf.exe" --version | findstr /c:"qpdf version 12.4.2" >nul
+if errorlevel 1 goto :qpdf_missing
+
 if not exist ".venv\Scripts\python.exe" (
     echo Creating the private Python environment...
     %PDF_BOOTSTRAP% -m venv .venv
@@ -50,6 +54,10 @@ goto :failed
 
 :node_missing
 echo Node.js 22.13 or newer was not found. Install it from https://nodejs.org/ and run this setup again.
+goto :failed
+
+:qpdf_missing
+echo Bundled qpdf 12.4.2 is missing or damaged. Extract a fresh release and run setup again.
 
 :failed
 echo.

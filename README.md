@@ -35,7 +35,13 @@ For the packaged Windows version, extract the ZIP and open **Setup Dependencies.
 once. It creates a private `.venv`, installs the pinned Python packages, and runs
 `npm ci` for the pinned PDF.js packages. It does not silently install Python,
 Node.js, or a browser; if one is missing, it shows the official download location
-and leaves PDFs untouched. The launchers automatically use the private environment.
+and leaves PDFs untouched. The release includes qpdf 12.4.2 and its license; setup
+checks those bundled files. The launchers automatically use the private environment.
+
+When running from a Git checkout, **Update PDF Viewing Optimizer.cmd** performs only
+a clean fast-forward pull, then reruns setup. It refuses to update a checkout with
+local tracked or untracked changes. Extracted release copies do not self-update;
+install a newer release into a separate folder.
 
 ```powershell
 python -m venv .venv
@@ -44,12 +50,13 @@ npm ci
 $env:PDF_BROWSER = 'C:\Program Files\Zen Browser\zen.exe'
 ```
 
-Keep the complete `pdfjs-dist` package, including its font, CMap, ICC and WASM resources. The renderer needs these to decode some PDFs correctly. `PDF_NODE`, `PDF_NODE_MODULES` and `PDF_BROWSER` can select alternate installed runtimes. Without local Node dependencies, the scripts can reuse Codex's bundled runtime. If qpdf is installed, viewing-copy mode also tests its lossless Flate/object-stream rewrite; set `PDF_QPDF` to select a specific executable.
+Keep the complete `pdfjs-dist` package, including its font, CMap, ICC and WASM resources. The renderer needs these to decode some PDFs correctly. `PDF_NODE`, `PDF_NODE_MODULES` and `PDF_BROWSER` can select alternate installed runtimes. Without local Node dependencies, the scripts can reuse Codex's bundled runtime. The Windows release uses its bundled qpdf 12.4.2 for a lossless Flate/object-stream candidate; set `PDF_QPDF` to select another executable.
 
 ## Create a viewing copy
 
-On Windows, open **Create Viewing Copies.cmd**, select one or more PDFs, and leave
-the window open while they are processed sequentially. Review each exact source-to-output
+On Windows, open **Create Viewing Copies.cmd** and select one or more PDFs. After each
+picker, choose whether to add PDFs from another folder; canceling a later picker keeps
+the files already selected. Leave the window open while they are processed sequentially. Review each exact source-to-output
 mapping in the confirmation dialog before starting. Duplicate selections collapse
 to one job. Use **Stop after current** to keep the active result and skip the queue. Accepted copies and all
 reports are saved beside each source as `NAME.optimized.*`; existing names receive
@@ -59,13 +66,17 @@ timing stages from the adjacent `.checkpoint` directory. Final browser acceptanc
 and publication always run again. The window shows the current stage and its age;
 each file has a six-hour and 10-GiB working-data limit in the GUI.
 The app checks required local components before selection; **Check setup** repeats
-that check. Keyboard shortcuts are Alt+S for setup, Alt+P to choose PDFs, Alt+T to
-stop after the current file, and Ctrl+L to focus the activity log. Long mappings are
+that check. Keyboard shortcuts are Alt+S for setup, Alt+P to choose PDFs, Alt+G to
+toggle parallel generation, Alt+T to stop after the current file, and Ctrl+L to focus the activity log. Long mappings are
 shown in a resizable, scrollable review window before anything starts.
 Choose **Verification workers** before review (default: two, or one on a one-CPU
 system). Startup and review show logical CPUs, total/available RAM, and the
-conservative planning estimate of 2 GiB plus 3 GiB per worker. This is not a
+conservative planning estimate of 4 GiB plus 0.5 GiB per worker. This is not a
 measured peak or limit, and renderer workers may use multiple CPU threads.
+Enable **Parallel candidate generation** to build independent built-in candidates
+concurrently, capped by the reviewed worker count. It can reduce generation time on
+large files but raises simultaneous RAM and disk traffic; dependent packing,
+verification, timing, documents and publication remain ordered.
 The determinate progress bar reports completed reviewed files—such as “1 of 2 files
 complete”—while the status line separately identifies the active file and stage.
 
@@ -76,7 +87,8 @@ For the command line:
 ```
 
 The output is `notes.viewing.pdf`, with `.md` and `.json` reports beside it. You can provide an explicit output path as the second argument. If no candidate qualifies, the command saves reports with status **no improvement** and does not publish a replacement PDF.
-CLI callers may set `--verification-workers N`, `--time-budget-seconds`, `--disk-budget-bytes`, and an adjacent
+CLI callers may set `--verification-workers N`, `--parallel-candidates`,
+`--time-budget-seconds`, `--disk-budget-bytes`, and an adjacent
 `--checkpoint` directory. Omitting the budget options retains the existing unlimited
 single-file behavior.
 
@@ -115,7 +127,7 @@ renderer versions, and stage context. Incomplete or corrupt entries are ignored.
 
 Viewing-copy candidates are checked against raw navigation structures and drawing/resource signatures, then rendered at 144 DPI in PDFium. Source signatures and lossless source renders are reused within the invocation; page comparisons use the selected spawned workers and remain fail-closed. Final candidates also undergo all-page PDF.js comparison with persistent verification-only workers, high-resolution and print samples, and browser interaction checks. All verification workers stop before fresh sequential benchmarks, browser checks, and publication. Exact transformations require identical tested pixels. Edge-changing transformations must preserve geometry and meet a strict one-pixel edge-band limit. The legacy modes have the different checks described above and in the mode reference.
 
-The benchmark measures preparation, cold rendering and cached drawing separately in fresh processes. A **faster** classification requires at least 10% less aggregate median cold-render CPU and no significant sampled latency regression. A smaller exact copy can qualify without meeting the faster threshold, provided CPU stays within 5% of the original. Reports include individual runs, variability and rejected candidates.
+The benchmark measures preparation, cold rendering and cached drawing separately in fresh processes. Operator preparation is recorded once per page/version; the selection-driving render pass retains three alternating runs and extends to five when noisy. A **faster** classification requires at least 10% less aggregate median cold-render CPU and no significant sampled latency regression. A smaller exact copy can qualify without meeting the faster threshold, provided CPU stays within 5% of the original. Reports include individual runs, variability and rejected candidates.
 
 These production selection measurements use the installed PDF.js harness. The
 separate comparison runner measures Firefox's bundled viewer; its findings do

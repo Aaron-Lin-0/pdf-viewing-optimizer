@@ -7,7 +7,7 @@ import unittest
 from dataclasses import replace
 
 from pypdf import PdfWriter
-from viewing_copy_gui import progress_text
+from viewing_copy_gui import collect_pdf_paths,progress_text
 
 from batch_workflow import (BatchController, JobAlreadyRunning, JobBudgetExceeded, JobTimeout,
                             _claim_job, _process_alive, _release_claim, _save_job, confirmation_text,
@@ -35,12 +35,21 @@ def complete(job, status="no improvement", **changes):
 
 
 class ViewingCopyGuiTests(unittest.TestCase):
+    def test_picker_accumulates_pdfs_across_folders(self):
+        batches=iter([('first/a.pdf','first/b.pdf'),('second/c.pdf',)])
+        prompts=[]
+        selected=collect_pdf_paths(lambda:next(batches),lambda count:prompts.append(count) or count<3)
+        self.assertEqual(selected,('first/a.pdf','first/b.pdf','second/c.pdf'))
+        self.assertEqual(prompts,[2,3])
+        batches=iter([('first/a.pdf',),()])
+        self.assertEqual(collect_pdf_paths(lambda:next(batches),lambda _count:True),('first/a.pdf',))
+
     def test_resource_summary_warns_without_blocking_selection(self):
         resources={'logical_cpu_count':8,'total_ram_bytes':16*1024**3,
                    'available_ram_bytes':4*1024**3}
         text=resource_summary(2,resources)
         self.assertIn('Verification workers: 2',text)
-        self.assertIn('8.0 GiB',text)
+        self.assertIn('5.0 GiB',text)
         self.assertIn('exceeds available RAM',text)
         self.assertIn('does not reserve or cap CPU cores',text)
 
@@ -54,9 +63,10 @@ class ViewingCopyGuiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
             source=Path(folder)/'source.pdf';make_pdf(source);job=plan_batch([source])[0]
             with patch('batch_workflow.subprocess.Popen',return_value=Child()) as popen:
-                run_optimizer(job,lambda *_:None,lambda:None,3)
+                run_optimizer(job,lambda *_:None,lambda:None,3,True)
             command=popen.call_args.args[0]
             self.assertEqual(command[command.index('--verification-workers')+1],'3')
+            self.assertIn('--parallel-candidates',command)
 
     def test_memory_detection_failure_is_reported_as_unavailable(self):
         from unittest.mock import patch
@@ -73,7 +83,7 @@ class ViewingCopyGuiTests(unittest.TestCase):
         self.assertEqual(progress_text(1,2),'1 of 2 files complete')
         self.assertEqual(progress_text(2,2),'2 of 2 files complete')
 
-    def test_dependency_preflight_distinguishes_required_and_optional_tools(self):
+    def test_dependency_preflight_requires_bundled_qpdf(self):
         from unittest.mock import patch
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
             browser=Path(folder)/'zen.exe';browser.write_bytes(b'fixture')
@@ -81,12 +91,17 @@ class ViewingCopyGuiTests(unittest.TestCase):
             with patch.dict('os.environ',{'PDF_BROWSER':str(browser)},clear=False),\
                  patch('batch_workflow.importlib.metadata.version',side_effect=lambda name:{'pypdf':'6.10.0','pypdfium2':'5.14.0','Pillow':'12.3.0','PyMuPDF':'1.28.2'}[name]),\
                  patch('viewing_copy.runtime_node',return_value=__import__('sys').executable),\
+                 patch('viewing_copy.qpdf_identity',return_value=('qpdf.exe','qpdf version 12.4.2','f'*64)) as qpdf,\
                  patch('batch_workflow.subprocess.run',return_value=completed),\
                  patch('batch_workflow.shutil.which',return_value=None):
                 rows=dependency_diagnostics()
+                qpdf.side_effect=ValueError('qpdf unavailable')
+                missing=dependency_diagnostics()
             self.assertFalse([row for row in rows if not row['ok'] and not row['optional']])
-            self.assertEqual(rows[-1]['name'],'qpdf');self.assertTrue(rows[-1]['optional'])
-            self.assertIn('Optional: qpdf',dependency_report(rows))
+            self.assertEqual(rows[-1]['name'],'qpdf');self.assertFalse(rows[-1]['optional'])
+            self.assertIn('Ready: qpdf',dependency_report(rows))
+            self.assertFalse(missing[-1]['ok']);self.assertFalse(missing[-1]['optional'])
+            self.assertIn('Restore the bundled qpdf files',missing[-1]['action'])
 
     def test_second_process_claim_is_rejected(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
@@ -119,9 +134,10 @@ class ViewingCopyGuiTests(unittest.TestCase):
             self.assertEqual([job.source for job in jobs], [first.absolute(), second.absolute()])
             self.assertEqual(jobs[0].output.name, "first.optimized-2.pdf")
             self.assertTrue(all(job.status == "ready" for job in jobs))
-            text = confirmation_text(jobs)
+            text = confirmation_text(jobs,parallel_candidates=True)
             self.assertLess(text.index(str(first)), text.index(str(second)))
             self.assertIn(str(jobs[0].output), text)
+            self.assertIn('Candidate generation: parallel',text)
             self.assertEqual([job.source for job in plan_batch([second, first])],
                              [second.absolute(), first.absolute()])
 

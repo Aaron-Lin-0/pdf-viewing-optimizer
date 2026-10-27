@@ -15,9 +15,14 @@ After extracting the ZIP, open Setup Dependencies.cmd once. It creates a private
 .venv and installs the pinned Python and PDF.js packages. Python 3.10+, Node.js
 22.13+ and Zen/Firefox must already be installed; missing components are explained
 without changing any PDF. All launchers prefer the private environment afterward.
+In a Git checkout, Update PDF Viewing Optimizer.cmd performs a clean fast-forward
+pull and reruns setup. It stops when local changes exist. Extracted releases must be
+updated by installing a newer release into a separate folder.
 
-On Windows, open Create Viewing Copies.cmd and select one or more PDFs. Files run
-one at a time after you review and confirm each source-to-output mapping. Duplicate
+On Windows, open Create Viewing Copies.cmd and select one or more PDFs. After each
+picker, choose whether to add PDFs from another folder; canceling a later picker
+keeps the current selection. Files run one at a time after you review and confirm
+each source-to-output mapping. Duplicate
 selections collapse to one job. Stop after current preserves the active result and
 skips queued files. Accepted copies
 and reports are placed beside each source as
@@ -28,19 +33,23 @@ Interrupted jobs reuse only exact completed generation, preservation and timing
 stages from NAME.optimized.checkpoint. Final browser acceptance and publication
 always run again. The GUI shows stage age and applies a six-hour/10-GiB limit per file.
 It checks required components before selection. Keyboard shortcuts: Alt+S setup,
-Alt+P choose PDFs, Alt+T stop after current, Ctrl+L activity log. Long paths remain
+Alt+P choose PDFs, Alt+G parallel generation, Alt+T stop after current, Ctrl+L activity log. Long paths remain
 available in a resizable, scrollable review window.
 The progress bar advances by completed reviewed files; the status line shows the
 active file and stage without inventing a percentage for variable-length checks.
 Choose 1 through the detected logical CPU count for verification before review.
 The default is two (or one on a one-CPU system). Startup and review show total and
-available RAM plus a conservative 2 GiB + 3 GiB/worker planning estimate. Workers
+available RAM plus a conservative 4 GiB + 0.5 GiB/worker planning estimate. Workers
 may use multiple CPU threads; the selection neither reserves nor caps CPU cores.
+Parallel candidate generation is optional and off by default. When enabled, independent
+built-in candidates use at most the reviewed worker count; packing, verification,
+benchmarks, documents and publication remain ordered.
 
 Drag one original PDF onto Optimize Viewing PDF.cmd, or run:
   python optimize_pdf.py "input.pdf" "input.viewing.pdf" --viewing-copy
 
-Use --verification-workers N to select page-verification processes. CLI-only limits
+Use --verification-workers N to select page-verification processes and
+--parallel-candidates to concurrently build independent built-in candidates. CLI-only limits
 are available as --time-budget-seconds and --disk-budget-bytes;
 --checkpoint selects an adjacent checkpoint directory.
 
@@ -90,10 +99,10 @@ candidates. Selected spawned workers compare PDFium pages; verification-only
 PDF.js workers retain both documents across assigned pages. Workers stop before
 the unchanged sequential fresh-process benchmarks, browser checks and publication.
 
-Benchmarks use sequential fresh processes and alternating file order, three runs
-per page/version, extended to five for noisy CPU results. Samples include pages
-1/7/29 plus the densest drawing page; six-page documents use 1/3/6 plus the densest.
-Operator preparation, cold rendering (without prior operator preparation), and
+Benchmarks use sequential fresh processes and alternating file order. Render timing
+uses three runs per page/version, extended to five for noisy CPU results; operator
+preparation is recorded once because it does not select the winner. Samples include
+page 1 plus the three highest-density non-first pages. Operator preparation, cold rendering (without prior operator preparation), and
 cached drawing on a fresh canvas are separate measurements. Do not sum them.
 Reports include wall/CPU time, variability, sampled RSS, operations, annotations
 and sizes; browser forward/back rendering and layer construction are separate.
@@ -129,8 +138,8 @@ all dependencies and installed Zen/Firefox. Set PDF_PYTHON to select the launche
 the current user's bundled Codex runtime, then Python on PATH. Install the
 dependencies in the interpreter you choose.
 Use PDF_NODE, PDF_NODE_MODULES or PDF_BROWSER to select other installed runtimes.
-If qpdf is installed, viewing-copy mode also tests its lossless Flate/object-stream
-rewrite. Set PDF_QPDF to select a specific qpdf executable.
+The Windows package includes qpdf 12.4.2 and uses it for a lossless
+Flate/object-stream candidate. Set PDF_QPDF to select another qpdf executable.
 Missing dependencies produce an error and never publish an unchecked PDF.
 Keep the complete pdfjs-dist package: its cmaps, standard_fonts, iccs and wasm
 directories are needed for image/font decoding. The harness stops on parsing

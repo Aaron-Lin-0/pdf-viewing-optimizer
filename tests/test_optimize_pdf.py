@@ -30,6 +30,8 @@ class OptimizerTests(unittest.TestCase):
     def test_verification_workers_are_viewing_copy_only(self):
         with self.assertRaisesRegex(ValueError,'viewing-copy mode'):
             optimizer.optimize('unused.pdf','unused-output.pdf',verification_workers=2)
+        with self.assertRaisesRegex(ValueError,'viewing-copy mode'):
+            optimizer.optimize('unused.pdf','unused-output.pdf',parallel_candidates=True)
 
     def test_structure_compression_keeps_exact_commands(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:

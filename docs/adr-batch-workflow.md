@@ -10,7 +10,8 @@ The production optimizer already owns input validation, transformations,
 preservation checks, performance selection and exclusive publication. The first
 Windows GUI correctly reused that CLI, but placed selection, naming, process
 management and result interpretation directly in Tk callbacks. The first native
-picker smoke showed why that boundary is too weak: choosing files and authorizing
+picker smoke showed why that boundary is too weak: choosing files across one or more
+picker sessions/folders and authorizing
 a long-running operation are different actions, and UI automation is not a safe
 substitute for a visible review step.
 

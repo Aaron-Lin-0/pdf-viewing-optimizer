@@ -54,7 +54,8 @@ def system_resources():
 
 
 def resource_summary(workers, resources=None):
-    resources=resources or system_resources();estimate=(2+3*workers)*1024**3
+    from viewing_copy import estimated_verification_ram
+    resources=resources or system_resources();estimate=estimated_verification_ram(workers)
     gib=lambda value:'unavailable' if value is None else f'{value/1024**3:.1f} GiB'
     lines=[f'Verification workers: {workers}',
            f"Logical CPU count: {resources['logical_cpu_count']}",
@@ -93,10 +94,13 @@ def dependency_diagnostics():
     rows.append({'name':'Zen/Firefox','ok':browser.is_file(),'optional':False,
                  'detail':str(browser),'action':None if browser.is_file() else
                  'Install Zen/Firefox, then set PDF_BROWSER to its executable.'})
-    qpdf=shutil.which(os.environ.get('PDF_QPDF') or 'qpdf')
-    rows.append({'name':'qpdf','ok':bool(qpdf),'optional':True,
-                 'detail':qpdf or 'not installed','action':None if qpdf else
-                 'Optional: install qpdf for an additional lossless candidate.'})
+    try:
+        from viewing_copy import qpdf_identity
+        qpdf,version,_=qpdf_identity()
+        rows.append({'name':'qpdf','ok':True,'optional':False,'detail':f'{version} — {qpdf}','action':None})
+    except Exception as exc:
+        rows.append({'name':'qpdf','ok':False,'optional':False,'detail':str(exc),
+                     'action':'Restore the bundled qpdf files or set PDF_QPDF to a working executable.'})
     return tuple(rows)
 
 
@@ -269,7 +273,7 @@ def plan_batch(sources):
     return tuple(jobs)
 
 
-def confirmation_text(jobs, verification_workers=None, resources=None):
+def confirmation_text(jobs, verification_workers=None, resources=None, parallel_candidates=False):
     from viewing_copy import default_verification_workers
     verification_workers=default_verification_workers() if verification_workers is None else verification_workers
     ready=sum(job.status == 'ready' for job in jobs);recovered=sum(job.status in {'optimized','no improvement'} for job in jobs)
@@ -281,18 +285,20 @@ def confirmation_text(jobs, verification_workers=None, resources=None):
             lines.extend((str(job.source),f"  Recovered: {job.status}",""))
         else:
             lines.extend((str(job.source), f"  Rejected: {job.error}", ""))
-    lines.extend((resource_summary(verification_workers,resources),"",
+    lines.extend((resource_summary(verification_workers,resources),
+                  'Candidate generation: '+('parallel (higher RAM and disk use)' if parallel_candidates else 'sequential'),"",
                   "Originals are never changed. Existing outputs are never overwritten."))
     return "\n".join(lines)
 
 
-def run_optimizer(job, emit, started, verification_workers=None):
+def run_optimizer(job, emit, started, verification_workers=None, parallel_candidates=False):
     command = [sys.executable, str(ROOT / "optimize_pdf.py"), str(job.source), str(job.output),
                "--viewing-copy", "--expected-source-sha256", job.source_sha256,
                "--checkpoint", str(job.output.with_suffix('.checkpoint')),
                "--time-budget-seconds", str(DEFAULT_TIME_BUDGET_SECONDS),
                "--disk-budget-bytes", str(DEFAULT_DISK_BUDGET_BYTES)]
     if verification_workers is not None:command.extend(("--verification-workers",str(verification_workers)))
+    if parallel_candidates:command.append('--parallel-candidates')
     last_error=None
     with subprocess.Popen(command, cwd=ROOT, stdout=subprocess.PIPE,
                           stderr=subprocess.STDOUT, text=True, errors="replace",
@@ -336,12 +342,14 @@ def validate_result(job):
 
 
 class BatchController:
-    def __init__(self, jobs, emit=lambda *_: None, runner=run_optimizer, verification_workers=None):
+    def __init__(self, jobs, emit=lambda *_: None, runner=run_optimizer, verification_workers=None,
+                 parallel_candidates=False):
         self.jobs = list(jobs)
         self.emit = emit
-        self.runner = ((lambda job,emit,started:run_optimizer(job,emit,started,verification_workers))
+        self.runner = ((lambda job,emit,started:run_optimizer(job,emit,started,verification_workers,parallel_candidates))
                        if runner is run_optimizer else runner)
         self.verification_workers=verification_workers
+        self.parallel_candidates=parallel_candidates
         self._lock = threading.RLock()
         self._busy = False
         self._stop_requested = False

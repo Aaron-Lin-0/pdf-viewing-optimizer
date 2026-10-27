@@ -121,13 +121,17 @@ def default_verification_workers():
     return min(2, logical_cpu_count())
 
 
+def estimated_verification_ram(workers):
+    return 4*1024**3 + workers*512*1024**2
+
+
 def verification_resources(requested=None):
     logical = logical_cpu_count()
     effective = default_verification_workers() if requested is None else requested
     if not isinstance(effective, int) or isinstance(effective, bool) or not 1 <= effective <= logical:
         raise ValueError(f'Verification workers must be an integer from 1 through {logical}.')
     return {'requested_workers': requested, 'effective_workers': effective,
-            'logical_cpu_count': logical, 'estimated_ram_bytes': (2 + 3 * effective) * 1024**3}
+            'logical_cpu_count': logical, 'estimated_ram_bytes': estimated_verification_ram(effective)}
 
 
 class VerificationSession:
@@ -294,9 +298,11 @@ def node_identity(node,budget=None):
 
 
 def qpdf_identity(budget=None):
-    requested=os.environ.get('PDF_QPDF') or 'qpdf'
-    executable=shutil.which(requested)
-    if not executable:raise ValueError('qpdf is unavailable; install it or set PDF_QPDF.')
+    requested=os.environ.get('PDF_QPDF')
+    bundled=Path(__file__).resolve().parent/'vendor'/'qpdf'/'bin'/'qpdf.exe'
+    executable=shutil.which(requested) if requested else (
+        str(bundled) if sys.platform=='win32' and bundled.is_file() else shutil.which('qpdf'))
+    if not executable:raise ValueError('qpdf is unavailable; restore the bundled runtime or set PDF_QPDF.')
     version=_run([executable,'--version'],30,budget,'qpdf version check',capture_output=True,text=True,
                  creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
     if version.returncode:raise ValueError('qpdf version preflight failed: '+version.stderr[-500:])
@@ -357,8 +363,9 @@ def benchmark_pages(source):
             if appearance is not None and hasattr(appearance.get_object(),'get_data'):value+=cost(appearance)
         density.append(value)
     count=len(density)
-    samples=[1,3,6] if count==6 else [1,min(7,count),min(29,count)]
-    return sorted(set(samples+[density.index(max(density))+1]))
+    complex_pages=[index+1 for index in sorted(range(count),key=lambda index:density[index],reverse=True)
+                   if index][:3]
+    return sorted([1]+complex_pages)
 
 
 def benchmarks(paths,pages,runs=3,results=None,checkpoint=None,budget=None,node=None):
@@ -371,8 +378,8 @@ def benchmarks(paths,pages,runs=3,results=None,checkpoint=None,budget=None,node=
     for page in pages:
         for run in range(runs):
             for path in (paths if run%2==0 else list(reversed(paths))):
-                for mode in ['render','prepare']:
-                    measure(path,page,mode,run)
+                measure(path,page,'render',run)
+                if run==0:measure(path,page,'prepare',run)
                 print(f'Benchmarked {Path(path).name}, page {page}, run {run+1}/{runs}',flush=True)
     # Re-run the complete comparison if three samples vary substantially.
     if runs==3:
@@ -383,8 +390,7 @@ def benchmarks(paths,pages,runs=3,results=None,checkpoint=None,budget=None,node=
             for page in pages:
                 for run in [3,4]:
                     for path in (paths if run%2==0 else list(reversed(paths))):
-                        for mode in ['render','prepare']:
-                            measure(path,page,mode,run)
+                        measure(path,page,'render',run)
                         print(f'Noise check: {Path(path).name}, page {page}, run {run+1}/5',flush=True)
     return results
 
@@ -595,7 +601,8 @@ def report_text(report):
 
 
 def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=None,
-                     time_budget_seconds=None,disk_budget_bytes=None,verification_workers=None):
+                     time_budget_seconds=None,disk_budget_bytes=None,verification_workers=None,
+                     parallel_candidates=False):
     try:import pymupdf
     except ImportError as exc:raise ValueError('PyMuPDF is missing. Run Setup Dependencies.cmd, then try again.') from exc
     source,destination=Path(source).expanduser().absolute(),Path(destination).expanduser().absolute()
@@ -666,10 +673,14 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
     count=len(reader.pages)
     del reader;gc.collect()
     pages=benchmark_pages(source)
+    kinds=['dedup']+(['annotations','consolidated','combined'] if has_ink else [])+['inline','batched']
     report={'status':'no improvement','source':str(source),'source_bytes':source_bytes,'source_sha256':source_hash,'pages':count,'benchmark_pages':pages,'candidates':[],'rejected':[],
             'checkpoint':{'schema':CHECKPOINT_SCHEMA,'path':str(checkpoint),'resumed':False},
             'budgets':{'time_seconds':time_budget_seconds,'disk_bytes':disk_budget_bytes},
-            'verification_resources':resources,'stage_wall_seconds':{},
+            'verification_resources':resources,
+            'candidate_generation':{'parallel':bool(parallel_candidates),
+                                    'workers':min(len(kinds),resources['effective_workers']) if parallel_candidates else 1},
+            'stage_wall_seconds':{},
             'source_evidence_reuse':{'source_renders_created':0,'source_renders_reused':0,
                                      'source_signatures_created':0,'source_signatures_reused':0}}
     with tempfile.TemporaryDirectory(prefix='pdf-viewing-',dir=destination.parent) as temporary:
@@ -691,26 +702,59 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
             except (TimeBudgetExceeded,DiskBudgetExceeded):
                 retire_session(True)
                 raise
-        kinds=['dedup']+(['annotations','consolidated','combined'] if has_ink else [])+['inline','batched']
         if not has_ink:report['rejected'].append({'kind':'annotation conversion','reason':'No BOOX handwriting annotations detected.'})
-        for kind in kinds:
-            path=Path(temporary)/(kind+'.pdf')
-            try:
-                stage(f'candidate generation: {kind}',(Path(temporary),))
-                recipe=hashlib.sha256(json.dumps({'kind':kind,'code':code_hash},sort_keys=True).encode()).hexdigest()
-                file_context=_context('production-candidate-file',source_hash,recipe,'repository',code_hash,{'kind':kind})
-                meta_context=_context('production-candidate-complete',source_hash,recipe,'repository',code_hash,{'kind':kind})
+        def repository_context(kind):
+            recipe=hashlib.sha256(json.dumps({'kind':kind,'code':code_hash},sort_keys=True).encode()).hexdigest()
+            return (_context('production-candidate-file',source_hash,recipe,'repository',code_hash,{'kind':kind}),
+                    _context('production-candidate-complete',source_hash,recipe,'repository',code_hash,{'kind':kind}))
+        generated={};generation_errors={}
+        if parallel_candidates:
+            stage('parallel candidate generation',(Path(temporary),))
+            missing=[]
+            for kind in kinds:
+                path=Path(temporary)/(kind+'.pdf');file_context,meta_context=repository_context(kind)
                 metadata=cache.load_json(meta_context)
                 reused=metadata is not None and cache.materialize(file_context,path)
                 if reused and filehash(path)==metadata.get('candidate_sha256'):
-                    manifest=metadata['manifest'];report['checkpoint']['resumed']=True
+                    generated[kind]=metadata['manifest'];report['checkpoint']['resumed']=True
                     print(f'Reused completed candidate: {kind}',flush=True)
                 else:
-                    path.unlink(missing_ok=True)
-                    print(f'Preparing candidate: {kind}',flush=True)
-                    manifest=build_candidate(source,path,kind)
-                    candidate_hash=_store_candidate(cache,file_context,path)
-                    cache.store_json(meta_context,{'candidate_sha256':candidate_hash,'manifest':manifest})
+                    path.unlink(missing_ok=True);missing.append((kind,path,file_context,meta_context))
+            if missing:
+                workers=min(len(missing),resources['effective_workers'])
+                print(f'Preparing {len(missing)} candidates with {workers} process(es).',flush=True)
+                with ProcessPoolExecutor(max_workers=workers) as pool:
+                    futures={kind:pool.submit(build_candidate,source,path,kind)
+                             for kind,path,_file_context,_meta_context in missing}
+                    for kind,path,file_context,meta_context in missing:
+                        try:
+                            manifest=futures[kind].result()
+                            candidate_hash=_store_candidate(cache,file_context,path)
+                            cache.store_json(meta_context,{'candidate_sha256':candidate_hash,'manifest':manifest})
+                            generated[kind]=manifest
+                            budget.check('parallel candidate generation',(Path(temporary),))
+                        except Exception as exc:generation_errors[kind]=exc
+            finish_stage()
+        for kind in kinds:
+            path=Path(temporary)/(kind+'.pdf')
+            try:
+                if parallel_candidates:
+                    if kind in generation_errors:raise generation_errors[kind]
+                    manifest=generated[kind]
+                else:
+                    stage(f'candidate generation: {kind}',(Path(temporary),))
+                    file_context,meta_context=repository_context(kind)
+                    metadata=cache.load_json(meta_context)
+                    reused=metadata is not None and cache.materialize(file_context,path)
+                    if reused and filehash(path)==metadata.get('candidate_sha256'):
+                        manifest=metadata['manifest'];report['checkpoint']['resumed']=True
+                        print(f'Reused completed candidate: {kind}',flush=True)
+                    else:
+                        path.unlink(missing_ok=True)
+                        print(f'Preparing candidate: {kind}',flush=True)
+                        manifest=build_candidate(source,path,kind)
+                        candidate_hash=_store_candidate(cache,file_context,path)
+                        cache.store_json(meta_context,{'candidate_sha256':candidate_hash,'manifest':manifest})
                 gc.collect()
                 stage(f'preservation verification: {kind}',(Path(temporary),))
                 candidate_hash=filehash(path);allow_edges=kind in {'batched','annotations','consolidated','combined'}

@@ -14,7 +14,8 @@ The Windows batch GUI is a thin adapter over the headless controller in
 `batch_workflow.py` and a separate `optimize_pdf.py --viewing-copy` process for
 each selected file. Planning collapses duplicate selections, rejects unsafe inputs,
 snapshots the source SHA256 and reserves an unused adjacent `NAME.optimized[-N].*`
-set before displaying every source-to-output mapping for confirmation. The controller
+set before displaying every source-to-output mapping for confirmation. The picker can
+be reopened to accumulate files from multiple folders before that single review. The controller
 rechecks sources and targets before each sequential launch, validates terminal reports
 and hashes, isolates per-file failures and supports stop-after-current. Window close
 is blocked while a child or its terminal result is being handled; closing between
@@ -28,6 +29,10 @@ tool, renderer and operation contexts match exactly. Completion markers are writ
 last and payload hashes are rechecked. A restarted batch reconstructs a terminal job
 only from validated reports and otherwise resumes an incomplete job at its reviewed
 output path. Final PDF.js/browser acceptance and publication are never cached.
+Independent built-in base candidates may be generated in separate processes when the
+reviewed parallel-generation toggle is enabled, capped by the verification-worker
+count. Dependent packed candidates, preservation, timing, documents and publication
+remain ordered. Candidate failures stay isolated and use the same cache identities.
 Within one document, run-local source geometry and lossless 144-DPI PDFium renders
 are reused across candidate checks. PDFium and final PDF.js page comparisons use
 the reviewed verification-worker count; each worker owns its renderer handles and
@@ -37,14 +42,14 @@ The GUI displays stage age and reports time and disk budget exhaustion as distin
 terminal states.
 
 Before selection, the GUI checks the pinned Python packages, Node/PDF.js/canvas and
-configured Zen/Firefox executable once; qpdf remains an optional candidate. Blocking
+configured Zen/Firefox executable and bundled qpdf runtime once. Blocking
 diagnostics include a local corrective action and never bypass acceptance. The native
 review dialog is resizable and scrollable for long paths, and all primary controls
 have keyboard access. Dynamic status is mirrored in the window title. Batch progress
 is determinate and counts terminal reviewed files; per-file stage age remains separate
 because candidate and browser work varies by document.
 
-Pages are recognized by their drawing structure, not their filename or producer label. Candidate passes include duplicate-object removal, static annotation conversion, consolidation of eligible appearances, exact inlining and same-width segment batching. Optional structure packing is compared separately. When qpdf is installed or selected with `PDF_QPDF`, viewing-copy mode also compares its lossless Flate/object-stream rewrite under the same preservation, rendering and publication gates. Already deduplicated candidates do not receive another all-stream duplicate scan during packing.
+Pages are recognized by their drawing structure, not their filename or producer label. Candidate passes include duplicate-object removal, static annotation conversion, consolidation of eligible appearances, exact inlining and same-width segment batching. Optional structure packing is compared separately. The Windows package includes qpdf 12.4.2 and compares its lossless Flate/object-stream rewrite under the same preservation, rendering and publication gates; `PDF_QPDF` can select another executable. Already deduplicated candidates do not receive another all-stream duplicate scan during packing.
 
 Annotation conversion preserves placement, appearance matrices, bounding-box clipping, colors, layer membership and paint order. Only a leading sequence of eligible painted annotations is converted. Links, comments, forms, attachments, action-bearing objects, replies and protected references remain. Missing/state-dependent appearances, special zoom/rotation flags, transparency groups and unsupported layer expressions are skipped. Unfamiliar or transformed appearances retain ordinary Form calls.
 
@@ -76,7 +81,7 @@ The Node and browser harnesses load the complete PDF.js font/image resources and
 
 Preparation and rendering run in separate fresh processes. Cold rendering has no preceding operator-list request. Cached drawing renders a second time onto a fresh canvas. These measurements overlap in meaning and are never added together.
 
-Runs are sequential, with alternating source/candidate order: three runs per page/version, extended to five when CPU measurements are noisy. Samples include 1, 7 and 29 when present plus the densest page; six-page documents use 1, 3 and 6 plus the densest. Density includes image dimensions as well as drawing data. Reports retain wall time, process CPU, sampled RSS, drawing operations, annotation counts, sizes and individual runs. RSS sampling is not a peak-memory measurement.
+Runs are sequential, with alternating source/candidate order: render timing uses three runs per page/version, extended to five when CPU measurements are noisy. Operator preparation is descriptive and runs once per page/version. Samples include page 1 plus the three highest-density non-first pages. Density includes decoded drawing bytes, nested Forms, image dimensions and annotation appearances. Reports retain wall time, process CPU, sampled RSS, drawing operations, annotation counts, sizes and individual runs. RSS sampling is not a peak-memory measurement.
 
 - Faster: at least 10% lower aggregate median cold-render CPU.
 - Regression gate: no sampled cold/cached latency increase above the greater of 10% or 50 ms.

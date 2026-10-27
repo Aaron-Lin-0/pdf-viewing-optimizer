@@ -36,7 +36,7 @@ Do not edit generated copies in `dist/` or an installed skill as an independent 
 
 Use Python 3.10+ and Node.js 22.13+. Windows with Zen is the tested platform. From the repository root, create `.venv`, install `requirements-dev.txt`, and run `npm ci`; see `README.md` for commands. Use `.venv/Scripts/python.exe` on Windows or `.venv/bin/python` on POSIX, rather than changing global Python packages.
 
-The Node dependencies belong in the root `node_modules/`. `PDF_NODE`, `PDF_NODE_MODULES` and `PDF_BROWSER` can select installed runtimes; do not hard-code a developer's absolute paths. Browser checks use disposable profiles, never the user's everyday profile. Activation is optional when invoking the virtual-environment interpreter directly.
+The Node dependencies belong in the root `node_modules/`. The Windows release includes the pinned qpdf runtime under `vendor/qpdf/`; `PDF_QPDF` may select another executable. `PDF_NODE`, `PDF_NODE_MODULES` and `PDF_BROWSER` can select installed runtimes; do not hard-code a developer's absolute paths. Browser checks use disposable profiles, never the user's everyday profile. Activation is optional when invoking the virtual-environment interpreter directly.
 
 ## Preservation requirements
 

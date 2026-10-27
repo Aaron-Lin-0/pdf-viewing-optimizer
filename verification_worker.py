@@ -8,20 +8,24 @@ import pypdfium2 as pdfium
 
 
 _DOCUMENTS = {}
+_PERSISTENT = set()
 
 
-def _document(path):
+def _document(path,persistent=False):
     key = str(Path(path).absolute())
+    if persistent:_PERSISTENT.add(key)
     document = _DOCUMENTS.get(key)
     if document is None:
+        for stale in set(_DOCUMENTS)-_PERSISTENT:
+            _DOCUMENTS.pop(stale).close()
         document = pdfium.PdfDocument(key)
         document.init_forms()
         _DOCUMENTS[key] = document
     return document
 
 
-def _render(path, index, scale=2, crop=None, print_mode=False):
-    page = _document(path)[index]
+def _render(path, index, scale=2, crop=None, print_mode=False, persistent=False):
+    page = _document(path,persistent)[index]
     try:
         kwargs = {'scale': scale, 'draw_annots': True}
         if crop:
@@ -41,7 +45,7 @@ def render_source(task):
     path, index, destination, scale, crop, print_mode = task
     temporary = str(destination) + f'.{os.getpid()}.tmp'
     try:
-        with _render(path, index, scale, crop, print_mode) as image:
+        with _render(path, index, scale, crop, print_mode, True) as image:
             image.save(temporary, format='PNG', optimize=False)
             os.replace(temporary, destination)
             return {'page': index + 1, 'width': image.width, 'height': image.height}

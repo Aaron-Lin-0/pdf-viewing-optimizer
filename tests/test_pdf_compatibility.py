@@ -399,12 +399,13 @@ class CompatibilityTests(unittest.TestCase):
     def test_densest_bitmap_page_is_sampled(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
             source=Path(folder)/'scan.pdf';w=PdfWriter()
+            sizes=[2,3,4,200,5,100,150,50]
             for i in range(8):
                 p=w.add_blank_page(width=100,height=100)
-                obj=image_object(Image.new('L',(200,200) if i==3 else (2,2),0))
+                obj=image_object(Image.new('L',(sizes[i],sizes[i]),0))
                 p[NameObject('/Resources')]=DictionaryObject({NameObject('/XObject'):DictionaryObject({NameObject('/I'):w._add_object(obj)})})
                 s=DecodedStreamObject();s.set_data(b'q 100 0 0 100 0 0 cm /I Do Q');p[NameObject('/Contents')]=w._add_object(s)
-            w.write(source);self.assertIn(4,benchmark_pages(source))
+            w.write(source);self.assertEqual(benchmark_pages(source),[1,4,6,7])
 
     def test_empty_document_rejected_clearly(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:

@@ -30,6 +30,10 @@ explicit; setup must not download or change a browser profile.
 The P12 native smoke uses keyboard shortcuts to open the setup report and system
 picker, selects the fresh matrix and interaction fixtures together, reviews every
 long source/output mapping in the scrollable dialog, and starts them sequentially.
+Repeat the picker from a second folder and confirm both folders remain in the single
+review; canceling a later picker must retain the earlier selection.
+Use Alt+G to toggle parallel candidate generation and confirm the review names the
+selected generation mode before starting.
 Verify one terminal result before the next launch, report/output hashes, an honest
 reports-only result when appropriate, and isolated-browser acceptance for any
 published copy. Resize the main and review windows to their minimum sizes and confirm
@@ -54,6 +58,9 @@ and cover worker-count propagation plus unavailable resource detection. The gene
 matrix and interaction fixtures remain the cross-renderer check. Before timing or
 browser acceptance, assert the verification pools have shut down; never overlap
 these phases when collecting performance evidence.
+Parallel-generation tests must prove every independent base candidate is submitted
+before results are collected, the reviewed worker cap reaches the child command, and
+sequential mode remains the default. Packing and all acceptance phases stay ordered.
 
 ## Generated compatibility matrix
 
@@ -81,8 +88,8 @@ A reports-only **no improvement** outcome is valid. Never force publication when
 
 Run one document at a time with `--viewing-copy`. Keep the `.md` and `.json` reports; they include source/output hashes, candidate decisions, preservation results and raw timing runs. The source is never rewritten.
 
-When qpdf is installed or selected with `PDF_QPDF`, confirm that `qpdf-flate` appears
-as a measured candidate or an explicit rejection in the report. It receives the same
+Confirm that bundled qpdf appears as `qpdf-flate`, either measured or explicitly
+rejected in the report. `PDF_QPDF` may select another executable. It receives the same
 all-page and final renderer/browser checks as repository-generated candidates.
 
 Compare medians and variability using the same machine, dependency versions, annotation settings and page samples. Do not benchmark alongside other renderers or heavy tests. Operator preparation, cold rendering, cached drawing and browser page sequences are different measurements. Avoid adding their timings or describing a smaller file as faster without a measured result.

@@ -54,16 +54,17 @@ def verify_pages(original, candidate):
 
 def optimize(source, destination, compact_structure=False, fast_handwriting=False, remove_invisible_text=False,
              inline_handwriting=False, viewing_copy=False, expected_source_sha256=None,
-             checkpoint=None,time_budget_seconds=None,disk_budget_bytes=None,verification_workers=None):
+             checkpoint=None,time_budget_seconds=None,disk_budget_bytes=None,verification_workers=None,
+             parallel_candidates=False):
     if viewing_copy:
         if any((compact_structure, fast_handwriting, remove_invisible_text, inline_handwriting)):
             raise ValueError('Viewing-copy mode selects its own passes; run other modes separately.')
         from viewing_copy import optimize_viewing
         return optimize_viewing(source, destination, expected_source_sha256,checkpoint,
-                                time_budget_seconds,disk_budget_bytes,verification_workers)
+                                time_budget_seconds,disk_budget_bytes,verification_workers,parallel_candidates)
     if any(value is not None for value in (expected_source_sha256,checkpoint,time_budget_seconds,
-                                            disk_budget_bytes,verification_workers)):
-        raise ValueError('Expected-source checking, checkpoints, budgets and verification workers are available only in viewing-copy mode.')
+                                            disk_budget_bytes,verification_workers)) or parallel_candidates:
+        raise ValueError('Expected-source checking, checkpoints, budgets, verification workers and parallel candidates are available only in viewing-copy mode.')
     if sum((fast_handwriting, remove_invisible_text, inline_handwriting)) > 1:
         raise ValueError('Run handwriting, OCR removal and inlining modes as separate passes.')
     if compact_structure:
@@ -182,6 +183,8 @@ def main():
                         help='Stop this viewing-copy run when checkpoint and working files exceed this budget.')
     parser.add_argument('--verification-workers',type=int,
                         help='Viewing-copy PDF verification processes (default: 2, limited by logical CPUs).')
+    parser.add_argument('--parallel-candidates',action='store_true',
+                        help='Generate independent built-in viewing-copy candidates concurrently; uses more RAM and disk bandwidth.')
     args = parser.parse_args()
     suffix = '.viewing.pdf' if args.viewing_copy else ('.inlined.pdf' if args.inline_handwriting else ('.no-ocr.pdf' if args.remove_invisible_text else '.optimized.pdf'))
     destination = args.output or args.input.with_name(args.input.stem + suffix)
@@ -192,7 +195,7 @@ def main():
                  inline_handwriting=args.inline_handwriting, viewing_copy=args.viewing_copy,
                  expected_source_sha256=args.expected_source_sha256,checkpoint=args.checkpoint,
                  time_budget_seconds=args.time_budget_seconds,disk_budget_bytes=args.disk_budget_bytes,
-                 verification_workers=args.verification_workers)
+                 verification_workers=args.verification_workers,parallel_candidates=args.parallel_candidates)
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         from viewing_copy import TimeBudgetExceeded,DiskBudgetExceeded
