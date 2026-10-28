@@ -14,6 +14,7 @@ claim that automatic selection across external tools is already available.
 
 | Document | Purpose |
 |---|---|
+| [v0.2.0 release notes](docs/release-v0.2.0.md) | Safer large-page verification, reviewed Windows workflow and upgrade notes |
 | [Main roadmap](docs/roadmap.md) | Primary future improvement plan and decision flow |
 | [Batch workflow ADR](docs/adr-batch-workflow.md) | Implemented GUI/controller boundary and safety invariants |
 | [Contributor instructions](AGENTS.md) | Source map, preservation constraints and delivery rules |
