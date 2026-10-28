@@ -69,7 +69,7 @@ sequential mode remains the default. Packing and all acceptance phases stay orde
 
 ```powershell
 python tests/run_compatibility.py fixtures
-$env:PDF_BROWSER = 'C:\Program Files\Zen Browser\zen.exe'
+$env:PDF_BROWSER = 'C:\Program Files\Mozilla Firefox\firefox.exe'
 python tests/run_compatibility.py browser
 ```
 

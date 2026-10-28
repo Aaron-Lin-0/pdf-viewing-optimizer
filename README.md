@@ -30,7 +30,7 @@ partial assessment is evidence for a plan, not a completed optimization verdict.
 
 ## Install
 
-Use Python 3.10+, Node.js 22.13+ and an installed Zen or Firefox browser. Windows with Zen is the tested environment.
+Use Python 3.10+, Node.js 22.13+ and an installed Firefox or Zen browser. Firefox is the default; Zen remains supported through `PDF_BROWSER`.
 
 For the packaged Windows version, extract the ZIP and open **Setup Dependencies.cmd**
 once. It creates a private `.venv`, installs the pinned Python packages, and runs
@@ -48,7 +48,7 @@ install a newer release into a separate folder.
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 npm ci
-$env:PDF_BROWSER = 'C:\Program Files\Zen Browser\zen.exe'
+$env:PDF_BROWSER = 'C:\Program Files\Mozilla Firefox\firefox.exe'
 ```
 
 Keep the complete `pdfjs-dist` package, including its font, CMap, ICC and WASM resources. The renderer needs these to decode some PDFs correctly. `PDF_NODE`, `PDF_NODE_MODULES` and `PDF_BROWSER` can select alternate installed runtimes. Without local Node dependencies, the scripts can reuse Codex's bundled runtime. The Windows release uses its bundled qpdf 12.4.2 for a lossless Flate/object-stream candidate; set `PDF_QPDF` to select another executable.

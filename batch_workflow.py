@@ -95,10 +95,10 @@ def dependency_diagnostics():
     except Exception as exc:
         rows.append({'name':'Node/PDF.js','ok':False,'optional':False,'detail':str(exc),
                      'action':'Run Setup Dependencies.cmd after installing Node.js 22.13 or newer.'})
-    browser=Path(os.environ.get('PDF_BROWSER') or r'C:\Program Files\Zen Browser\zen.exe')
-    rows.append({'name':'Zen/Firefox','ok':browser.is_file(),'optional':False,
+    browser=Path(os.environ.get('PDF_BROWSER') or r'C:\Program Files\Mozilla Firefox\firefox.exe')
+    rows.append({'name':'Firefox/Zen','ok':browser.is_file(),'optional':False,
                  'detail':str(browser),'action':None if browser.is_file() else
-                 'Install Zen/Firefox, then set PDF_BROWSER to its executable.'})
+                 'Install Firefox, or set PDF_BROWSER to Firefox or Zen executable.'})
     try:
         from viewing_copy import qpdf_identity
         qpdf,version,_=qpdf_identity()

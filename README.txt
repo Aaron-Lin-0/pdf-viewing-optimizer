@@ -13,7 +13,7 @@ Viewing copy (recommended for measured rendering cost)
 
 After extracting the ZIP, open Setup Dependencies.cmd once. It creates a private
 .venv and installs the pinned Python and PDF.js packages. Python 3.10+, Node.js
-22.13+ and Zen/Firefox must already be installed; missing components are explained
+22.13+ and Firefox/Zen must already be installed; missing components are explained
 without changing any PDF. All launchers prefer the private environment afterward.
 In a Git checkout, Update PDF Viewing Optimizer.cmd performs a clean fast-forward
 pull and reruns setup. It stops when local changes exist. Extracted releases must be

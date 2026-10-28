@@ -1,4 +1,4 @@
-"""Run PDF.js navigation/layer checks in a disposable headless Zen profile."""
+"""Run PDF.js navigation/layer checks in a disposable headless Firefox profile."""
 import json
 import contextlib
 import mimetypes
@@ -28,8 +28,8 @@ def profile_directory(parent):
 
 
 def check_browser(source,candidate,pages=(1,7,29),timeout=1200):
-    browser=os.environ.get('PDF_BROWSER') or r'C:\Program Files\Zen Browser\zen.exe'
-    if not Path(browser).is_file():raise ValueError('Set PDF_BROWSER to Zen/Firefox for browser acceptance checks.')
+    browser=os.environ.get('PDF_BROWSER') or r'C:\Program Files\Mozilla Firefox\firefox.exe'
+    if not Path(browser).is_file():raise ValueError('Set PDF_BROWSER to Firefox or Zen for browser acceptance checks.')
     local=Path(__file__).resolve().parent/'node_modules'
     bundled=Path.home()/'.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules'
     modules=Path(os.environ.get('PDF_NODE_MODULES',str(local if (local/'pdfjs-dist').is_dir() else bundled)))
@@ -112,5 +112,5 @@ def check_browser(source,candidate,pages=(1,7,29),timeout=1200):
                     detail=next((f' at item {i+1}: {a!r} != {b!r}' for i,(a,b) in enumerate(zip(before[key],after[key])) if a!=b),
                                 f' (counts {len(before[key])} != {len(after[key])})')
                 raise ValueError(f'Browser navigation/layer check failed: {key}'+detail[:800])
-        return {'engine':'isolated headless Zen/Firefox; installed pdfjs-dist browser build','results':result}
+        return {'engine':'isolated headless Firefox; installed pdfjs-dist browser build','results':result}
     finally:server.shutdown();server.server_close()
