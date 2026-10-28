@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT/'tools'))
 import compare_optimizers as comparison
 import firefox_measure
-from pypdf import PdfReader, PdfWriter
+from pypdf import PdfWriter
 from pypdf.annotations import Link
 from reportlab.pdfgen import canvas
 
@@ -24,7 +24,7 @@ HAS_METRICS = all(importlib.util.find_spec(x) for x in ('numpy', 'scipy', 'skima
 def fixture(path, text='Math α + β = 3.14', pages=1, attachment=True, links=True):
     raw = path.with_suffix('.raw.pdf')
     c = canvas.Canvas(str(raw), pagesize=(144, 144))
-    for i in range(pages):
+    for _i in range(pages):
         c.drawString(8, 120, text)
         c.setLineWidth(2)
         c.circle(60, 60, 12)
@@ -522,7 +522,6 @@ class InkCalibrationTests(unittest.TestCase):
         shifted.close()
 
     def test_plot_axes_and_nondominated_records(self):
-        from comparison_metrics import image_metrics
         original_metrics = self.metrics(self.original)
         changed_metrics = self.metrics(self.blank)
         timing = lambda value: {'first_visit/p1/None': {'median_ms': value, 'range_ms': [value, value], 'resolved': True}}

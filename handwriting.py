@@ -176,7 +176,7 @@ def duplicate_layer_match(page, writer):
     prefix = StreamObject()
     prefix._data = data[:match.start()]
     depth = 0
-    for operands, operator in ContentStream(prefix, writer).operations:
+    for _operands, operator in ContentStream(prefix, writer).operations:
         if operator == b'q':
             depth += 1
         elif operator == b'Q':

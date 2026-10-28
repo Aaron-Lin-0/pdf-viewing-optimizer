@@ -26,7 +26,7 @@ class PlanExecutionTests(unittest.TestCase):
                 "import shutil,sys,time\n"
                 "if '--version' in sys.argv: print('fixture-1')\n"
                 "elif any(a.startswith('--help') for a in sys.argv): print('--recompress-flate --compression-level --object-streams --stream-data --linearize')\n"
-                "elif '--linearize' in sys.argv: time.sleep(2)\n"
+                "elif '--linearize' in sys.argv: time.sleep(30)\n"
                 "else: shutil.copyfile(sys.argv[1],sys.argv[-1])\n")
             config = {'tools': {'qpdf': {'command': [sys.executable, str(fake)],
                                          'version': 'fixture-1', 'version_args': ['--version'],
@@ -39,7 +39,7 @@ class PlanExecutionTests(unittest.TestCase):
             config_path = root/'config.json'; config_path.write_text(json.dumps(config))
             output = root/'run'
             args = argparse.Namespace(pdf=source, plan=plan_path, output=output,
-                tools_config=config_path, timeout=1, verification_timeout=30,
+                tools_config=config_path, timeout=5, verification_timeout=30,
                 max_output_bytes=1_000_000)
 
             result = execute(args)

@@ -208,7 +208,7 @@ def flatten_ink(writer):
         old_data = content.get_data() if content is not None else b''
         if content is not None:
             depth = 0
-            for args, op in content.operations:
+            for _args, op in content.operations:
                 if op == b'q': depth += 1
                 elif op == b'Q': depth -= 1
                 if depth < 0: raise ValueError('Unbalanced page graphics state; ink conversion blocked.')

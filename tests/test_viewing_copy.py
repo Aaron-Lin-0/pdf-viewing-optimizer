@@ -10,7 +10,7 @@ from unittest.mock import patch
 sys.path[:0]=[str(Path(__file__).resolve().parents[1]),str(Path(__file__).resolve().parent)]
 from pypdf import PdfReader,PdfWriter
 from pypdf.generic import ArrayObject,DictionaryObject,NameObject,NumberObject,TextStringObject,DecodedStreamObject
-from annotation_ink import flatten_ink,consolidate_ink,verify_flattened,verify_consolidated
+from annotation_ink import flatten_ink,consolidate_ink,verify_consolidated
 from navigation import navigation_fingerprint
 from viewing_copy import (verify_candidate,choose_candidate,visual_delta,reader_for,build_candidate,
                           build_qpdf_candidate,benchmark_pages,benchmark_worker,benchmarks,optimize_viewing,qpdf_identity,
@@ -109,6 +109,40 @@ class ViewingTests(unittest.TestCase):
             report=json.loads(output.with_suffix('.json').read_text())
             self.assertEqual((Pool.instances[0].max_workers,len(Pool.instances[0].submissions)),(2,3))
             self.assertEqual(report['candidate_generation'],{'parallel':True,'workers':2})
+
+    def test_optimizer_selection_limits_candidate_families(self):
+        class PackedDocument:
+            def __enter__(self):return self
+            def __exit__(self,*_args):pass
+            def save(self,path,**_kwargs):Path(path).write_bytes(b'x')
+        verified={'exact':True,'pages':[],'normalized_missing_OC':False,'full':True,'checks':{}}
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            source=Path(folder)/'source.pdf';writer=PdfWriter();writer.add_blank_page(width=60,height=60);writer.write(source)
+            with patch('viewing_copy.benchmark_worker',return_value={}),\
+                 patch('viewing_copy.node_identity',return_value={'path':'node','version':'fixture','sha256':'f'*64}),\
+                 patch('viewing_copy.verify_candidate',return_value=verified),\
+                 patch('viewing_copy.benchmarks',return_value=[]),patch('viewing_copy.choose_candidate',return_value=None),\
+                 patch('viewing_copy.build_candidate',side_effect=AssertionError('repository candidate ran')),\
+                 patch('viewing_copy.qpdf_identity',return_value=('qpdf','qpdf fixture','f'*64)),\
+                 patch('viewing_copy.build_qpdf_candidate',side_effect=lambda src,dst,*_args:shutil.copyfile(src,dst)),\
+                 patch('pymupdf.open',side_effect=AssertionError('PyMuPDF ran')):
+                with contextlib.redirect_stdout(io.StringIO()):optimize_viewing(source,Path(folder)/'qpdf.pdf',optimizer='qpdf')
+            qpdf=json.loads((Path(folder)/'qpdf.json').read_text())
+            self.assertEqual(qpdf['optimizer'],'qpdf')
+            self.assertEqual([item['kind'] for item in qpdf['candidates']],['qpdf-flate'])
+            with patch('viewing_copy.benchmark_worker',return_value={}),\
+                 patch('viewing_copy.node_identity',return_value={'path':'node','version':'fixture','sha256':'f'*64}),\
+                 patch('viewing_copy.verify_candidate',return_value=verified),\
+                 patch('viewing_copy.benchmarks',return_value=[]),patch('viewing_copy.choose_candidate',return_value=None),\
+                 patch('viewing_copy.build_candidate',side_effect=AssertionError('repository candidate ran')),\
+                 patch('viewing_copy.qpdf_identity',side_effect=AssertionError('qpdf ran')),\
+                 patch('pymupdf.open',return_value=PackedDocument()):
+                with contextlib.redirect_stdout(io.StringIO()):optimize_viewing(source,Path(folder)/'pymupdf.pdf',optimizer='pymupdf')
+            packed=json.loads((Path(folder)/'pymupdf.json').read_text())
+            self.assertEqual(packed['optimizer'],'pymupdf')
+            self.assertEqual([item['kind'] for item in packed['candidates']],['packed-original-packed'])
+        with self.assertRaisesRegex(ValueError,'Unknown'):optimize_viewing('missing.pdf','output.pdf',optimizer='other')
+        with self.assertRaisesRegex(ValueError,'adaptive'):optimize_viewing('missing.pdf','output.pdf',optimizer='qpdf',parallel_candidates=True)
 
     def test_verification_worker_releases_previous_candidate(self):
         import verification_worker as worker
@@ -388,7 +422,7 @@ class ViewingTests(unittest.TestCase):
             second=w.add_blank_page(width=60,height=60)
             second[NameObject('/Annots')]=ArrayObject([w._add_object(DictionaryObject(ann))])
             w.write(a)
-            with patch('viewing_copy.visual_delta',side_effect=[ValueError('off-edge pixels'),{'exact':True}]):
+            with patch('viewing_copy.page_delta',side_effect=[ValueError('off-edge pixels'),{'exact':True}]):
                 manifest=build_candidate(a,b,'annotations')
             self.assertEqual(manifest['converted'],{2:[0]})
             self.assertEqual(PdfReader(b).pages[0]['/Annots'][0]['/Subtype'],'/Stamp')
@@ -499,7 +533,7 @@ class ViewingTests(unittest.TestCase):
             base.write_bytes(b'0'*100);fast.write_bytes(b'0'*120);small.write_bytes(b'0'*80)
             records=[]
             for path,cpu in [(base,1),(fast,.7),(small,.95)]:
-                for run in range(3):records.append({'file':str(path.absolute()),'page':1,'mode':'render','ready':{'wall':cpu,'cpu':cpu},'cold':{'wall':cpu,'cpu':cpu},'cached':{'wall':.1}})
+                for _run in range(3):records.append({'file':str(path.absolute()),'page':1,'mode':'render','ready':{'wall':cpu,'cpu':cpu},'cold':{'wall':cpu,'cpu':cpu},'cached':{'wall':.1}})
             candidates=[{'path':str(fast),'exact':False},{'path':str(small),'exact':True}]
             self.assertEqual(choose_candidate(base,candidates,records)['path'],str(fast))
             for r in records:

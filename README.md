@@ -58,15 +58,20 @@ On Windows, open **Create Viewing Copies.cmd** and select one or more PDFs. Afte
 picker, choose whether to add PDFs from another folder; canceling a later picker keeps
 the files already selected. Leave the window open while they are processed sequentially. Review each exact source-to-output
 mapping in the confirmation dialog before starting. Duplicate selections collapse
-to one job. Use **Stop after current** to keep the active result and skip the queue. Accepted copies and all
-reports are saved beside each source as `NAME.optimized.*`; existing names receive
-`-2`, `-3`, and so on. A failed or unchanged file does not stop the remaining files.
+to one job. The **Optimizer** selector defaults to **PDF Viewing Optimizer
+(recommended)**, which adaptively compares the repository candidates. You may instead
+run only bundled qpdf lossless compression or only PyMuPDF structural packing; every
+choice still passes the same preservation, timing and publication gates. Use **Stop
+after current** to keep the active result and skip the queue.
+Each run keeps its copy, reports and checkpoint together in an adjacent
+`NAME.optimized-YYYY-MM-DD[-N]` folder; the original's folder receives only that one
+run folder. A failed or unchanged file does not stop the remaining files.
 Interrupted jobs resume only exact completed candidate-generation, preservation and
-timing stages from the adjacent `.checkpoint` directory. Final browser acceptance
+timing stages from the run folder's `.checkpoint` directory. Final browser acceptance
 and publication always run again. The window shows the current stage and its age;
 each file has a six-hour and 10-GiB working-data limit in the GUI.
 The app checks required local components before selection; **Check setup** repeats
-that check. Keyboard shortcuts are Alt+S for setup, Alt+P to choose PDFs, Alt+G to
+that check. Keyboard shortcuts are Alt+S for setup, Alt+O for the optimizer, Alt+P to choose PDFs, Alt+G to
 toggle parallel generation, Alt+T to stop after the current file, and Ctrl+L to focus the activity log. Long mappings are
 shown in a resizable, scrollable review window before anything starts.
 Choose **Verification workers** before review (default: two, or one on a one-CPU
@@ -86,11 +91,17 @@ For the command line:
 .\.venv\Scripts\python.exe optimize_pdf.py 'notes.pdf' --viewing-copy
 ```
 
-The output is `notes.viewing.pdf`, with `.md` and `.json` reports beside it. You can provide an explicit output path as the second argument. If no candidate qualifies, the command saves reports with status **no improvement** and does not publish a replacement PDF.
+The default run folder is `notes.optimized-YYYY-MM-DD`, containing
+`notes.optimized.pdf`, `.md`/`.json` reports and the checkpoint. A same-day repeat
+uses `-2`, `-3`, and so on without overwriting. You can provide an explicit output
+path as the second argument to retain caller-controlled placement. If no candidate
+qualifies, the run folder contains the reports and checkpoint but no replacement PDF.
 CLI callers may set `--verification-workers N`, `--parallel-candidates`,
-`--time-budget-seconds`, `--disk-budget-bytes`, and an adjacent
+`--time-budget-seconds`, `--disk-budget-bytes`, and a same-folder
 `--checkpoint` directory. Omitting the budget options retains the existing unlimited
 single-file behavior.
+Use `--viewing-optimizer adaptive|qpdf|pymupdf` to make the same choice from the
+command line. Parallel candidate generation applies only to `adaptive`.
 
 For drag and drop, set `PDF_PYTHON` to the installed interpreter, then drop one PDF onto **Optimize Viewing PDF.cmd**. Keep the launcher and program files together.
 

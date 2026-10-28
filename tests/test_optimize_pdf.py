@@ -2,8 +2,10 @@ import contextlib
 import importlib.util
 import io
 from pathlib import Path
+import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import DecodedStreamObject, NameObject
@@ -27,11 +29,24 @@ def make_pdf(path, color="1 0 0", encrypted=False):
 
 
 class OptimizerTests(unittest.TestCase):
+    def test_default_viewing_copy_uses_a_dated_artifact_folder(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            source=Path(folder)/'source.pdf';make_pdf(source)
+            with patch.object(sys,'argv',['optimize_pdf.py',str(source),'--viewing-copy']),\
+                 patch.object(optimizer,'optimize') as run:
+                self.assertEqual(optimizer.main(),0)
+            destination=run.call_args.args[1]
+            self.assertEqual(destination.name,'source.optimized.pdf')
+            self.assertRegex(destination.parent.name,r'^source\.optimized-\d{4}-\d{2}-\d{2}$')
+            self.assertTrue(destination.parent.is_dir())
+
     def test_verification_workers_are_viewing_copy_only(self):
         with self.assertRaisesRegex(ValueError,'viewing-copy mode'):
             optimizer.optimize('unused.pdf','unused-output.pdf',verification_workers=2)
         with self.assertRaisesRegex(ValueError,'viewing-copy mode'):
             optimizer.optimize('unused.pdf','unused-output.pdf',parallel_candidates=True)
+        with self.assertRaisesRegex(ValueError,'viewing-copy mode'):
+            optimizer.optimize('unused.pdf','unused-output.pdf',viewing_optimizer='qpdf')
 
     def test_structure_compression_keeps_exact_commands(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
@@ -67,6 +82,28 @@ class OptimizerTests(unittest.TestCase):
             make_pdf(changed, color="0 0 1")
             with self.assertRaisesRegex(ValueError, "changed visually"):
                 optimizer.verify_pages(source, changed)
+
+    def test_strip_fingerprint_bounds_memory_and_detects_changes(self):
+        import pypdfium2 as pdfium
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            source, changed = Path(folder) / "source.pdf", Path(folder) / "changed.pdf"
+            make_pdf(source)
+            make_pdf(changed, color="0 0 1")
+            with pdfium.PdfDocument(source) as before, pdfium.PdfDocument(changed) as after:
+                whole = optimizer.page_fingerprint(before, 0)
+                strips = optimizer.page_fingerprint(before, 0, strip_pixels=1000)
+                self.assertEqual(whole[0], strips[0])
+                self.assertEqual(strips, optimizer.page_fingerprint(before, 0, strip_pixels=1000))
+                self.assertNotEqual(strips, optimizer.page_fingerprint(after, 0, strip_pixels=1000))
+
+    def test_damaged_input_is_rejected_with_a_clear_message(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            source, output = Path(folder) / "source.pdf", Path(folder) / "output.pdf"
+            make_pdf(source)
+            source.write_bytes(source.read_bytes()[:400])
+            with self.assertRaisesRegex(ValueError, "damaged or incomplete"):
+                optimizer.optimize(source, output)
+            self.assertFalse(output.exists())
 
     def test_existing_output_and_original_cannot_be_overwritten(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:

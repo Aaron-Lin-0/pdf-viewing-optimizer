@@ -8,8 +8,11 @@ are documented in [comparison.md](comparison.md#validation).
 Install `requirements-dev.txt` and the Node packages before running tests. Tests generate PDFs in temporary directories; no private notes or downloaded fixtures are required.
 
 ```powershell
+python -m ruff check .
 python -m unittest discover -s tests -p 'test_*.py'
 ```
+
+`ruff.toml` limits linting to definite errors and likely bugs; it does not enforce a code style.
 
 The unit/regression suite covers geometry, navigation mutations, annotation conversion, shared resources, transparency, malformed references, output collisions, interrupted writes, signatures, dependency failures, memory ownership and candidate selection. One test decodes a JPEG2000 image and checks its colored pixels, preventing two blank renderings from passing as equivalent.
 

@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import date
 from pathlib import Path
 import sys
 import tempfile
@@ -10,6 +11,7 @@ from pypdf import PdfWriter
 from viewing_copy_gui import collect_pdf_paths,progress_text
 
 from batch_workflow import (BatchController, JobAlreadyRunning, JobBudgetExceeded, JobTimeout,
+                            OPTIMIZER_LABELS,
                             _claim_job, _process_alive, _release_claim, _save_job, confirmation_text,
                             dependency_diagnostics, dependency_report, filehash, plan_batch,
                             resource_summary, run_optimizer)
@@ -67,6 +69,20 @@ class ViewingCopyGuiTests(unittest.TestCase):
             command=popen.call_args.args[0]
             self.assertEqual(command[command.index('--verification-workers')+1],'3')
             self.assertIn('--parallel-candidates',command)
+            self.assertEqual(command[command.index('--viewing-optimizer')+1],'adaptive')
+
+    def test_optimizer_selection_is_reviewed_and_recovery_specific(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            source=Path(folder)/'source.pdf';make_pdf(source)
+            qpdf=plan_batch([source],'qpdf')[0]
+            self.assertEqual(qpdf.optimizer,'qpdf')
+            self.assertIn(OPTIMIZER_LABELS['qpdf'],confirmation_text((qpdf,)))
+            _save_job(replace(qpdf,status='running'))
+            self.assertEqual(plan_batch([source],'qpdf')[0].output,qpdf.output)
+            adaptive=plan_batch([source])[0]
+            self.assertEqual(adaptive.optimizer,'adaptive')
+            self.assertNotEqual(adaptive.output,qpdf.output)
+            with self.assertRaisesRegex(ValueError,'Unknown'):plan_batch([source],'other')
 
     def test_memory_detection_failure_is_reported_as_unavailable(self):
         from unittest.mock import patch
@@ -92,8 +108,7 @@ class ViewingCopyGuiTests(unittest.TestCase):
                  patch('batch_workflow.importlib.metadata.version',side_effect=lambda name:{'pypdf':'6.10.0','pypdfium2':'5.14.0','Pillow':'12.3.0','PyMuPDF':'1.28.2'}[name]),\
                  patch('viewing_copy.runtime_node',return_value=__import__('sys').executable),\
                  patch('viewing_copy.qpdf_identity',return_value=('qpdf.exe','qpdf version 12.4.2','f'*64)) as qpdf,\
-                 patch('batch_workflow.subprocess.run',return_value=completed),\
-                 patch('batch_workflow.shutil.which',return_value=None):
+                 patch('batch_workflow.subprocess.run',return_value=completed):
                 rows=dependency_diagnostics()
                 qpdf.side_effect=ValueError('qpdf unavailable')
                 missing=dependency_diagnostics()
@@ -120,6 +135,7 @@ class ViewingCopyGuiTests(unittest.TestCase):
     def test_checkpoint_symlink_is_rejected(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
             root=Path(folder);source=root/'source.pdf';make_pdf(source);job=plan_batch([source])[0]
+            job.output.parent.mkdir()
             target=root/'elsewhere';target.mkdir()
             try:job.output.with_suffix('.checkpoint').symlink_to(target,target_is_directory=True)
             except OSError:self.skipTest('directory symlinks are unavailable')
@@ -129,10 +145,14 @@ class ViewingCopyGuiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
             first, second = Path(folder) / "first.pdf", Path(folder) / "second.pdf"
             make_pdf(first); make_pdf(second)
-            first.with_name("first.optimized.pdf").write_bytes(b"old")
+            today=date.today().isoformat()
+            first.with_name(f"first.optimized-{today}").mkdir()
             jobs = plan_batch([first, second, first])
             self.assertEqual([job.source for job in jobs], [first.absolute(), second.absolute()])
-            self.assertEqual(jobs[0].output.name, "first.optimized-2.pdf")
+            self.assertEqual(jobs[0].output.parent.name, f"first.optimized-{today}-2")
+            self.assertEqual(jobs[0].output.name, "first.optimized.pdf")
+            self.assertEqual(jobs[1].output.parent.name, f"second.optimized-{today}")
+            self.assertTrue(all(target.parent==job.output.parent for job in jobs for target in job.targets))
             self.assertTrue(all(job.status == "ready" for job in jobs))
             text = confirmation_text(jobs,parallel_candidates=True)
             self.assertLess(text.index(str(first)), text.index(str(second)))
@@ -159,13 +179,16 @@ class ViewingCopyGuiTests(unittest.TestCase):
             self.assertFalse(results[0].output.with_suffix('.checkpoint').exists())
 
     def test_launch_recheck_rejects_source_mutation_and_output_race(self):
-        for race in ("source", "output"):
+        for race in ("source", "folder", "output"):
             with self.subTest(race=race), tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
                 source = Path(folder) / "source.pdf"; make_pdf(source)
                 jobs = plan_batch([source])
                 if race == "source":
                     source.write_bytes(b"changed")
+                elif race == "folder":
+                    jobs[0].output.parent.mkdir()
                 else:
+                    jobs[0].output.parent.mkdir()
                     jobs[0].output.with_suffix(".md").write_text("appeared", encoding="utf-8")
                 controller = BatchController(jobs, runner=lambda *_: self.fail("launched"))
                 result = controller.run()[0]

@@ -1,13 +1,13 @@
 """Plan and run verified viewing-copy jobs sequentially."""
 
 from dataclasses import dataclass, replace
+from datetime import date
 import ctypes
 import hashlib
 import importlib.metadata
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import threading
@@ -19,6 +19,11 @@ from navigation import reader_for, validate_input
 ROOT = Path(__file__).resolve().parent
 DEFAULT_TIME_BUDGET_SECONDS = 6 * 60 * 60
 DEFAULT_DISK_BUDGET_BYTES = 10 * 1024 * 1024 * 1024
+OPTIMIZER_LABELS = {
+    'adaptive': 'PDF Viewing Optimizer (recommended)',
+    'qpdf': 'qpdf — lossless compression only',
+    'pymupdf': 'PyMuPDF — structural packing only',
+}
 
 
 class JobTimeout(RuntimeError):
@@ -140,9 +145,10 @@ def adjacent_output(source, reserved=()):
     source = Path(source).absolute()
     number = 1
     while True:
-        label = source.stem + ".optimized" + (f"-{number}" if number > 1 else "")
-        output = source.with_name(label + ".pdf")
-        if _targets_available(output, reserved):
+        label = source.stem + ".optimized-" + date.today().isoformat() + (f"-{number}" if number > 1 else "")
+        folder = source.with_name(label)
+        output = folder / (source.stem + ".optimized.pdf")
+        if not folder.exists() and not folder.is_symlink() and _targets_available(output, reserved):
             return output
         number += 1
 
@@ -153,7 +159,9 @@ def _job_record(job):
 
 def _checkpoint_root(job):
     root=job.output.with_suffix('.checkpoint')
-    if root.is_symlink() or root.parent.resolve()!=job.output.parent.resolve():
+    parent=job.output.parent
+    grouped=parent.parent.resolve()==job.source.parent.resolve()
+    if parent.is_symlink() or (parent!=job.source.parent and not grouped) or root.is_symlink() or root.parent.resolve()!=parent.resolve():
         raise ValueError('Saved-progress folder is a shortcut or points outside this PDF folder. Rename or remove it, then try again.')
     return root
 
@@ -164,6 +172,7 @@ def _save_job(job):
     temporary=record.with_name(f'.job.{os.getpid()}.tmp')
     temporary.write_text(json.dumps({'schema':1,'source':str(job.source),'output':str(job.output),
                                      'source_sha256':job.source_sha256,'status':job.status,
+                                     'optimizer':job.optimizer,
                                      'error':job.error}),encoding='utf-8')
     os.replace(temporary,record)
 
@@ -192,8 +201,8 @@ def _claim_job(job):
             return claim
         except FileExistsError:
             try:pid=int(json.loads(claim.read_text(encoding='utf-8'))['pid'])
-            except (KeyError,OSError,ValueError):raise JobAlreadyRunning('This PDF has an unreadable active-run marker. Close other optimizer windows or remove running.json, then try again.')
-            if _process_alive(pid):raise JobAlreadyRunning('This PDF is already being optimized in another window. Wait for it to finish, then try again.')
+            except (KeyError,OSError,ValueError):raise JobAlreadyRunning('This PDF has an unreadable active-run marker. Close other optimizer windows or remove running.json, then try again.') from None
+            if _process_alive(pid):raise JobAlreadyRunning('This PDF is already being optimized in another window. Wait for it to finish, then try again.') from None
             claim.unlink(missing_ok=True)
 
 
@@ -216,19 +225,27 @@ def _last_stage(job):
     return 'the current stage'
 
 
-def _recover_job(source,source_hash):
-    prefix=source.stem+'.optimized'
-    folders=[path for path in source.parent.iterdir()
-             if path.is_dir() and not path.is_symlink() and path.parent.resolve()==source.parent.resolve()
-             and path.name.startswith(prefix) and path.name.endswith('.checkpoint')]
-    for folder in sorted(folders,key=lambda path:path.stat().st_mtime,reverse=True):
+def _recover_job(source,source_hash,optimizer):
+    prefix=source.stem+'.optimized-'
+    roots=[path/(source.stem+'.optimized.checkpoint') for path in source.parent.iterdir()
+           if path.is_dir() and not path.is_symlink() and path.parent.resolve()==source.parent.resolve()
+           and path.name.startswith(prefix)]
+    # Keep interrupted pre-folder runs resumable.
+    roots.extend(path for path in source.parent.iterdir()
+                 if path.is_dir() and not path.is_symlink() and path.parent.resolve()==source.parent.resolve()
+                 and path.name.startswith(source.stem+'.optimized') and path.name.endswith('.checkpoint'))
+    for folder in sorted((path for path in roots if path.is_dir() and not path.is_symlink()),
+                         key=lambda path:path.stat().st_mtime,reverse=True):
         try:
             data=json.loads((folder/'job.json').read_text(encoding='utf-8'))
             output=Path(data['output']).absolute()
-            job=Job(source,output,source_hash,data['status'],data.get('error'))
+            job=Job(source,output,source_hash,data['status'],data.get('error'),data.get('optimizer','adaptive'))
+            legacy=output.parent==source.parent
+            grouped=output.parent.parent==source.parent and output.parent.name.startswith(prefix)
             if (data.get('schema')!=1 or Path(data['source']).absolute()!=source or
-                    data.get('source_sha256')!=source_hash or output.parent!=source.parent or
-                    output.with_suffix('.checkpoint')!=folder.absolute() or job.status not in {'ready','running'}):
+                    data.get('source_sha256')!=source_hash or not (legacy or grouped) or
+                    output.with_suffix('.checkpoint')!=folder.absolute() or job.status not in {'ready','running'} or
+                    job.optimizer!=optimizer):
                 continue
             try:return replace(job,status=validate_result(job))
             except Exception:
@@ -245,13 +262,15 @@ class Job:
     source_sha256: str | None
     status: str
     error: str | None = None
+    optimizer: str = 'adaptive'
 
     @property
     def targets(self):
         return _targets(self.output) if self.output else ()
 
 
-def plan_batch(sources):
+def plan_batch(sources,optimizer='adaptive'):
+    if optimizer not in OPTIMIZER_LABELS:raise ValueError('Unknown PDF optimizer.')
     jobs, seen, reserved = [], set(), set()
     for selected in sources:
         source = Path(selected).expanduser().absolute()
@@ -261,13 +280,13 @@ def plan_batch(sources):
         seen.add(key)
         output = adjacent_output(source, reserved)
         reserved.update(map(_path_key, _targets(output)))
-        job = Job(source, output, None, "planned")
+        job = Job(source, output, None, "planned",optimizer=optimizer)
         try:
             if not source.is_file():
                 raise ValueError("Input must be a PDF file.")
             source_hash = filehash(source)
             validate_input(reader_for(source))
-            jobs.append(_recover_job(source,source_hash) or replace(job, source_sha256=source_hash, status="ready"))
+            jobs.append(_recover_job(source,source_hash,optimizer) or replace(job, source_sha256=source_hash, status="ready"))
         except Exception as exc:
             jobs.append(replace(job, status="rejected", error=str(exc)))
     return tuple(jobs)
@@ -278,6 +297,7 @@ def confirmation_text(jobs, verification_workers=None, resources=None, parallel_
     verification_workers=default_verification_workers() if verification_workers is None else verification_workers
     ready=sum(job.status == 'ready' for job in jobs);recovered=sum(job.status in {'optimized','no improvement'} for job in jobs)
     lines = [f"Optimize {ready} PDF(s) and recover {recovered} completed result(s)?", ""]
+    if jobs:lines.extend((f"Optimizer: {OPTIMIZER_LABELS[jobs[0].optimizer]}",""))
     for job in jobs:
         if job.status == "ready":
             lines.extend((str(job.source), f"  → {job.output}", ""))
@@ -294,6 +314,7 @@ def confirmation_text(jobs, verification_workers=None, resources=None, parallel_
 def run_optimizer(job, emit, started, verification_workers=None, parallel_candidates=False):
     command = [sys.executable, str(ROOT / "optimize_pdf.py"), str(job.source), str(job.output),
                "--viewing-copy", "--expected-source-sha256", job.source_sha256,
+               "--viewing-optimizer", job.optimizer,
                "--checkpoint", str(job.output.with_suffix('.checkpoint')),
                "--time-budget-seconds", str(DEFAULT_TIME_BUDGET_SECONDS),
                "--disk-budget-bytes", str(DEFAULT_DISK_BUDGET_BYTES)]
@@ -390,6 +411,8 @@ class BatchController:
     def _launch_check(self, job):
         if not job.source.is_file() or filehash(job.source) != job.source_sha256:
             raise ValueError("source changed after review")
+        if job.output.parent!=job.source.parent and job.output.parent.exists() and not _job_record(job).is_file():
+            raise FileExistsError("run folder appeared after review")
         if not _targets_available(job.output):
             raise FileExistsError("output or report appeared after review")
 

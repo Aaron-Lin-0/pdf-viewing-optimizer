@@ -1,2 +1,3 @@
 -r requirements.txt
 reportlab==4.4.9
+ruff==0.17.3

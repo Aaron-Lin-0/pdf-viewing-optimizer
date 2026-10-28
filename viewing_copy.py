@@ -22,6 +22,8 @@ from navigation import navigation_fingerprint, reader_for, validate_input
 from annotation_ink import flatten_ink, consolidate_ink, verify_flattened, verify_consolidated
 from geometry import page_signature
 from tools.evidence_cache import EvidenceCache
+import verification_worker
+from verification_worker import DeltaAccumulator, bitmap_size, halo, page_delta, render_rows
 
 
 CHECKPOINT_SCHEMA = 1
@@ -163,7 +165,7 @@ class VerificationSession:
 
     def compare(self, candidate, pages, allow_edges=False, scale=2, crop=None, print_mode=False):
         source_paths = [self._source_path(index, scale, crop, print_mode) for index in pages]
-        missing = [(index, path) for index, path in zip(pages, source_paths) if not path.is_file()]
+        missing = [(index, path) for index, path in zip(pages, source_paths) if not path.exists()]
         futures = [self.pool.submit(self._render_source,
                    (str(self.source), index, str(path), scale, crop, print_mode))
                    for index, path in missing]
@@ -205,32 +207,31 @@ class VerificationSession:
 
 def visual_delta(a,b,allow_edges=False):
     if a.size!=b.size:raise ValueError('Rendered page dimensions changed.')
-    with ImageChops.difference(a,b) as delta:
-        peak=max(hi for lo,hi in delta.getextrema())
-        mean=sum(ImageStat.Stat(delta).mean)/3
-        if not peak:return {'exact':True,'peak':0,'mean':0}
-        if not allow_edges or peak>96 or mean>1.5:
-            raise ValueError(f'Appearance changed beyond guard: peak={peak}, mean={mean:.6f}.')
-        ink=a.convert('L').point(lambda p:255 if p<250 else 0)
-        outer=ink.filter(ImageFilter.MaxFilter(3));inner=ink.filter(ImageFilter.MinFilter(3))
-        band=ImageChops.subtract(outer,inner)
-        channels=delta.split();changed=ImageChops.lighter(ImageChops.lighter(channels[0],channels[1]),channels[2]).point(lambda p:255 if p else 0)
-        outside=ImageChops.multiply(changed,ImageChops.invert(band))
-        if outside.getbbox():raise ValueError('Pixel changes extend beyond the one-pixel ink-edge band.')
-        return {'exact':False,'peak':peak,'mean':mean}
+    delta=DeltaAccumulator(allow_edges);delta.add(a,b,(0,a.height))
+    return delta.result()
 
 
 def detail_crop(source,pages):
     best=None
-    for page in pages:
-        with render(source,page-1) as image:
-            ink=image.convert('L').point(lambda p:255 if p<250 else 0)
-            edges=ImageChops.subtract(ink.filter(ImageFilter.MaxFilter(3)),ink.filter(ImageFilter.MinFilter(3)))
-            width,height=image.size;side=min(192,width,height)
-            for y in sorted(set(range(0,height-side+1,side))|{height-side}):
-                for x in sorted(set(range(0,width-side+1,side))|{width-side}):
-                    with edges.crop((x,y,x+side,y+side)) as tile:score=sum(ImageStat.Stat(tile).sum)
-                    if best is None or score>best[0]:best=(score,page,(x/2,(height-y-side)/2,(width-x-side)/2,y/2))
+    with pdfium.PdfDocument(source) as document:
+        document.init_forms()
+        for number in pages:
+            page=document[number-1]
+            try:
+                width,height=bitmap_size(page);side=min(192,width,height)
+                ys=sorted(set(range(0,height-side+1,side))|{height-side})
+                xs=sorted(set(range(0,width-side+1,side))|{width-side})
+                per=max(1,verification_worker.STRIP_PIXELS//(width*side))
+                for group in (ys[i:i+per] for i in range(0,len(ys),per)):
+                    low,high=halo(group[0],group[-1]+side,height)
+                    with render_rows(page,(low,high),height) as image:
+                        ink=image.convert('L').point(lambda p:255 if p<250 else 0)
+                        edges=ImageChops.subtract(ink.filter(ImageFilter.MaxFilter(3)),ink.filter(ImageFilter.MinFilter(3)))
+                        for y in group:
+                            for x in xs:
+                                with edges.crop((x,y-low,x+side,y-low+side)) as tile:score=sum(ImageStat.Stat(tile).sum)
+                                if best is None or score>best[0]:best=(score,number,(x/2,(height-y-side)/2,(width-x-side)/2,y/2))
+            finally:page.close()
     if not best:raise ValueError('No page available for high-resolution acceptance.')
     return best[1],best[2]
 
@@ -265,8 +266,7 @@ def verify_candidate(source,candidate,manifest,allow_edges=False,full=True,sessi
             if old_sig!=page_signature(after,index,allow_edges):
                 raise ValueError(f'Page {index+1}: saved handwriting/resource geometry changed.')
         if not session:
-            with render(source,index) as old,render(candidate,index) as new:
-                delta=visual_delta(old,new,allow_edges)
+            delta=page_delta(source,candidate,index,allow_edges)
             exact &= delta['exact'];deltas.append({'page':index+1,**delta})
         if not session:print(f'Verified vector content/navigation/appearance: {index+1}/{len(before.pages)}',flush=True)
     if session:
@@ -521,7 +521,7 @@ def build_candidate(source,destination,kind):
         restored=[]
         for index in list(manifest['converted']):
             try:
-                with render(source,index) as a,render(unmerged,index) as b:visual_delta(a,b,True)
+                page_delta(source,unmerged,index,True)
                 verify_pdfjs_page(source,unmerged,index+1,True)
             except ValueError as exc:
                 writer.pages[index].clear();writer.pages[index].update(original_pages[index])
@@ -568,9 +568,9 @@ def build_candidate(source,destination,kind):
 
 
 def report_text(report):
-    lines=['# Vector viewing-copy report','',f"Status: {report['status']}",f"Classification: {report.get('classification','no qualifying improvement')}",f"Original: {report['source']}",f"Original bytes: {report.get('source_bytes','see source file')}",f"Original SHA256: {report['source_sha256']}",'','OCR/search text retained. If ink annotations are converted, only the viewing copy loses their individual annotation editing. Originals remain unchanged.','', '| Candidate | Bytes | Exact tested appearance | CPU reduction | Regression |','| --- | ---: | --- | ---: | --- |']
+    lines=['# Vector viewing-copy report','',f"Status: {report['status']}",f"Classification: {report.get('classification','no qualifying improvement')}",f"Optimizer: {report.get('optimizer','adaptive')}",f"Original: {report['source']}",f"Original bytes: {report.get('source_bytes','see source file')}",f"Original SHA256: {report['source_sha256']}",'','OCR/search text retained. If ink annotations are converted, only the viewing copy loses their individual annotation editing. Originals remain unchanged.','', '| Candidate | Bytes | Exact tested appearance | CPU reduction | Regression |','| --- | ---: | --- | ---: | --- |']
     resources=report.get('verification_resources',{});reuse=report.get('source_evidence_reuse',{})
-    lines[7:7]=['',f"Verification workers: requested={resources.get('requested_workers','default')}, effective={resources.get('effective_workers','unavailable')}",
+    lines[8:8]=['',f"Verification workers: requested={resources.get('requested_workers','default')}, effective={resources.get('effective_workers','unavailable')}",
                 f"Conservative verification RAM estimate: {resources.get('estimated_ram_bytes',0)/1024**3:.1f} GiB (planning estimate, not a measured peak or limit).",
                 f"Source evidence: {reuse.get('source_renders_created',0)} renders created, {reuse.get('source_renders_reused',0)} reused; {reuse.get('source_signatures_created',0)} signatures created, {reuse.get('source_signatures_reused',0)} reused."]
     for c in report.get('candidates',[]):
@@ -602,11 +602,13 @@ def report_text(report):
 
 def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=None,
                      time_budget_seconds=None,disk_budget_bytes=None,verification_workers=None,
-                     parallel_candidates=False):
+                     parallel_candidates=False,optimizer='adaptive'):
     try:import pymupdf
     except ImportError as exc:raise ValueError('PyMuPDF is missing. Run Setup Dependencies.cmd, then try again.') from exc
     source,destination=Path(source).expanduser().absolute(),Path(destination).expanduser().absolute()
     resources=verification_resources(verification_workers)
+    if optimizer not in {'adaptive','qpdf','pymupdf'}:raise ValueError('Unknown PDF optimizer.')
+    if parallel_candidates and optimizer!='adaptive':raise ValueError('Parallel candidate generation is available only for the adaptive optimizer.')
     if time_budget_seconds is not None and time_budget_seconds<=0:raise ValueError('Time budget must be positive.')
     if disk_budget_bytes is not None and disk_budget_bytes<=0:raise ValueError('Disk budget must be positive.')
     if not source.is_file():raise ValueError('Input must be a PDF file.')
@@ -632,6 +634,7 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
     if filehash(source)!=source_hash:raise ValueError('Original changed during renderer preflight.')
     code_hash=_code_hash()
     run_identity={'schema':CHECKPOINT_SCHEMA,'source_sha256':source_hash,'code_sha256':code_hash,
+                  'optimizer':optimizer,
                   'python':sys.version.split()[0],'pypdf':_version('pypdf'),
                   'pypdfium2':_version('pypdfium2'),'pymupdf':_version('pymupdf')}
     run_key=hashlib.sha256(json.dumps(run_identity,sort_keys=True).encode()).hexdigest()[:16]
@@ -673,8 +676,8 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
     count=len(reader.pages)
     del reader;gc.collect()
     pages=benchmark_pages(source)
-    kinds=['dedup']+(['annotations','consolidated','combined'] if has_ink else [])+['inline','batched']
-    report={'status':'no improvement','source':str(source),'source_bytes':source_bytes,'source_sha256':source_hash,'pages':count,'benchmark_pages':pages,'candidates':[],'rejected':[],
+    kinds=(['dedup']+(['annotations','consolidated','combined'] if has_ink else [])+['inline','batched']) if optimizer=='adaptive' else []
+    report={'status':'no improvement','optimizer':optimizer,'source':str(source),'source_bytes':source_bytes,'source_sha256':source_hash,'pages':count,'benchmark_pages':pages,'candidates':[],'rejected':[],
             'checkpoint':{'schema':CHECKPOINT_SCHEMA,'path':str(checkpoint),'resumed':False},
             'budgets':{'time_seconds':time_budget_seconds,'disk_bytes':disk_budget_bytes},
             'verification_resources':resources,
@@ -702,7 +705,7 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
             except (TimeBudgetExceeded,DiskBudgetExceeded):
                 retire_session(True)
                 raise
-        if not has_ink:report['rejected'].append({'kind':'annotation conversion','reason':'No BOOX handwriting annotations detected.'})
+        if optimizer=='adaptive' and not has_ink:report['rejected'].append({'kind':'annotation conversion','reason':'No BOOX handwriting annotations detected.'})
         def repository_context(kind):
             recipe=hashlib.sha256(json.dumps({'kind':kind,'code':code_hash},sort_keys=True).encode()).hexdigest()
             return (_context('production-candidate-file',source_hash,recipe,'repository',code_hash,{'kind':kind}),
@@ -781,7 +784,9 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
                 print(f'Skipped {kind}: {exc}',flush=True)
             finally:gc.collect()
         # Compression-only candidate keeps the original document graph and stream contents.
-        packing_inputs=[(source,{'kind':'packed-original','manifest':{'converted':{},'evidence':[]},'exact':True})]+[(Path(c['path']),c) for c in valid]
+        packing_inputs=([(source,{'kind':'packed-original','manifest':{'converted':{},'evidence':[]},'exact':True})]+[(Path(c['path']),c) for c in valid]
+                        if optimizer=='adaptive' else
+                        [(source,{'kind':'packed-original','manifest':{'converted':{},'evidence':[]},'exact':True})] if optimizer=='pymupdf' else [])
         for path,item in packing_inputs:
             packed=Path(temporary)/(item['kind']+'-packed.pdf')
             try:
@@ -818,41 +823,42 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
                     retire_session(True)
                     raise
                 report['rejected'].append({'kind':item['kind']+'-packed','reason':str(exc)})
-        qpdf=Path(temporary)/'qpdf-flate.pdf'
-        try:
-            stage('candidate generation: qpdf-flate',(Path(temporary),))
-            identity=qpdf_identity(budget);executable,version,executable_hash=identity
-            recipe=hashlib.sha256(json.dumps({'kind':'qpdf-flate','executable':executable_hash,'version':version},sort_keys=True).encode()).hexdigest()
-            file_context=_context('production-candidate-file',source_hash,recipe,'qpdf',version,{'kind':'qpdf-flate','tool_sha256':executable_hash})
-            meta_context=_context('production-candidate-complete',source_hash,recipe,'qpdf',version,{'kind':'qpdf-flate','tool_sha256':executable_hash})
-            metadata=cache.load_json(meta_context)
-            reused=metadata is not None and cache.materialize(file_context,qpdf)
-            if not reused or filehash(qpdf)!=metadata.get('candidate_sha256'):
-                qpdf.unlink(missing_ok=True)
-                build_qpdf_candidate(source,qpdf,budget,identity)
-                candidate_hash=_store_candidate(cache,file_context,qpdf)
-                cache.store_json(meta_context,{'candidate_sha256':candidate_hash})
-            else:report['checkpoint']['resumed']=True
-            stage('preservation verification: qpdf-flate',(Path(temporary),))
-            qpdf_hash=filehash(qpdf)
-            verify_context=_context('production-preservation',source_hash,qpdf_hash,'pdfium',_version('pypdfium2'),
-                                    {'kind':'qpdf-flate','allow_edges':False,'code':code_hash})
-            check=cache.load_json(verify_context)
-            if check is None:
-                check=verify_candidate(source,qpdf,{'converted':{},'evidence':[]},full=True,session=session())
-                cache.store_json(verify_context,check)
-            else:report['checkpoint']['resumed']=True
-            valid.append({'kind':'qpdf-flate','path':str(qpdf),'bytes':qpdf.stat().st_size,
-                          'exact':check['exact'],'manifest':{'converted':{},'evidence':[]},
-                          'verification':check,'tool_version':version})
-        except Exception as exc:
-            finish_stage('interrupted' if isinstance(exc,(TimeBudgetExceeded,DiskBudgetExceeded)) else 'failed')
-            if verification_session and verification_session.pool is None:retire_session(True)
-            failure_budget('candidate generation or verification: qpdf-flate',(Path(temporary),))
-            if isinstance(exc,(TimeBudgetExceeded,DiskBudgetExceeded)):
-                retire_session(True)
-                raise
-            report['rejected'].append({'kind':'qpdf-flate','reason':str(exc)})
+        if optimizer in {'adaptive','qpdf'}:
+            qpdf=Path(temporary)/'qpdf-flate.pdf'
+            try:
+                stage('candidate generation: qpdf-flate',(Path(temporary),))
+                identity=qpdf_identity(budget);executable,version,executable_hash=identity
+                recipe=hashlib.sha256(json.dumps({'kind':'qpdf-flate','executable':executable_hash,'version':version},sort_keys=True).encode()).hexdigest()
+                file_context=_context('production-candidate-file',source_hash,recipe,'qpdf',version,{'kind':'qpdf-flate','tool_sha256':executable_hash})
+                meta_context=_context('production-candidate-complete',source_hash,recipe,'qpdf',version,{'kind':'qpdf-flate','tool_sha256':executable_hash})
+                metadata=cache.load_json(meta_context)
+                reused=metadata is not None and cache.materialize(file_context,qpdf)
+                if not reused or filehash(qpdf)!=metadata.get('candidate_sha256'):
+                    qpdf.unlink(missing_ok=True)
+                    build_qpdf_candidate(source,qpdf,budget,identity)
+                    candidate_hash=_store_candidate(cache,file_context,qpdf)
+                    cache.store_json(meta_context,{'candidate_sha256':candidate_hash})
+                else:report['checkpoint']['resumed']=True
+                stage('preservation verification: qpdf-flate',(Path(temporary),))
+                qpdf_hash=filehash(qpdf)
+                verify_context=_context('production-preservation',source_hash,qpdf_hash,'pdfium',_version('pypdfium2'),
+                                        {'kind':'qpdf-flate','allow_edges':False,'code':code_hash})
+                check=cache.load_json(verify_context)
+                if check is None:
+                    check=verify_candidate(source,qpdf,{'converted':{},'evidence':[]},full=True,session=session())
+                    cache.store_json(verify_context,check)
+                else:report['checkpoint']['resumed']=True
+                valid.append({'kind':'qpdf-flate','path':str(qpdf),'bytes':qpdf.stat().st_size,
+                              'exact':check['exact'],'manifest':{'converted':{},'evidence':[]},
+                              'verification':check,'tool_version':version})
+            except Exception as exc:
+                finish_stage('interrupted' if isinstance(exc,(TimeBudgetExceeded,DiskBudgetExceeded)) else 'failed')
+                if verification_session and verification_session.pool is None:retire_session(True)
+                failure_budget('candidate generation or verification: qpdf-flate',(Path(temporary),))
+                if isinstance(exc,(TimeBudgetExceeded,DiskBudgetExceeded)):
+                    retire_session(True)
+                    raise
+                report['rejected'].append({'kind':'qpdf-flate','reason':str(exc)})
         if verification_session:
             retire_session()
         report['source_evidence_reuse']=evidence_stats
@@ -884,12 +890,12 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
                                                                budget,node,resources['effective_workers'])
                     for page in pages:
                         budget.check('high-resolution and print acceptance',(Path(temporary),))
-                        with render(source,page-1,4) as a,render(chosen['path'],page-1,4) as b:visual_delta(a,b,not chosen['exact'])
-                        with render(source,page-1,2,print_mode=True) as a,render(chosen['path'],page-1,2,print_mode=True) as b:visual_delta(a,b,not chosen['exact'])
+                        page_delta(source,chosen['path'],page-1,not chosen['exact'],4)
+                        page_delta(source,chosen['path'],page-1,not chosen['exact'],print_mode=True)
                     acceptance['high_dpi_and_print_pages']=pages
                     detail_page,crop=detail_crop(source,pages)
                     budget.check('detail-crop acceptance',(Path(temporary),))
-                    with render(source,detail_page-1,8,crop) as a,render(chosen['path'],detail_page-1,8,crop) as b:delta=visual_delta(a,b,not chosen['exact'])
+                    delta=page_delta(source,chosen['path'],detail_page-1,not chosen['exact'],8,crop)
                     acceptance['detail_crop']={'page':detail_page,'crop':crop,'dpi':576,**delta}
                     from browser_check import check_browser
                     budget.check('browser acceptance',(Path(temporary),))

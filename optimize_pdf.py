@@ -6,6 +6,7 @@ Requires: pypdf >= 6.10, pypdfium2 >= 5.14, Pillow
 
 import argparse
 import hashlib
+import math
 from pathlib import Path
 import shutil
 import sys
@@ -22,15 +23,26 @@ except ImportError as exc:
     ) from exc
 
 
-def page_fingerprint(document, index, scale=2):
+def page_fingerprint(document, index, scale=2, strip_pixels=1 << 23):
+    # Huge pages use one shared strip layout so verification cannot exhaust memory.
     page = document[index]
     try:
-        bitmap = page.render(scale=scale, draw_annots=True)
-        try:
-            with bitmap.to_pil().convert("RGB") as image:
-                return image.size, hashlib.sha256(image.tobytes()).digest()
-        finally:
-            bitmap.close()
+        width = math.ceil(page.get_width() * scale)
+        height = math.ceil(page.get_height() * scale)
+        rows = max(1, strip_pixels // width)
+        digest = hashlib.sha256()
+        for top in range(0, height, rows):
+            bottom = min(height, top + rows)
+            bitmap = page.render(scale=scale, draw_annots=True,
+                                 crop=(0, (height - bottom) / scale, 0, top / scale))
+            try:
+                with bitmap.to_pil().convert("RGB") as image:
+                    if image.size != (width, bottom - top):
+                        raise ValueError(f"Page {index + 1} strip rendered at an unexpected size.")
+                    digest.update(image.tobytes())
+            finally:
+                bitmap.close()
+        return (width, height), digest.digest()
     finally:
         page.close()
 
@@ -55,16 +67,18 @@ def verify_pages(original, candidate):
 def optimize(source, destination, compact_structure=False, fast_handwriting=False, remove_invisible_text=False,
              inline_handwriting=False, viewing_copy=False, expected_source_sha256=None,
              checkpoint=None,time_budget_seconds=None,disk_budget_bytes=None,verification_workers=None,
-             parallel_candidates=False):
+             parallel_candidates=False,viewing_optimizer='adaptive'):
     if viewing_copy:
         if any((compact_structure, fast_handwriting, remove_invisible_text, inline_handwriting)):
             raise ValueError('Viewing-copy mode selects its own passes; run other modes separately.')
         from viewing_copy import optimize_viewing
         return optimize_viewing(source, destination, expected_source_sha256,checkpoint,
-                                time_budget_seconds,disk_budget_bytes,verification_workers,parallel_candidates)
+                                time_budget_seconds,disk_budget_bytes,verification_workers,parallel_candidates,
+                                viewing_optimizer)
     if any(value is not None for value in (expected_source_sha256,checkpoint,time_budget_seconds,
                                             disk_budget_bytes,verification_workers)) or parallel_candidates:
         raise ValueError('Expected-source checking, checkpoints, budgets, verification workers and parallel candidates are available only in viewing-copy mode.')
+    if viewing_optimizer!='adaptive':raise ValueError('Viewing optimizer selection is available only in viewing-copy mode.')
     if sum((fast_handwriting, remove_invisible_text, inline_handwriting)) > 1:
         raise ValueError('Run handwriting, OCR removal and inlining modes as separate passes.')
     if compact_structure:
@@ -185,9 +199,23 @@ def main():
                         help='Viewing-copy PDF verification processes (default: 2, limited by logical CPUs).')
     parser.add_argument('--parallel-candidates',action='store_true',
                         help='Generate independent built-in viewing-copy candidates concurrently; uses more RAM and disk bandwidth.')
+    parser.add_argument('--viewing-optimizer',choices=('adaptive','qpdf','pymupdf'),default='adaptive',
+                        help='Viewing-copy engine (default: repository adaptive optimizer).')
     args = parser.parse_args()
     suffix = '.viewing.pdf' if args.viewing_copy else ('.inlined.pdf' if args.inline_handwriting else ('.no-ocr.pdf' if args.remove_invisible_text else '.optimized.pdf'))
-    destination = args.output or args.input.with_name(args.input.stem + suffix)
+    created_run_folder=None
+    if args.output is None and args.viewing_copy:
+        from batch_workflow import adjacent_output
+        while True:
+            destination=adjacent_output(args.input)
+            try:
+                destination.parent.mkdir()
+                created_run_folder=destination.parent
+                break
+            except FileExistsError:
+                pass
+    else:
+        destination = args.output or args.input.with_name(args.input.stem + suffix)
     try:
         optimize(args.input, destination, compact_structure=args.compact_structure,
                  fast_handwriting=args.fast_handwriting,
@@ -195,8 +223,12 @@ def main():
                  inline_handwriting=args.inline_handwriting, viewing_copy=args.viewing_copy,
                  expected_source_sha256=args.expected_source_sha256,checkpoint=args.checkpoint,
                  time_budget_seconds=args.time_budget_seconds,disk_budget_bytes=args.disk_budget_bytes,
-                 verification_workers=args.verification_workers,parallel_candidates=args.parallel_candidates)
+                 verification_workers=args.verification_workers,parallel_candidates=args.parallel_candidates,
+                 viewing_optimizer=args.viewing_optimizer)
     except Exception as exc:
+        if created_run_folder is not None:
+            try:created_run_folder.rmdir()
+            except OSError:pass
         print(f"Error: {exc}", file=sys.stderr)
         from viewing_copy import TimeBudgetExceeded,DiskBudgetExceeded
         if isinstance(exc,TimeBudgetExceeded):return 2

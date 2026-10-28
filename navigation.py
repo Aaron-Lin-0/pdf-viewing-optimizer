@@ -2,12 +2,21 @@
 import hashlib
 from decimal import Decimal
 from pypdf import PdfReader
+from pypdf.errors import EmptyFileError, PdfReadError
 from pypdf.generic import IndirectObject, StreamObject, NullObject, NumberObject, FloatObject
 
 
 def reader_for(path):
-    reader=PdfReader(path)
-    if reader.is_encrypted:return reader
+    try:
+        reader=PdfReader(path)
+        if reader.is_encrypted:return reader
+        return _repair_layer_references(reader)
+    except EmptyFileError:raise
+    except PdfReadError as exc:
+        raise ValueError(f'Not a readable PDF; the file may be damaged or incomplete ({exc}).') from exc
+
+
+def _repair_layer_references(reader):
     valid={(n,g) for g,rows in reader.xref.items() for n,offset in rows.items()
            if n and offset>0 and not reader.xref_free_entry.get(g,{}).get(n,False)}
     valid.update((n,0) for n in reader.xref_objStm)

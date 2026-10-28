@@ -13,8 +13,11 @@ native Firefox protocol are documented in [comparison.md](comparison.md).
 The Windows batch GUI is a thin adapter over the headless controller in
 `batch_workflow.py` and a separate `optimize_pdf.py --viewing-copy` process for
 each selected file. Planning collapses duplicate selections, rejects unsafe inputs,
-snapshots the source SHA256 and reserves an unused adjacent `NAME.optimized[-N].*`
-set before displaying every source-to-output mapping for confirmation. The picker can
+snapshots the source SHA256 and reserves an unused adjacent
+`NAME.optimized-YYYY-MM-DD[-N]` run folder before displaying every source-to-output
+mapping for confirmation. The selected PDF, JSON/Markdown reports and checkpoint
+all stay inside that folder; an explicit CLI/API destination remains caller-owned.
+The picker can
 be reopened to accumulate files from multiple folders before that single review. The controller
 rechecks sources and targets before each sequential launch, validates terminal reports
 and hashes, isolates per-file failures and supports stop-after-current. Window close
@@ -22,6 +25,13 @@ is blocked while a child or its terminal result is being handled; closing betwee
 jobs skips the remaining queue. The optimizer independently checks the confirmed
 source hash at startup and before publication. The GUI does not implement a separate
 transformation or acceptance path.
+
+The reviewed optimizer selector defaults to the repository's adaptive pipeline.
+It may restrict a run to the bundled qpdf Flate/object-stream candidate or the
+PyMuPDF structural-packing candidate. The selected engine is stored with restart
+metadata and included in the report; changing it starts a distinct reviewed run.
+All choices retain the same preservation, performance and publication gates.
+Parallel candidate generation is available only to the adaptive pipeline.
 
 Production checkpoints reuse completed candidate generation, full preservation
 verification and balanced timing only when their source, candidate, maintained-code,

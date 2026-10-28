@@ -23,17 +23,19 @@ On Windows, open Create Viewing Copies.cmd and select one or more PDFs. After ea
 picker, choose whether to add PDFs from another folder; canceling a later picker
 keeps the current selection. Files run one at a time after you review and confirm
 each source-to-output mapping. Duplicate
-selections collapse to one job. Stop after current preserves the active result and
-skips queued files. Accepted copies
-and reports are placed beside each source as
-NAME.optimized.*, using NAME.optimized-2.* and higher rather than overwriting.
+selections collapse to one job. The Optimizer selector defaults to the repository's
+PDF Viewing Optimizer (recommended). qpdf-only and PyMuPDF-only runs remain available
+and use the same preservation, timing and publication gates. Stop after current preserves the active result and
+skips queued files. Each run keeps its accepted copy, reports and checkpoint in one
+adjacent NAME.optimized-YYYY-MM-DD folder. Same-day repeats use -2 and higher rather
+than overwriting, so loose artifacts do not accumulate beside the original.
 Failures and no-improvement results do not stop later files.
 The reviewed source hash is rechecked at child startup and before publication.
 Interrupted jobs reuse only exact completed generation, preservation and timing
-stages from NAME.optimized.checkpoint. Final browser acceptance and publication
+stages from the checkpoint inside that run folder. Final browser acceptance and publication
 always run again. The GUI shows stage age and applies a six-hour/10-GiB limit per file.
 It checks required components before selection. Keyboard shortcuts: Alt+S setup,
-Alt+P choose PDFs, Alt+G parallel generation, Alt+T stop after current, Ctrl+L activity log. Long paths remain
+Alt+O optimizer, Alt+P choose PDFs, Alt+G parallel generation, Alt+T stop after current, Ctrl+L activity log. Long paths remain
 available in a resizable, scrollable review window.
 The progress bar advances by completed reviewed files; the status line shows the
 active file and stage without inventing a percentage for variable-length checks.
@@ -46,14 +48,19 @@ built-in candidates use at most the reviewed worker count; packing, verification
 benchmarks, documents and publication remain ordered.
 
 Drag one original PDF onto Optimize Viewing PDF.cmd, or run:
-  python optimize_pdf.py "input.pdf" "input.viewing.pdf" --viewing-copy
+  python optimize_pdf.py "input.pdf" --viewing-copy
+
+The default creates NAME.optimized-YYYY-MM-DD\NAME.optimized.pdf plus reports and
+checkpoint data. Supplying an explicit output path retains caller-controlled placement.
 
 Use --verification-workers N to select page-verification processes and
 --parallel-candidates to concurrently build independent built-in candidates. CLI-only limits
 are available as --time-budget-seconds and --disk-budget-bytes;
---checkpoint selects an adjacent checkpoint directory.
+--checkpoint selects a checkpoint directory beside the chosen output.
+Use --viewing-optimizer adaptive, qpdf or pymupdf to select the engine; parallel
+candidate generation applies only to adaptive.
 
-Creates NAME.viewing.pdf plus readable .md and machine-readable .json reports.
+Creates readable .md and machine-readable .json reports beside the chosen output.
 If no candidate meets the preservation/performance rules, only reports are saved.
 OCR/search text, navigation, attachments, comments and form fields are retained.
 Static BOOX ink annotations may become vector page drawings; those strokes lose

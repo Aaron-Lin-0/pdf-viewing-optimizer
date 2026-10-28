@@ -100,7 +100,7 @@ def check_browser(source,candidate,pages=(1,7,29),timeout=1200):
                         except subprocess.TimeoutExpired:process.kill();process.wait()
                     log.close()
                     # Child file handles can close shortly after process-tree termination.
-                    for attempt in range(20):
+                    for _attempt in range(20):
                         try:
                             probe=Path(profile,'browser.log');probe.unlink(missing_ok=True);break
                         except PermissionError:time.sleep(.1)

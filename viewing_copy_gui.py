@@ -4,7 +4,7 @@ import queue
 import threading
 import time
 
-from batch_workflow import (BatchController, confirmation_text, dependency_diagnostics,
+from batch_workflow import (BatchController, OPTIMIZER_LABELS, confirmation_text, dependency_diagnostics,
                             dependency_report, plan_batch, resource_summary, system_resources)
 from viewing_copy import default_verification_workers
 
@@ -58,6 +58,7 @@ def main():
     ttk.Label(frame,text='Select PDFs from one or more folders, review every output path, then process one file at a time.',wraplength=760).grid(row=1,column=0,sticky='ew',pady=(3,12))
     resources=system_resources();worker_count=tk.IntVar(value=default_verification_workers())
     parallel_candidates=tk.BooleanVar(value=False)
+    optimizer_choice=tk.StringVar(value=OPTIMIZER_LABELS['adaptive'])
     resource_text=tk.StringVar(value=resource_summary(worker_count.get(),resources))
     ttk.Label(frame,textvariable=resource_text,wraplength=760).grid(row=2,column=0,sticky='ew',pady=(0,8))
     current=tk.StringVar(value='Checking setup…');current_label=ttk.Label(frame,textvariable=current,wraplength=760)
@@ -70,10 +71,8 @@ def main():
     log=tk.Text(log_frame,wrap='word',state='disabled',takefocus=True);scroll=ttk.Scrollbar(log_frame,orient='vertical',command=log.yview)
     log.configure(yscrollcommand=scroll.set);log.grid(row=0,column=0,sticky='nsew');scroll.grid(row=0,column=1,sticky='ns')
     controls=ttk.Frame(frame);controls.grid(row=6,column=0,sticky='ew',pady=(12,0));controls.columnconfigure(2,weight=1)
-    ttk.Label(controls,text='Verification workers:').grid(row=0,column=0,padx=(0,6))
     worker_selector=ttk.Spinbox(controls,from_=1,to=resources['logical_cpu_count'],width=5,
                                 textvariable=worker_count,wrap=False)
-    worker_selector.grid(row=0,column=1,padx=(0,12))
     def update_resources(*_args):
         try:value=worker_count.get()
         except tk.TclError:return
@@ -108,7 +107,8 @@ def main():
                 f'{count} {"PDF" if count==1 else "PDFs"} selected. Add PDFs from another folder?'))
         if not selected:
             return
-        jobs = plan_batch(selected)
+        optimizer={label:key for key,label in OPTIMIZER_LABELS.items()}[optimizer_choice.get()]
+        jobs = plan_batch(selected,optimizer)
         try:workers=worker_count.get()
         except tk.TclError:
             messagebox.showerror('Verification workers',f'Choose a whole number from 1 through {resources["logical_cpu_count"]}.')
@@ -138,6 +138,7 @@ def main():
         progress.configure(maximum=max(1,batch_total),value=0);progress_status.set(progress_text(0,batch_total))
         choose_button.configure(state='disabled');setup_button.configure(state='disabled');stop_button.configure(state='normal')
         worker_selector.configure(state='disabled')
+        optimizer_selector.configure(state='disabled')
         parallel_selector.configure(state='disabled')
         write(f"Reviewed {len(jobs)} unique PDF(s).")
 
@@ -172,7 +173,7 @@ def main():
                     if value.status == "optimized":
                         write(f"Saved: {value.output}")
                     elif value.status == "no improvement":
-                        write(f"No improvement; reports saved beside: {value.output.with_suffix('.json')}")
+                        write(f"No improvement; run artifacts saved in: {value.output.parent}")
                     elif value.status in {"rejected", "failed", "timeout", "budget exhausted"}:
                         write(f"{value.status.title()}: {value.source} — {value.error}")
                     elif value.status == "skipped":
@@ -185,7 +186,8 @@ def main():
                     setup_button.configure(state="normal")
                     stop_button.configure(state="disabled")
                     worker_selector.configure(state='normal')
-                    parallel_selector.configure(state='normal')
+                    optimizer_selector.configure(state='readonly')
+                    update_optimizer_controls()
                     set_status("Complete")
                     counts = {status: sum(item.status == status for item in value)
                               for status in ("optimized", "no improvement", "failed", "timeout", "budget exhausted", "rejected", "skipped")}
@@ -207,19 +209,31 @@ def main():
             return
         root.destroy()
 
+    ttk.Label(controls,text='Optimizer:',underline=0).grid(row=0,column=0,sticky='w',padx=(0,6))
+    optimizer_selector=ttk.Combobox(controls,textvariable=optimizer_choice,state='readonly',width=38,
+                                    values=tuple(OPTIMIZER_LABELS.values()))
+    optimizer_selector.grid(row=0,column=1,columnspan=5,sticky='w')
+    ttk.Label(controls,text='Verification workers:').grid(row=1,column=0,padx=(0,6),pady=(8,0))
+    worker_selector.grid(row=1,column=1,padx=(0,12),pady=(8,0))
     parallel_selector=ttk.Checkbutton(controls,text='Parallel candidate generation (more RAM)',underline=19,
                                       variable=parallel_candidates)
-    parallel_selector.grid(row=0,column=3,columnspan=3,sticky='e')
+    parallel_selector.grid(row=1,column=3,columnspan=3,sticky='e',pady=(8,0))
+    def update_optimizer_controls(*_args):
+        adaptive=optimizer_choice.get()==OPTIMIZER_LABELS['adaptive']
+        if not adaptive:parallel_candidates.set(False)
+        parallel_selector.configure(state='normal' if adaptive and not running else 'disabled')
+    optimizer_choice.trace_add('write',update_optimizer_controls)
     setup_button=ttk.Button(controls,text='Check setup',underline=6,command=check_setup)
-    setup_button.grid(row=1,column=3,padx=(0,8),pady=(8,0))
+    setup_button.grid(row=2,column=3,padx=(0,8),pady=(8,0))
     choose_button=ttk.Button(controls,text='Choose PDFs…',underline=7,command=choose,state='disabled')
-    choose_button.grid(row=1,column=4,padx=(0,8),pady=(8,0))
+    choose_button.grid(row=2,column=4,padx=(0,8),pady=(8,0))
     stop_button=ttk.Button(controls,text='Stop after current',underline=0,command=stop,state='disabled')
-    stop_button.grid(row=1,column=5,pady=(8,0))
+    stop_button.grid(row=2,column=5,pady=(8,0))
     root.bind('<Alt-s>',lambda _event:check_setup())
     root.bind('<Alt-p>',lambda _event:choose() if str(choose_button['state'])!='disabled' else None)
     root.bind('<Alt-t>',lambda _event:stop())
     root.bind('<Alt-g>',lambda _event:parallel_selector.invoke() if parallel_selector.instate(['!disabled']) else None)
+    root.bind('<Alt-o>',lambda _event:optimizer_selector.focus_set() if optimizer_selector.instate(['!disabled']) else None)
     root.bind('<Control-l>',lambda _event:log.focus_set())
     root.bind('<Configure>',lambda event:current_label.configure(wraplength=max(360,event.width-60)) if event.widget is root else None)
     root.protocol("WM_DELETE_WINDOW", close)

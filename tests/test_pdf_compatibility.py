@@ -18,8 +18,8 @@ from pypdf.generic import (ArrayObject, BooleanObject, ByteStringObject, Decoded
 from geometry import page_signature
 from navigation import navigation_fingerprint
 from optimize_pdf import optimize
-from viewing_copy import (benchmark_pages, benchmark_worker, build_candidate, filehash,
-    optimize_viewing, render, runtime_node, verify_candidate, verify_pdfjs_page)
+from viewing_copy import (benchmark_pages, build_candidate, filehash,
+    optimize_viewing, runtime_node, verify_candidate, verify_pdfjs_page)
 
 
 def nums(values):

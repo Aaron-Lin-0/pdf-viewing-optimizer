@@ -9,7 +9,7 @@ if "%~1"=="" (
     pause
     exit /b 1
 )
-"%PDF_PYTHON%" "%~dp0optimize_pdf.py" "%~1" "%~dpn1.viewing.pdf" --viewing-copy
+"%PDF_PYTHON%" "%~dp0optimize_pdf.py" "%~1" --viewing-copy
 set "PDF_EXIT=%ERRORLEVEL%"
 pause
 exit /b %PDF_EXIT%

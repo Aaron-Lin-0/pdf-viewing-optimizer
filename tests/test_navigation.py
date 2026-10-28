@@ -14,7 +14,7 @@ from pypdf.generic import Fit
 class NavigationTests(unittest.TestCase):
     def fixture(self,path):
         w=PdfWriter()
-        for i in range(3):w.add_blank_page(width=100,height=100)
+        for _i in range(3):w.add_blank_page(width=100,height=100)
         parent=w.add_outline_item('Chapter 1',0,bold=True,is_open=False)
         w.add_outline_item('Small letters',1,parent=parent,italic=True,fit=Fit.xyz(left=12,top=70,zoom=1.2))
         w.add_outline_item('Chapter 2',2)

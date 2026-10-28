@@ -287,6 +287,12 @@ Suggested module names above do not imply implemented APIs.
   invocation-local source signatures/renders, keep renderer handles inside owned
   workers, expose reviewed worker/RAM information, preserve sequential documents
   and fresh benchmark/browser/publication gates, and validate fail-closed cleanup.
+- [ ] **P14 — Contain transparency and reject impossible browser runs early.** Let
+  unrelated transparency stop only the handwriting forms whose effective paint
+  context cannot be proved opaque, not the whole batching candidate. Probe source
+  browser behavior once before timing, reuse that fresh source-side evidence only
+  within the invocation, and report qualified candidates that fail final acceptance
+  separately from a genuine no-improvement result.
 
 ### P0 progress notes — 2026-10-18
 
@@ -902,6 +908,80 @@ new optimizer settings. P12 retains broader accessibility and dependency-preflig
   base candidates in separate processes, capped by the verification-worker count.
   Dependent packing, preservation, timing, document order and publication remain
   sequential so acceptance and performance evidence are unchanged.
+- Default viewing-copy and reviewed batch runs now group the output, reports and
+  checkpoint in a dated per-source folder. Explicit CLI/API destinations retain
+  caller-controlled placement; existing files and interrupted legacy checkpoints
+  are not overwritten.
+- The reviewed GUI/CLI optimizer selector defaults to the repository adaptive
+  pipeline and can restrict execution to qpdf or PyMuPDF. The choice is bound to
+  restart metadata and reports; all three paths retain the same acceptance gates.
+
+### P14 plan — transparency containment and early viability — 2026-10-27
+
+**Triggering evidence:** A completed authorized 46-page holdout produced three
+pixel-exact, smaller candidates without sampled timing regressions. The best reduced
+aggregate cold-render CPU by 6.9%, so it qualified under the existing smaller-exact
+rule even though it did not meet the 10% faster classification. No PDF was published:
+the batching candidate was skipped by the document-wide transparency scan, then all
+three qualifying candidates failed the same source-side bookmark wait during fresh
+browser acceptance. The report records about 42 minutes across stages, including
+about 29 minutes repeating final acceptance. This is an acceptance/diagnostic and
+scheduling failure, not evidence that the performance threshold is too strict.
+
+**Fixed boundaries:** Keep the original on any unresolved paint context or failed
+acceptance check. Do not remove transparency, flatten it, rasterize handwriting,
+clone a shared Form in the first implementation, or relax geometry, appearance,
+navigation, timing or publication thresholds. Preserve the public CLI modes and
+`optimize_pdf.optimize(...)` callers. A valid reports-only result remains allowed.
+
+1. **Replace presence-based blocking with effective-context proof.** In
+   `handwriting.py`, walk reachable page/Form invocations with cycle guards and the
+   active graphics-state stack. A handwriting Form may be batched only when every
+   reachable invocation is proven free of transparency groups, soft masks,
+   non-normal blend modes, non-unit stroke/fill alpha and overprint. Continue to
+   require the existing recognized opaque local pen state. If one shared Form is
+   invoked from both safe and unsafe contexts, skip that Form in this milestone;
+   leave unrelated safe Forms eligible. `viewing_copy.py` should remove only its
+   current whole-document transparency veto and record changed/skipped Form and
+   segment counts with stable reasons in the candidate manifest/report.
+2. **Skip work when the scoped proof finds no opportunity.** Complete the cheap
+   reachability/opacity inventory before writing and fully verifying a batched
+   candidate. If no Form is eligible, report the actual counts and reason immediately.
+   Do not add a user option, confidence score or alternate unsafe path.
+3. **Separate source browser viability from candidate comparison.** Split
+   `browser_check.py`/`browser_harness.html` into a fresh single-document probe and a
+   comparison of source/candidate traces. After at least one candidate passes full
+   preservation, probe the source once before balanced performance timing. Reuse
+   that result only for candidate checks in the same invocation; never checkpoint
+   browser acceptance. If the source cannot complete the harness, stop before timing
+   and candidate browser retries with an explicit source-browser incompatibility.
+4. **Diagnose the bookmark wait without weakening it.** On timeout, retain the
+   destination array, expected page, current page, target rendering state, visible
+   page range, scale and scroll position. Reproduce the holdout's nominal-target vs.
+   current-page mismatch. Accept a corrected wait only if the target page is rendered
+   and the destination viewport behavior is stable and equivalent between source and
+   candidate; the existing structural navigation fingerprint must still match exactly.
+   A source navigation failure remains a failed viability probe, not a candidate pass.
+5. **Make terminal reporting truthful.** Preserve `no improvement` for a run with no
+   qualifying candidate. When candidates qualify but all fail final acceptance,
+   report `no publishable candidate` (or an equivalent explicit classification), list
+   the acceptance blocker once where it is source-wide, and retain the per-candidate
+   evidence. The GUI may keep the same safe reports-only lifecycle result, but its
+   summary must not say that no candidate was good enough.
+
+**Required tests and delivery:** Extend `test_handwriting.py` and
+`test_pdf_compatibility.py` with an unrelated transparent page plus opaque handwriting,
+an inherited soft mask, a transparency group, a non-normal blend/alpha state, and one
+Form shared by safe and unsafe callers. Prove safe Forms change, unsafe Forms remain
+byte/geometry equivalent, and an all-unsafe document exits before candidate rendering.
+Extend `test_viewing_copy.py` with one source browser probe per invocation, source
+failure before timing, sequential candidate fallback, uncached browser acceptance and
+the distinct terminal classification. Add a generated mixed-transparency/navigation
+fixture and exercise all-page PDFium/PDF.js plus isolated Zen checks under
+`testing.md`. Then run the full suite, package to a fresh destination, and rerun the
+authorized holdout once with no competing heavy work. The holdout must either publish
+a fully accepted copy or finish earlier with a precise blocker; it does not promise
+that a safe batching opportunity or qualifying output exists.
 
 Follow [testing.md](testing.md) and the comparison-specific checks in
 [comparison.md](comparison.md#validation). A future product-mode/API or external
