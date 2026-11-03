@@ -14,8 +14,7 @@ import tempfile
 from navigation import navigation_fingerprint, reader_for, validate_input
 
 try:
-    from pypdf import PdfReader, PdfWriter
-    import pypdfium2 as pdfium
+    from pypdf import PdfWriter
 except ImportError as exc:
     raise SystemExit(
         "Missing PDF tools. Install them with:\n"
@@ -48,6 +47,7 @@ def page_fingerprint(document, index, scale=2, strip_pixels=1 << 23):
 
 
 def verify_pages(original, candidate):
+    import pypdfium2 as pdfium
     # shortcut: compares pixels at 144 DPI, use more renderers/resolutions for prepress work.
     with pdfium.PdfDocument(original) as before, pdfium.PdfDocument(candidate) as after:
         if len(before) != len(after):
@@ -67,10 +67,17 @@ def verify_pages(original, candidate):
 def optimize(source, destination, compact_structure=False, fast_handwriting=False, remove_invisible_text=False,
              inline_handwriting=False, viewing_copy=False, expected_source_sha256=None,
              checkpoint=None,time_budget_seconds=None,disk_budget_bytes=None,verification_workers=None,
-             parallel_candidates=False,viewing_optimizer='adaptive'):
+             parallel_candidates=False,viewing_optimizer='adaptive',viewing_profile='thorough'):
+    if viewing_profile not in {'quick','thorough'}:raise ValueError('Unknown viewing profile.')
     if viewing_copy:
         if any((compact_structure, fast_handwriting, remove_invisible_text, inline_handwriting)):
             raise ValueError('Viewing-copy mode selects its own passes; run other modes separately.')
+        if viewing_profile=='quick':
+            if viewing_optimizer not in {'adaptive','qpdf'} or parallel_candidates or verification_workers is not None:
+                raise ValueError('Quick mode uses one adaptive transformation chain or qpdf only, without verification workers or parallel candidates.')
+            from quick_lossless import optimize_quick
+            return optimize_quick(source,destination,expected_source_sha256,checkpoint,time_budget_seconds,disk_budget_bytes,
+                                  optimizer=viewing_optimizer)
         from viewing_copy import optimize_viewing
         return optimize_viewing(source, destination, expected_source_sha256,checkpoint,
                                 time_budget_seconds,disk_budget_bytes,verification_workers,parallel_candidates,
@@ -79,6 +86,7 @@ def optimize(source, destination, compact_structure=False, fast_handwriting=Fals
                                             disk_budget_bytes,verification_workers)) or parallel_candidates:
         raise ValueError('Expected-source checking, checkpoints, budgets, verification workers and parallel candidates are available only in viewing-copy mode.')
     if viewing_optimizer!='adaptive':raise ValueError('Viewing optimizer selection is available only in viewing-copy mode.')
+    if viewing_profile!='thorough':raise ValueError('Viewing profiles require --viewing-copy.')
     if sum((fast_handwriting, remove_invisible_text, inline_handwriting)) > 1:
         raise ValueError('Run handwriting, OCR removal and inlining modes as separate passes.')
     if compact_structure:
@@ -124,7 +132,7 @@ def optimize(source, destination, compact_structure=False, fast_handwriting=Fals
             # A fresh root clone drops entire unreachable resource graphs, including descendants.
             rebuilt = Path(temporary) / 'reachable.pdf'
             with candidate.open('rb') as intermediate:
-                reachable = PdfWriter(clone_from=PdfReader(intermediate))
+                reachable = PdfWriter(clone_from=reader_for(intermediate))
                 reachable.compress_identical_objects(remove_duplicates=True, remove_unreferenced=True)
                 reachable.write(rebuilt)
                 reachable.close()
@@ -138,7 +146,7 @@ def optimize(source, destination, compact_structure=False, fast_handwriting=Fals
             candidate = compacted
 
         with candidate.open('rb') as navigation_file:
-            if navigation_fingerprint(reader) != navigation_fingerprint(PdfReader(navigation_file)):
+            if navigation_fingerprint(reader) != navigation_fingerprint(reader_for(navigation_file)):
                 raise ValueError('Table of contents, named destinations or attachments changed; candidate rejected.')
         print('Verified table of contents, named destinations and embedded attachments.', flush=True)
 
@@ -186,7 +194,7 @@ def main():
     modes.add_argument('--inline-handwriting', action='store_true',
                        help='Consolidate supported BOOX handwriting Forms, preserving drawing bytes and clipping.')
     modes.add_argument('--viewing-copy', action='store_true',
-                       help='Select a verified faster vector viewing copy; converts static BOOX ink annotations.')
+                       help='Create a viewing copy using the selected quick or thorough profile.')
     parser.add_argument('--expected-source-sha256',
                         help='Fail without publication unless the viewing-copy input matches this SHA256.')
     parser.add_argument('--checkpoint',type=Path,
@@ -201,6 +209,8 @@ def main():
                         help='Generate independent built-in viewing-copy candidates concurrently; uses more RAM and disk bandwidth.')
     parser.add_argument('--viewing-optimizer',choices=('adaptive','qpdf','pymupdf'),default='adaptive',
                         help='Viewing-copy engine (default: repository adaptive optimizer).')
+    parser.add_argument('--viewing-profile',choices=('quick','thorough'),default='thorough',
+                        help='Quick: exact transformations without optimizer comparisons/rendering benchmarks; thorough: measured candidate selection.')
     args = parser.parse_args()
     suffix = '.viewing.pdf' if args.viewing_copy else ('.inlined.pdf' if args.inline_handwriting else ('.no-ocr.pdf' if args.remove_invisible_text else '.optimized.pdf'))
     created_run_folder=None
@@ -224,13 +234,13 @@ def main():
                  expected_source_sha256=args.expected_source_sha256,checkpoint=args.checkpoint,
                  time_budget_seconds=args.time_budget_seconds,disk_budget_bytes=args.disk_budget_bytes,
                  verification_workers=args.verification_workers,parallel_candidates=args.parallel_candidates,
-                 viewing_optimizer=args.viewing_optimizer)
+                 viewing_optimizer=args.viewing_optimizer,viewing_profile=args.viewing_profile)
     except Exception as exc:
         if created_run_folder is not None:
             try:created_run_folder.rmdir()
             except OSError:pass
         print(f"Error: {exc}", file=sys.stderr)
-        from viewing_copy import TimeBudgetExceeded,DiskBudgetExceeded
+        from pdf_runtime import TimeBudgetExceeded,DiskBudgetExceeded
         if isinstance(exc,TimeBudgetExceeded):return 2
         if isinstance(exc,DiskBudgetExceeded):return 3
         return 1

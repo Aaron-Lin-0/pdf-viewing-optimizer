@@ -10,7 +10,8 @@ import zipfile
 ROOT=Path(__file__).resolve().parents[1]
 PROGRAM=['optimize_pdf.py','handwriting.py','invisible_text.py','navigation.py','geometry.py',
          'annotation_ink.py','viewing_copy.py','batch_workflow.py','viewing_copy_gui.py','browser_check.py',
-         'pdfjs_benchmark.mjs','browser_harness.html','verification_worker.py','tools/evidence_cache.py']
+         'pdfjs_benchmark.mjs','browser_harness.html','verification_worker.py','tools/evidence_cache.py',
+         'pdf_runtime.py','quick_lossless.py','lossless_verify.py']
 QPDF=['vendor/qpdf/LICENSE.html','vendor/qpdf/README.md','vendor/qpdf/bin/concrt140.dll','vendor/qpdf/bin/fix-qdf.exe',
       'vendor/qpdf/bin/msvcp140_1.dll','vendor/qpdf/bin/msvcp140_2.dll',
       'vendor/qpdf/bin/msvcp140_atomic_wait.dll','vendor/qpdf/bin/msvcp140_codecvt_ids.dll',

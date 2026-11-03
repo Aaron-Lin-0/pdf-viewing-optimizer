@@ -14,7 +14,7 @@ sys.path[:0] = [str(Path(__file__).resolve().parents[1]), str(Path(__file__).res
 from PIL import Image, ImageCms, ImageDraw
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import (ArrayObject, BooleanObject, ByteStringObject, DecodedStreamObject,
-    DictionaryObject, EncodedStreamObject, FloatObject, NameObject, NumberObject, TextStringObject)
+    DictionaryObject, EncodedStreamObject, Fit, FloatObject, NameObject, NumberObject, TextStringObject)
 from geometry import page_signature
 from navigation import navigation_fingerprint
 from optimize_pdf import optimize
@@ -156,6 +156,8 @@ def compatibility_fixture(path):
     p=page('Shared image indirect resources',b'q 160 0 0 160 10 10 cm /Im Do Q')
     shared=DictionaryObject(w.pages[0]['/Resources']['/XObject'])
     p[NameObject('/Resources')]=w._add_object(DictionaryObject({NameObject('/XObject'):w._add_object(shared)}))
+    w.add_outline_item('Repeated Fit one',len(w.pages)-1,fit=Fit.fit())
+    w.add_outline_item('Repeated Fit two',len(w.pages)-1,fit=Fit.fit())
     w.add_attachment('fixture.txt',b'attachment stays')
     w.add_named_destination('Quick link',2);w.set_page_label(0,len(w.pages)-1,prefix='Case ')
     w.write(path);return labels

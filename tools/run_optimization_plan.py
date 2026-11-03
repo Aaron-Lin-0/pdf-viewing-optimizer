@@ -114,6 +114,22 @@ def write_report(directory, state):
     (directory/'report.md').write_text('\n'.join(lines) + '\n', encoding='utf-8')
 
 
+def validate_completed_result(directory, state, digest, selected):
+    snapshot=directory/'source.pdf'
+    if not snapshot.is_file() or filehash(snapshot)!=digest:
+        raise RuntimeError('Completed source snapshot is missing or changed; refusing resume.')
+    rows=state.get('candidates')
+    if not isinstance(rows,list) or [row.get('id') for row in rows]!=[item['id'] for item in selected]:
+        raise RuntimeError('Completed candidate records do not match the reviewed plan; refusing resume.')
+    for row in rows:
+        if row.get('status') not in {'function-pass','unproven'}:
+            continue
+        expected=row.get('output_sha256')
+        output=directory/row['id'].replace('/','-')/'output.pdf'
+        if not expected or not output.is_file() or filehash(output)!=expected:
+            raise RuntimeError(f"Completed candidate {row['id']} is missing hash evidence or its output changed; refusing resume.")
+
+
 def execute(args):
     source = args.pdf.resolve(strict=True)
     plan = json.loads(args.plan.read_text(encoding='utf-8'))
@@ -137,6 +153,7 @@ def execute(args):
         if final.is_file():
             state = json.loads(final.read_text(encoding='utf-8'))
             if state.get('status') == 'complete':
+                validate_completed_result(directory,state,digest,selected)
                 return state
     else:
         if directory.exists() or directory.is_symlink():

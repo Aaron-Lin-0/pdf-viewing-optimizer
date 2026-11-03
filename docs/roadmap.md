@@ -18,6 +18,23 @@ and batch restart recovery are implemented as described under P11.
 
 ## Current foundation and immediate priority
 
+**Next action (2026-11-03): finish P15's native two-file review smoke, then return
+to P13/P14 performance work.** Preserve the existing milestone numbers and completed history.
+The objective remains smaller, efficiently rendered copies without sacrificing
+required content; these repairs make preservation and selection evidence reliable.
+
+**Current priority (corrected 2026-11-02): direct viewing copies.** Keep useful
+transformations and comparable storage savings while removing exhaustive optimizer
+comparisons and rendering-speed benchmarks from routine jobs. Thirty seconds on a
+short document is aspirational, not a required benchmark or reason to discard
+inlining, deduplication or cleanup. Follow [quick-lossless-plan.md](quick-lossless-plan.md)
+before speculative adaptive selection. The default direct chain retains those
+transformations, packs once and verifies preservation. The earlier compression-only
+lane remains an explicit qpdf option. [design.md](design.md) defines both profiles;
+thorough gates remain unchanged. Fresh generated matrix and interaction fixtures
+now pass the native-browser harness; the separate two-file GUI review smoke remains
+open as recorded under P15.
+
 The maintained implementation already includes:
 
 - Production viewing-copy generation and its existing preservation/performance
@@ -42,6 +59,146 @@ relevant run's completed records, final status, hashes and report for current
 facts; do not infer completion from an older chat or partial assessment. Keep
 private files, paths, screenshots and detailed comparison reports out of commits.
 Do not change the running implementation during an active comparison.
+
+## P15: repair the six confirmed audit findings
+
+**Status: implemented and regression-qualified; final native two-file review smoke pending.** The numbers below retain the audit finding
+numbers; execution order is 1, 2, 4, 3, 5, 6. Keep private reproduction files and
+document-specific results in ignored `audit-output/`. Use generated fixtures for
+committed regressions. Before executable changes, check for an active comparison
+and preserve the current uncommitted work. No new dependencies or optimizer modes
+are needed.
+
+### P15-A — Preserve custom trailer data (finding 1)
+
+- Extend the shared preservation check in `navigation.py` to include non-storage
+  trailer entries, including entries in cross-reference streams that pypdf omits
+  from its public trailer. Reuse the storage exceptions in `lossless_verify.py`;
+  do not mistake file-layout changes for document-data changes.
+- Trace `navigation_fingerprint` callers in legacy, direct, thorough and companion
+  paths. If writer cloning drops an unsupported entry, reject that candidate;
+  do not add speculative reconstruction logic or accept the loss to obtain savings.
+- Add generated classic-trailer and cross-reference-stream cases with direct and
+  indirect custom values. An unchanged value must pass; deletion/mutation must
+  fail. Exercise the direct publication path and retain ordinary bookmark, link,
+  layer and attachment coverage. Update affected verification/cache identities.
+- **Done when:** no output can be published with missing custom trailer data,
+  while supported storage-only changes and ordinary inputs still pass.
+
+### P15-B — Reject all signature objects before cleanup (finding 2)
+
+- Reuse one signature predicate across input validation and the strict comparator.
+  Inspect the bounded current object inventory, including unreferenced objects and
+  objects inside object streams, before transformations can remove them. Do not
+  decode unrelated image/content streams just to inspect dictionary keys.
+- Cover the shared `validate_input` callers and `validate_quick_input`, retaining
+  encryption, field/widget, parser-warning and unresolved-reference safeguards.
+  Fail closed when the inventory cannot be inspected within its limits.
+- Add orphan `/Sig`, orphan signature-field and `/ByteRange` plus `/Contents`
+  cases, including compressed-object storage. Assert that direct, compression-only
+  and shared legacy/thorough entry points reject them before generating a copy;
+  ordinary unsigned input must remain accepted.
+- **Done when:** cleanup cannot conceal a signature from validation, originals
+  remain intact, and no candidate is published for these inputs.
+
+### P15-C — Bind timing reuse to the actual renderer (finding 4)
+
+- Retain the PDF.js preflight result in `viewing_copy.py` and include its version
+  and module hashes in the existing timing context. Keep Node, source/candidate,
+  settings and code identities; entries lacking the new identity must miss.
+- Extend resume tests: identical context reuses timing; changing the actual
+  renderer through `PDF_NODE_MODULES` invalidates timing even with the same Node
+  executable and repository lockfile. Final acceptance/publication must still run.
+- **Done when:** a resumed speed classification cannot use another renderer's
+  measurements. Direct mode remains explicit that viewing speed is not measured.
+
+### P15-D — Recover retryable batch jobs (finding 3)
+
+- Update `_recover_job` and cancellation handling in `batch_workflow.py` so a
+  timeout or disk-budget interruption can recover the same reviewed output and
+  checkpoint. Canceling review of an interrupted job must not erase recoverability.
+  Define eligible states explicitly; do not indiscriminately retry every failure.
+- Retain source/profile/optimizer identity checks, owned-process claims, report
+  validation and output collision refusal. Thorough mode reuses only validated
+  completed stages; interrupted direct mode restarts its pass as currently designed.
+- Test timeout and budget exhaustion followed by reselection, interrupted-job
+  review cancellation followed by reselection, and refusal after source/profile
+  changes or output collisions. Align user messages with what can actually resume.
+- **Done when:** eligible retries reuse their original run folder without replacing
+  existing artifacts or reusing invalid evidence.
+
+### P15-E — Validate completed companion results on resume (finding 5)
+
+- Remove the unchecked completed-result return in `tools/run_optimization_plan.py`.
+  Before returning success, validate the saved source and retained candidate files
+  against recorded hashes, reusing the existing checks for incomplete resumes.
+- Reject missing/changed artifacts with a clear reason; do not silently replace
+  them or claim integrity from a saved boolean. Keep reports-only candidate states
+  valid where no output was expected.
+- Add completed-resume cases for unchanged files, deleted/changed source snapshots,
+  deleted/changed candidates and missing hash evidence.
+- **Done when:** a completed result is returned only for artifacts whose existence
+  and identity have just been verified.
+
+### P15-F — Keep setup and selection responsive (finding 6)
+
+- Move dependency diagnostics and batch planning out of Tk callbacks in
+  `viewing_copy_gui.py`, using its existing worker/event-queue pattern. Keep file
+  pickers, review dialogs and every widget update on the UI thread. Add only the
+  minimal optional planning progress callback needed to identify the current file.
+- Snapshot selected settings, disable conflicting controls, restore them after
+  failures, and ignore late worker results after closing the window. Never start
+  an optimizer before review approval; keep active-job stop/close semantics.
+- Test with deliberately blocked diagnostics/planning: UI event polling must
+  continue, close must remain safe, exceptions must restore controls, and stale
+  results must not enable processing under the wrong profile. Check keyboard
+  operation and the two-file review flow in the native Windows UI.
+- **Done when:** slow setup or file inspection leaves the window responsive and
+  cannot bypass review or launch duplicate jobs.
+
+### P15 integration and release gate
+
+After each repair, run its focused regression tests. After integration, run Ruff
+and the full unittest suite with writable local temporary storage. Follow
+[testing.md](testing.md) for fresh generated direct/thorough compatibility fixtures,
+all-page rendering and browser interaction checks affected by preservation changes.
+Record browser checks as pending if native startup is unavailable.
+
+Keep geometry, text, image, navigation, appearance and performance thresholds
+unchanged. Invalidate saved evidence when its acceptance rules change. Verify that
+unsigned supported fixtures still produce useful smaller copies where applicable;
+reports-only rejection is the correct outcome when preservation is unresolved.
+Do not infer rendering gains from storage savings or overlap timing with heavy work.
+
+Align README/setup messages, tests and packaging only where behavior changes. Build
+into a fresh release destination and verify packaged runtime bytes and a generated
+fixture smoke run. Keep private PDFs out of fixtures and commits; additional real
+document optimization requires authorization beyond the earlier read-only inspection.
+Close P15 only after all six exit criteria and required release checks have evidence.
+
+### P15 implementation notes — 2026-11-03
+
+- `navigation.py` now retains custom classic/xref-stream trailer entries in the
+  shared fingerprint and inventories up to 500,000 current objects before any
+  cleanup. One signature predicate rejects orphan `/Sig`, signature fields and
+  `/ByteRange` plus `/Contents`, including objects stored in object streams.
+- Thorough timing cache identity now contains the PDF.js version and loaded module
+  hashes returned by preflight. Direct mode remains benchmark-free. Timeout and
+  disk-budget batch records are explicitly retryable at the same reviewed output;
+  canceling their review no longer overwrites the recoverable record.
+- Completed companion results re-hash `source.pdf` and every retained candidate
+  before returning. Missing, changed or hashless artifacts fail closed. GUI setup
+  diagnostics and batch planning now run off the Tk thread with snapshotted settings,
+  progress events, stale-result rejection and safe close handling.
+- Ruff passes. All 210 regression tests pass; one directory-symlink test is skipped
+  where Windows denies creating that fixture. Fresh 27-page and interaction fixtures
+  passed direct PDFium/PDF.js render checks and isolated Firefox/Zen browser checks.
+  The fresh release verified 54 ZIP members and 31 installed-skill files byte-for-byte;
+  its packaged optimizer published a smaller verified interaction-fixture copy.
+- Native startup, background setup completion and Alt+P system-picker opening/cancel
+  passed. The automation helper could not reliably target the multi-select filename
+  control, so the required two-file review-dialog smoke was not completed. Keep P15
+  open until that generated-fixture UI check is observed; no real/private PDF was used.
 
 ## Scope and fixed boundaries
 
@@ -283,6 +440,9 @@ Suggested module names above do not imply implemented APIs.
 - [x] **P12 — Windows product hardening and release (completed 2026-10-26).** Complete accessibility,
   dependency diagnostics, generated-fixture UI acceptance, clean install/package
   validation and supportable failure reporting before calling the GUI released.
+- [ ] **P15 — Audit repairs (next priority; see detailed plan above).** Complete
+  trailer/signature preservation, renderer-bound timing, batch recovery,
+  completed-result validation and responsive planning before further P13/P14 work.
 - [ ] **P13 — Faster verification through reuse and bounded page workers.** Reuse
   invocation-local source signatures/renders, keep renderer handles inside owned
   workers, expose reviewed worker/RAM information, preserve sequential documents
@@ -989,6 +1149,45 @@ publication-policy change needs explicit design documentation and its own tests.
 Do not weaken existing guards to make a candidate qualify.
 
 ## Documentation maintenance
+
+### Follow-up — PDF.js verification memory recovery — 2026-10-28
+
+Persistent verification workers can retain enough page data to exhaust the Node
+heap. Workers now release rendering caches between pages and raise their heap
+allowance when detected available RAM permits, capped at 8 GiB each and half the
+available RAM across workers. Last-resort recovery releases workers and retries every page in a fresh,
+sequential process, retaining all appearance gates and the remaining time budget.
+Reports distinguish final-acceptance failure from lack of a qualifying candidate;
+the GUI directs users to the report without claiming there was no improvement.
+The subsequent bookmark correction waits for a rendered, visible destination and
+settled text/annotation layers, records a stable viewport, and compares it exactly
+between source and candidate. P14's source browser probe and scoped transparency
+proof remain pending. Private
+run findings belong in `audit-output/`; successful publication on those documents
+is not established by the recovery change alone.
+
+Validation: 166 regression tests completed successfully (one skipped); the
+27-page generated matrix passed all-page PDFium/PDF.js and forced fresh-process
+recovery checks. The interactive browser fixture passed. The matrix's source
+bookmark wait reproduced P14's target/current-page mismatch (target 27, current
+26, target rendered), so full browser compatibility remains blocked pending P14.
+The cache-cleanup/heap follow-up passed 168 regression tests (one skipped) and
+fresh all-page generated-matrix checks. A hash-verified real-document smoke test
+also passed six repeated dense-page comparisons within one persistent worker;
+this is not full-document acceptance or a measured end-to-end speed improvement.
+After the bookmark correction, fresh matrix and interactive browser checks both
+passed, including the previously failing final-page bookmark. All 168 regression
+tests completed successfully (one skipped). This supersedes the generated-matrix
+browser blocker above; real-document publication still requires its own full run.
+
+The 2026-10-29 follow-up also addresses reset pages left unrendered by repeated
+same-viewport bookmarks. A conditional rendering-queue request preserves normal
+navigation scheduling and all acceptance conditions. The repeated-Fit regression
+stalled at rendering state 0 without this fix and passed with it; the interaction
+fixture, full generated matrix and 168 regression tests (one skipped) passed.
+Targeted browser comparison on an authorized real document also completed with
+matching source/candidate results. Its private evidence stays in `audit-output/`;
+browser-only validation is not publication or a replacement for a full run.
 
 Use the [README document map](../README.md#documentation-and-main-improvement-plan)
 to distinguish current behavior, future work, usage and historical evidence.

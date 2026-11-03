@@ -24,6 +24,8 @@ OPTIMIZER_LABELS = {
     'qpdf': 'qpdf — lossless compression only',
     'pymupdf': 'PyMuPDF — structural packing only',
 }
+PROFILE_LABELS = {'quick':'Direct optimization (no benchmarks)', 'thorough':'Thorough optimization'}
+RECOVERABLE_STATUSES = {'ready','running','timeout','budget exhausted'}
 
 
 class JobTimeout(RuntimeError):
@@ -66,21 +68,24 @@ def resource_summary(workers, resources=None):
            f"Logical CPU count: {resources['logical_cpu_count']}",
            f"Total RAM: {gib(resources['total_ram_bytes'])}",
            f"Available RAM: {gib(resources['available_ram_bytes'])}",
-           f'Estimated verification RAM: {gib(estimate)} (conservative planning estimate, not a measured peak or limit).',
+           f'Estimated PDFium verification RAM: {gib(estimate)} (planning estimate, not a measured peak or limit).',
+           'PDF.js uses a separate heap allowance, raised when available RAM permits, up to 8 GiB per worker.',
            'Workers may use multiple CPU threads internally; this selection does not reserve or cap CPU cores.']
     if resources['available_ram_bytes'] is not None and estimate>resources['available_ram_bytes']:
         lines.append('Warning: the estimate exceeds available RAM; fewer workers are recommended.')
     return '\n'.join(lines)
 
 
-def dependency_diagnostics():
+def dependency_diagnostics(profile='thorough'):
+    if profile not in PROFILE_LABELS:raise ValueError('Unknown viewing profile.')
     rows=[]
-    required={'pypdf':'6.10.0','pypdfium2':'5.14.0','Pillow':'12.3.0','PyMuPDF':'1.28.2'}
+    required={'pypdf':'6.10.0','pypdfium2':'5.14.0','Pillow':'12.3.0'}
+    if profile=='thorough':required['PyMuPDF']='1.28.2'
     for name,expected in required.items():
         try:actual=importlib.metadata.version(name);ok=actual==expected
         except importlib.metadata.PackageNotFoundError:actual='missing';ok=False
         rows.append({'name':name,'ok':ok,'optional':False,'detail':actual,
-                     'action':None if ok else 'Run Setup Dependencies.cmd.'})
+                     'action':None if ok else ('Run Setup Dependencies.cmd --quick.' if profile=='quick' else 'Run Setup Dependencies.cmd.')})
     try:
         from viewing_copy import runtime_node
         node=runtime_node()
@@ -95,10 +100,11 @@ def dependency_diagnostics():
     except Exception as exc:
         rows.append({'name':'Node/PDF.js','ok':False,'optional':False,'detail':str(exc),
                      'action':'Run Setup Dependencies.cmd after installing Node.js 22.13 or newer.'})
-    browser=Path(os.environ.get('PDF_BROWSER') or r'C:\Program Files\Mozilla Firefox\firefox.exe')
-    rows.append({'name':'Firefox/Zen','ok':browser.is_file(),'optional':False,
-                 'detail':str(browser),'action':None if browser.is_file() else
-                 'Install Firefox, or set PDF_BROWSER to Firefox or Zen executable.'})
+    if profile=='thorough':
+        browser=Path(os.environ.get('PDF_BROWSER') or r'C:\Program Files\Mozilla Firefox\firefox.exe')
+        rows.append({'name':'Firefox/Zen','ok':browser.is_file(),'optional':False,
+                     'detail':str(browser),'action':None if browser.is_file() else
+                     'Install Firefox, or set PDF_BROWSER to Firefox or Zen executable.'})
     try:
         from viewing_copy import qpdf_identity
         qpdf,version,_=qpdf_identity()
@@ -170,9 +176,10 @@ def _save_job(job):
     if not job.output:return
     root=_checkpoint_root(job);root.mkdir(parents=True,exist_ok=True);record=root/'job.json'
     temporary=record.with_name(f'.job.{os.getpid()}.tmp')
-    temporary.write_text(json.dumps({'schema':1,'source':str(job.source),'output':str(job.output),
+    temporary.write_text(json.dumps({'schema':2 if job.profile=='quick' else 1,'source':str(job.source),'output':str(job.output),
                                      'source_sha256':job.source_sha256,'status':job.status,
                                      'optimizer':job.optimizer,
+                                     'profile':job.profile,
                                      'error':job.error}),encoding='utf-8')
     os.replace(temporary,record)
 
@@ -225,7 +232,7 @@ def _last_stage(job):
     return 'the current stage'
 
 
-def _recover_job(source,source_hash,optimizer):
+def _recover_job(source,source_hash,optimizer,profile='thorough'):
     prefix=source.stem+'.optimized-'
     roots=[path/(source.stem+'.optimized.checkpoint') for path in source.parent.iterdir()
            if path.is_dir() and not path.is_symlink() and path.parent.resolve()==source.parent.resolve()
@@ -239,15 +246,15 @@ def _recover_job(source,source_hash,optimizer):
         try:
             data=json.loads((folder/'job.json').read_text(encoding='utf-8'))
             output=Path(data['output']).absolute()
-            job=Job(source,output,source_hash,data['status'],data.get('error'),data.get('optimizer','adaptive'))
+            job=Job(source,output,source_hash,data['status'],data.get('error'),data.get('optimizer','adaptive'),data.get('profile','thorough'))
             legacy=output.parent==source.parent
             grouped=output.parent.parent==source.parent and output.parent.name.startswith(prefix)
-            if (data.get('schema')!=1 or Path(data['source']).absolute()!=source or
+            if (data.get('schema')!=(2 if profile=='quick' else 1) or Path(data['source']).absolute()!=source or
                     data.get('source_sha256')!=source_hash or not (legacy or grouped) or
-                    output.with_suffix('.checkpoint')!=folder.absolute() or job.status not in {'ready','running'} or
-                    job.optimizer!=optimizer):
+                    output.with_suffix('.checkpoint')!=folder.absolute() or job.status not in RECOVERABLE_STATUSES or
+                    job.optimizer!=optimizer or job.profile!=profile):
                 continue
-            try:return replace(job,status=validate_result(job))
+            try:return replace(job,status=validate_result(job,recovering=True))
             except Exception:
                 if _targets_available(output):return replace(job,status='ready',error=None)
         except (KeyError,OSError,ValueError):
@@ -263,16 +270,21 @@ class Job:
     status: str
     error: str | None = None
     optimizer: str = 'adaptive'
+    profile: str = 'thorough'
 
     @property
     def targets(self):
         return _targets(self.output) if self.output else ()
 
 
-def plan_batch(sources,optimizer='adaptive'):
+def plan_batch(sources,optimizer='adaptive',profile='thorough',progress=None):
     if optimizer not in OPTIMIZER_LABELS:raise ValueError('Unknown PDF optimizer.')
+    if profile not in PROFILE_LABELS:raise ValueError('Unknown viewing profile.')
+    if profile=='quick':
+        if optimizer=='pymupdf':raise ValueError('Direct mode supports adaptive transformations or qpdf.')
     jobs, seen, reserved = [], set(), set()
     for selected in sources:
+        if progress:progress(selected)
         source = Path(selected).expanduser().absolute()
         key = _path_key(source)
         if key in seen:
@@ -280,24 +292,29 @@ def plan_batch(sources,optimizer='adaptive'):
         seen.add(key)
         output = adjacent_output(source, reserved)
         reserved.update(map(_path_key, _targets(output)))
-        job = Job(source, output, None, "planned",optimizer=optimizer)
+        job = Job(source, output, None, "planned",optimizer=optimizer,profile=profile)
         try:
             if not source.is_file():
                 raise ValueError("Input must be a PDF file.")
             source_hash = filehash(source)
-            validate_input(reader_for(source))
-            jobs.append(_recover_job(source,source_hash,optimizer) or replace(job, source_sha256=source_hash, status="ready"))
+            if profile=='quick':
+                from lossless_verify import validate_quick_input
+                validate_quick_input(source)
+            else:validate_input(reader_for(source))
+            jobs.append(_recover_job(source,source_hash,optimizer,profile) or replace(job, source_sha256=source_hash, status="ready"))
         except Exception as exc:
             jobs.append(replace(job, status="rejected", error=str(exc)))
     return tuple(jobs)
 
 
 def confirmation_text(jobs, verification_workers=None, resources=None, parallel_candidates=False):
-    from viewing_copy import default_verification_workers
-    verification_workers=default_verification_workers() if verification_workers is None else verification_workers
+    quick=bool(jobs and jobs[0].profile=='quick')
+    if not quick:
+        from viewing_copy import default_verification_workers
+        verification_workers=default_verification_workers() if verification_workers is None else verification_workers
     ready=sum(job.status == 'ready' for job in jobs);recovered=sum(job.status in {'optimized','no improvement'} for job in jobs)
     lines = [f"Optimize {ready} PDF(s) and recover {recovered} completed result(s)?", ""]
-    if jobs:lines.extend((f"Optimizer: {OPTIMIZER_LABELS[jobs[0].optimizer]}",""))
+    if jobs:lines.extend((f"Profile: {PROFILE_LABELS[jobs[0].profile]}",f"Optimizer: {OPTIMIZER_LABELS[jobs[0].optimizer]}",""))
     for job in jobs:
         if job.status == "ready":
             lines.extend((str(job.source), f"  → {job.output}", ""))
@@ -305,9 +322,15 @@ def confirmation_text(jobs, verification_workers=None, resources=None, parallel_
             lines.extend((str(job.source),f"  Recovered: {job.status}",""))
         else:
             lines.extend((str(job.source), f"  Rejected: {job.error}", ""))
-    lines.extend((resource_summary(verification_workers,resources),
-                  'Candidate generation: '+('parallel (higher RAM and disk use)' if parallel_candidates else 'sequential'),"",
-                  "Originals are never changed. Existing outputs are never overwritten."))
+    if quick:
+        lines.extend((('Exact inlining, safe deduplication, cleanup and compression.' if jobs[0].optimizer=='adaptive' else 'Compression only; unreferenced objects retained.'),
+                      'No optimizer tournament or rendering-speed benchmarks. Preservation checks remain.',
+                      'Thirty seconds is an aspiration, not an acceptance requirement.',
+                      'Live annotations are retained; unreachable editor/recovery data may be omitted by the adaptive chain.',''))
+    else:
+        lines.extend((resource_summary(verification_workers,resources),
+                      'Candidate generation: '+('parallel (higher RAM and disk use)' if parallel_candidates else 'sequential'),''))
+    lines.append('Originals are never changed. Existing outputs are never overwritten.')
     return "\n".join(lines)
 
 
@@ -315,6 +338,7 @@ def run_optimizer(job, emit, started, verification_workers=None, parallel_candid
     command = [sys.executable, str(ROOT / "optimize_pdf.py"), str(job.source), str(job.output),
                "--viewing-copy", "--expected-source-sha256", job.source_sha256,
                "--viewing-optimizer", job.optimizer,
+               "--viewing-profile", job.profile,
                "--checkpoint", str(job.output.with_suffix('.checkpoint')),
                "--time-budget-seconds", str(DEFAULT_TIME_BUDGET_SECONDS),
                "--disk-budget-bytes", str(DEFAULT_DISK_BUDGET_BYTES)]
@@ -331,13 +355,16 @@ def run_optimizer(job, emit, started, verification_workers=None, parallel_candid
             if line.startswith('Stage: '):emit('stage',(line[7:],time.monotonic()))
             emit("output", line)
         returncode = child.wait()
-    if returncode==2:raise JobTimeout(f'This PDF exceeded the six-hour limit during {_last_stage(job)}. The original is unchanged and completed checks were saved. Select it again to resume.')
+    if returncode==2:
+        recovery=('Quick mode restarts its single pass when selected again.' if job.profile=='quick' else
+                  'Completed checks were saved. Select it again to resume.')
+        raise JobTimeout(f'This PDF exceeded the six-hour limit during {_last_stage(job)}. The original is unchanged. '+recovery)
     if returncode==3:raise JobBudgetExceeded(f'This PDF exceeded the 10-GiB working-data limit during {_last_stage(job)}. Nothing unchecked was published. Use a drive with more free space or raise the CLI limit.')
     if returncode:
         raise RuntimeError(last_error or f"optimizer exited with code {returncode}")
 
 
-def validate_result(job):
+def validate_result(job,recovering=False):
     output, json_report, readable_report = job.targets
     if not json_report.is_file() or not readable_report.is_file():
         raise RuntimeError("optimizer completed without both reports")
@@ -352,11 +379,25 @@ def validate_result(job):
         raise RuntimeError("optimizer report source does not match the reviewed source")
     if report.get("source_sha256") != job.source_sha256 or filehash(job.source) != job.source_sha256:
         raise RuntimeError("source changed after review")
+    if report.get('profile','thorough')!=job.profile:
+        raise RuntimeError('optimizer report profile does not match the reviewed profile')
+    if job.profile=='quick':
+        from quick_lossless import acceptance_context
+        from pdf_runtime import qpdf_identity
+        if recovering and 'acceptance_context' not in report:
+            raise RuntimeError('quick result has no reusable acceptance context')
+        if 'acceptance_context' in report and report['acceptance_context']!=acceptance_context(qpdf_identity(),job.optimizer):
+            raise RuntimeError('quick report acceptance context changed; start a fresh run')
+        if status=='optimized' and (not report.get('verification',{}).get('complete') or
+                                   'acceptance_context' not in report):
+            raise RuntimeError('quick report lacks completed lossless verification')
     if status == "optimized":
         if Path(report.get("output", "")).absolute() != output or not output.is_file():
             raise RuntimeError("optimizer report output does not match the reviewed output")
         if report.get("output_sha256") != filehash(output):
             raise RuntimeError("published copy hash does not match the optimizer report")
+        if job.profile=='quick' and output.stat().st_size>=job.source.stat().st_size:
+            raise RuntimeError('quick copy is not smaller')
     elif output.exists() or output.is_symlink():
         raise RuntimeError("no-improvement report unexpectedly published an output")
     return status
@@ -388,7 +429,8 @@ class BatchController:
         with self._lock:
             for index, job in enumerate(self.jobs):
                 if job.status == "ready":
-                    self._record(index, "skipped", "confirmation cancelled")
+                    self.jobs[index]=replace(job,status='skipped',error='confirmation cancelled')
+                    self.emit('result',self.jobs[index])
         return tuple(self.jobs)
 
     def request_stop(self):

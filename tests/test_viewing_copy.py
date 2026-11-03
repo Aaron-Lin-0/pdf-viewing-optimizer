@@ -33,6 +33,25 @@ def annotation_fixture():
 
 
 class ViewingTests(unittest.TestCase):
+    def test_pdfjs_heap_reserves_ram_across_workers(self):
+        from viewing_copy import pdfjs_heap_args
+        for available,workers,expected in [(None,2,[]),(8,2,[]),(20,2,['--max-old-space-size=5120']),
+                                           (20,1,['--max-old-space-size=8192']),(64,4,['--max-old-space-size=8192'])]:
+            with self.subTest(available=available,workers=workers),\
+                 patch('batch_workflow.system_resources',return_value={'available_ram_bytes':available*1024**3 if available else None}):
+                self.assertEqual(pdfjs_heap_args(workers),expected)
+
+    def test_smaller_exact_copy_needs_no_render_speedup(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            base,small=[Path(folder)/name for name in ['base.pdf','small.pdf']]
+            base.write_bytes(b'0'*100);small.write_bytes(b'0'*40)
+            records=[{'file':str(path.absolute()),'page':1,'mode':'render',
+                      'cold':{'wall':1,'cpu':cpu},'cached':{'wall':.1}} for path,cpu in [(base,1),(small,1.04)]]
+            candidate={'path':str(small),'exact':True}
+            self.assertIs(choose_candidate(base,[candidate],records),candidate)
+            records[1]['cold']['cpu']=1.06
+            self.assertIsNone(choose_candidate(base,[candidate],records))
+
     def test_verification_session_reuses_source_evidence_with_one_and_two_workers(self):
         for workers in (1,2):
             with self.subTest(workers=workers), tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
@@ -172,6 +191,30 @@ class ViewingTests(unittest.TestCase):
         with patch('viewing_copy.subprocess.Popen',return_value=Child()):
             with self.assertRaisesRegex(ValueError,'missing result'):
                 verify_pdfjs('source.pdf','candidate.pdf',1,workers=1,node='node')
+
+    def test_pdfjs_heap_failure_retries_every_page_in_fresh_process(self):
+        class Child:
+            returncode=1
+            def communicate(self,_input,timeout):return '', 'FATAL ERROR: heap limit allocation failed'
+            def poll(self):return self.returncode
+            def wait(self):return 0
+            def terminate(self):self.returncode=-15
+        for workers in (1,2):
+            with self.subTest(workers=workers),patch('viewing_copy.subprocess.Popen',side_effect=lambda *a,**k:Child()),\
+                 patch('viewing_copy.verify_pdfjs_page',side_effect=lambda s,c,p,*a:{'page':p,'ok':True}) as isolated:
+                rows=verify_pdfjs('source.pdf','candidate.pdf',3,True,node='node',workers=workers)
+                self.assertEqual([row['page'] for row in rows],[1,2,3])
+                self.assertEqual([call.args for call in isolated.call_args_list],
+                                 [('source.pdf','candidate.pdf',p,True,None,'node') for p in (1,2,3)])
+        with patch('viewing_copy.subprocess.Popen',return_value=Child()),\
+             patch('viewing_copy.verify_pdfjs_page',return_value={'page':1,'ok':False}) as isolated:
+            with self.assertRaisesRegex(ValueError,'isolated acceptance'):
+                verify_pdfjs('source.pdf','candidate.pdf',2,workers=1,node='node')
+            self.assertEqual(isolated.call_count,1)
+        with patch('viewing_copy.subprocess.Popen',return_value=Child()),\
+             patch('viewing_copy.verify_pdfjs_page',side_effect=TimeBudgetExceeded('expired')):
+            with self.assertRaises(TimeBudgetExceeded):
+                verify_pdfjs('source.pdf','candidate.pdf',2,workers=1,node='node')
 
     def test_pdfjs_verification_worker_keeps_results_in_page_order(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
@@ -329,7 +372,7 @@ class ViewingTests(unittest.TestCase):
             w=PdfWriter();p=w.add_blank_page(width=60,height=60)
             signature=DictionaryObject({NameObject('/Subtype'):NameObject('/Widget'),NameObject('/FT'):NameObject('/Sig')})
             p[NameObject('/Annots')]=ArrayObject([w._add_object(signature)]);w.write(a)
-            with self.assertRaisesRegex(ValueError,'Signature'):optimize_viewing(a,b)
+            with self.assertRaisesRegex(ValueError,'[Ss]ignature'):optimize_viewing(a,b)
             b.with_suffix('.json').write_text('keep')
             with self.assertRaises(FileExistsError):optimize_viewing(a,b)
             self.assertEqual(b.with_suffix('.json').read_text(),'keep')
@@ -364,11 +407,14 @@ class ViewingTests(unittest.TestCase):
                                      'annotations':{'count':0}})
                 return rows
             def choose(source,candidates,results):
+                if not candidates:return None
                 candidate=candidates[0];candidate.update(cpu_reduction=.2,regression=False,median={})
                 return candidate
             def pdfjs(*args,**kwargs):calls['pdfjs']+=1;return []
             def browser(*args,**kwargs):calls['browser']+=1;return {}
-            with patch('viewing_copy.benchmark_worker',return_value={}),\
+            preflight={'version':'6.4.299','modules':[{'sha256':'1'*64}]}
+            changed={'version':'6.4.299','modules':[{'sha256':'2'*64}]}
+            with patch('viewing_copy.benchmark_worker',side_effect=[preflight,preflight,changed]),\
                  patch('viewing_copy.node_identity',return_value={'path':'node','version':'fixture','sha256':'f'*64}),\
                  patch('viewing_copy.build_candidate',side_effect=build),\
                  patch('viewing_copy.verify_candidate',side_effect=verify),\
@@ -381,7 +427,14 @@ class ViewingTests(unittest.TestCase):
                 with contextlib.redirect_stdout(io.StringIO()):
                     optimize_viewing(source,first,checkpoint=checkpoint)
                     optimize_viewing(source,second,checkpoint=checkpoint)
-            self.assertEqual(calls,{'build':3,'verify':3,'timing':1,'pdfjs':2,'browser':2})
+                    with patch('viewing_copy.verify_pdfjs',side_effect=ValueError('heap limit')):
+                        failed=Path(folder)/'failed.pdf'
+                        optimize_viewing(source,failed,checkpoint=checkpoint)
+                    failed_report=json.loads(failed.with_suffix('.json').read_text())
+                    self.assertEqual(failed_report['status'],'no improvement')
+                    self.assertEqual(failed_report['classification'],'no publishable candidate: final acceptance failed')
+                    self.assertFalse(failed.exists())
+            self.assertEqual(calls,{'build':3,'verify':3,'timing':2,'pdfjs':2,'browser':2})
             report=json.loads(second.with_suffix('.json').read_text())
             self.assertTrue(report['checkpoint']['resumed'])
             self.assertGreater(report['checkpoint']['stats']['hits'],0)

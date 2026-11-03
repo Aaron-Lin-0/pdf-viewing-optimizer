@@ -4,6 +4,8 @@ from datetime import date
 from pathlib import Path
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from dataclasses import replace
 
@@ -37,6 +39,120 @@ def complete(job, status="no improvement", **changes):
 
 
 class ViewingCopyGuiTests(unittest.TestCase):
+    def test_native_mode_controls_follow_profile_and_preflight(self):
+        import tkinter as tk
+        from tkinter import ttk
+        from unittest.mock import patch
+        from viewing_copy_gui import main
+        from batch_workflow import PROFILE_LABELS
+        def smoke(root):
+            root.withdraw()
+            try:
+                def wait_for(predicate):
+                    deadline=time.monotonic()+2
+                    while not predicate() and time.monotonic()<deadline:
+                        root.update();time.sleep(.01)
+                    self.assertTrue(predicate())
+                root.update()
+                def descendants(widget):
+                    for child in widget.winfo_children():
+                        yield child;yield from descendants(child)
+                combos=[child for child in descendants(root) if isinstance(child,ttk.Combobox)]
+                profile=next(child for child in combos if child.get()==PROFILE_LABELS['quick'])
+                optimizer=next(child for child in combos if child is not profile)
+                worker=next(child for child in descendants(root) if isinstance(child,ttk.Spinbox))
+                self.assertTrue(optimizer.instate(['disabled']));self.assertTrue(worker.instate(['disabled']))
+                profile.set(PROFILE_LABELS['thorough'])
+                wait_for(lambda:optimizer.instate(['!disabled']) and worker.instate(['!disabled']))
+                profile.set(PROFILE_LABELS['quick'])
+                wait_for(lambda:optimizer.instate(['disabled']) and worker.instate(['disabled']))
+            finally:root.tk.call(root.protocol('WM_DELETE_WINDOW'))
+        with patch.object(tk.Tk,'mainloop',smoke),\
+             patch('viewing_copy_gui.dependency_diagnostics',return_value=()) as setup:
+            main()
+        self.assertEqual([call.args[0] for call in setup.call_args_list],['quick','thorough','quick'])
+
+    def test_slow_planning_does_not_block_tk_events_and_close_is_safe(self):
+        import tkinter as tk
+        from tkinter import ttk
+        from unittest.mock import patch
+        from viewing_copy_gui import main
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            source=Path(folder)/'source.pdf';make_pdf(source);gate=threading.Event();ticks=[]
+            def blocked(*args,**kwargs):
+                gate.wait(2);return ()
+            def smoke(root):
+                root.withdraw()
+                def descendants(widget):
+                    for child in widget.winfo_children():
+                        yield child;yield from descendants(child)
+                deadline=time.monotonic()+2
+                choose=None
+                while time.monotonic()<deadline:
+                    root.update();time.sleep(.01)
+                    choose=next((child for child in descendants(root)
+                                 if isinstance(child,ttk.Button) and 'Choose PDFs' in str(child['text'])),None)
+                    if choose and choose.instate(['!disabled']):break
+                self.assertIsNotNone(choose);choose.invoke();root.after(10,lambda:ticks.append(True))
+                deadline=time.monotonic()+.3
+                while time.monotonic()<deadline and not ticks:root.update();time.sleep(.01)
+                self.assertTrue(ticks);self.assertTrue(choose.instate(['disabled']))
+                root.tk.call(root.protocol('WM_DELETE_WINDOW'));gate.set()
+            with patch.object(tk.Tk,'mainloop',smoke),\
+                 patch('viewing_copy_gui.dependency_diagnostics',return_value=()),\
+                 patch('viewing_copy_gui.plan_batch',side_effect=blocked),\
+                 patch('tkinter.filedialog.askopenfilenames',return_value=(str(source),)),\
+                 patch('tkinter.messagebox.askyesno',return_value=False):
+                main()
+
+    def test_slow_setup_does_not_block_tk_events(self):
+        import tkinter as tk
+        from unittest.mock import patch
+        from viewing_copy_gui import main
+        gate=threading.Event();ticks=[]
+        def blocked(_profile):gate.wait(2);return ()
+        def smoke(root):
+            root.withdraw();root.after(10,lambda:ticks.append(True));deadline=time.monotonic()+.3
+            while time.monotonic()<deadline and not ticks:root.update();time.sleep(.01)
+            self.assertTrue(ticks);root.tk.call(root.protocol('WM_DELETE_WINDOW'));gate.set()
+        with patch.object(tk.Tk,'mainloop',smoke),patch('viewing_copy_gui.dependency_diagnostics',side_effect=blocked):
+            main()
+
+    def test_quick_profile_is_reviewed_and_isolated_from_thorough_recovery(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            source=Path(folder)/'source.pdf';make_pdf(source)
+            quick=plan_batch([source],profile='quick')[0]
+            self.assertEqual(quick.profile,'quick');self.assertEqual(quick.optimizer,'adaptive')
+            text=confirmation_text((quick,))
+            self.assertIn('Direct optimization',text);self.assertIn('not an acceptance requirement',text)
+            self.assertNotIn('PDFium verification RAM',text)
+            _save_job(replace(quick,status='running'))
+            self.assertEqual(json.loads(quick.output.with_suffix('.checkpoint').joinpath('job.json').read_text())['schema'],2)
+            self.assertEqual(plan_batch([source],profile='quick')[0].output,quick.output)
+            self.assertNotEqual(plan_batch([source],'qpdf')[0].output,quick.output)
+
+    def test_direct_setup_checks_renderers_but_does_not_require_browser(self):
+        from unittest.mock import patch
+        versions={'pypdf':'6.10.0','pypdfium2':'5.14.0','Pillow':'12.3.0'}
+        completed=__import__('subprocess').CompletedProcess([],0,'{"version":"6.4.299","dependencies":"ready"}\n','')
+        with patch('batch_workflow.importlib.metadata.version',side_effect=lambda name:versions[name]) as version,\
+             patch('viewing_copy.qpdf_identity',return_value=('qpdf.exe','qpdf version 12.4.2','f'*64)),\
+             patch('viewing_copy.runtime_node',return_value=__import__('sys').executable),\
+             patch('batch_workflow.subprocess.run',return_value=completed):
+            rows=dependency_diagnostics('quick')
+        self.assertEqual([row['name'] for row in rows],['pypdf','pypdfium2','Pillow','Node/PDF.js','qpdf'])
+        self.assertTrue(all(row['ok'] for row in rows));self.assertEqual(version.call_count,3)
+
+    def test_quick_report_requires_complete_verification_and_matching_profile(self):
+        from batch_workflow import validate_result
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            source=Path(folder)/'source.pdf';make_pdf(source)
+            quick=plan_batch([source],profile='quick')[0];_save_job(quick)
+            complete(quick,'optimized',profile='thorough')
+            with self.assertRaisesRegex(RuntimeError,'profile'):validate_result(quick)
+            complete(quick,'optimized',profile='quick')
+            with self.assertRaisesRegex(RuntimeError,'verification'):validate_result(quick)
+
     def test_picker_accumulates_pdfs_across_folders(self):
         batches=iter([('first/a.pdf','first/b.pdf'),('second/c.pdf',)])
         prompts=[]
@@ -243,6 +359,18 @@ class ViewingCopyGuiTests(unittest.TestCase):
                 def runner(job,emit,started):started();raise error
                 result=BatchController(plan_batch([source]),runner=runner).run()[0]
                 self.assertEqual(result.status,status)
+                recovered=plan_batch([source])[0]
+                self.assertEqual(recovered.status,'ready')
+                self.assertEqual(recovered.output,result.output)
+
+    def test_cancelled_retry_remains_recoverable(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            source=Path(folder)/'source.pdf';make_pdf(source);job=plan_batch([source])[0]
+            _save_job(replace(job,status='timeout',error='late'))
+            retry=plan_batch([source])[0];self.assertEqual(retry.output,job.output)
+            BatchController((retry,)).cancel()
+            recovered=plan_batch([source])[0]
+            self.assertEqual(recovered.status,'ready');self.assertEqual(recovered.output,job.output)
 
     def test_restart_recovers_valid_terminal_report_and_resumes_incomplete_job(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:

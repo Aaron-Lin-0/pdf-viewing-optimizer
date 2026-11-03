@@ -67,6 +67,32 @@ sequential mode remains the default. Packing and all acceptance phases stay orde
 
 ## Generated compatibility matrix
 
+Direct optimization has a separate qualification runner. Runtime direct jobs
+verify preservation in PDFium/PDF.js, without speed benchmarks. These additional
+development checks cover all generated high-resolution/print pages and browser
+interactions (the browser step requires normal native browser startup):
+
+```powershell
+.\.venv\Scripts\python.exe tests/run_quick_compatibility.py fixtures --output audit-output/QUICK_NEW_NAME
+.\.venv\Scripts\python.exe tests/run_quick_compatibility.py render --output audit-output/QUICK_NEW_NAME
+.\.venv\Scripts\python.exe tests/run_quick_compatibility.py browser --output audit-output/QUICK_NEW_NAME
+```
+
+Fixture creation requires a fresh directory; later steps refuse to replace their
+reports. The quick regression suite also mutates exact stream/image/font/text
+data, hit areas, annotations, bookmarks, metadata, layers, attachments, private
+entries, decimal precision and shared identities. It checks all PNG row filters,
+unreferenced payload preservation, warning/incremental/signature rejection,
+decoder limits, source races, exclusive publication/rollback and profile recovery.
+The direct regression cases prove useful inlining/cleanup survives, no benchmark
+or tournament runs, packing failure retains a verified intermediate, transform
+errors prevent publication and thirty seconds is not a gate. Direct dependency
+tests require renderer probes but no browser or PyMuPDF. The explicit qpdf-only
+lane still runs without renderers. The GUI defaults to Direct optimization,
+disables thorough-only controls and rechecks setup when changing mode.
+
+The commands below retain the thorough-mode qualification path.
+
 ```powershell
 python tests/run_compatibility.py fixtures
 $env:PDF_BROWSER = 'C:\Program Files\Mozilla Firefox\firefox.exe'
@@ -89,7 +115,9 @@ A reports-only **no improvement** outcome is valid. Never force publication when
 
 ## Real documents and timing
 
-Run one document at a time with `--viewing-copy`. Keep the `.md` and `.json` reports; they include source/output hashes, candidate decisions, preservation results and raw timing runs. The source is never rewritten.
+Run one document at a time. For direct mode add `--viewing-profile quick`; keep its reports with transformation counts, preservation coverage, hashes and descriptive stage elapsed times. Compare size savings against prior selected outputs. Thirty seconds is not a pass/fail criterion. The source is never rewritten.
+
+The remaining timing guidance applies to thorough mode, whose reports also include candidate decisions and raw rendering-speed measurements.
 
 Confirm that bundled qpdf appears as `qpdf-flate`, either measured or explicitly
 rejected in the report. `PDF_QPDF` may select another executable. It receives the same

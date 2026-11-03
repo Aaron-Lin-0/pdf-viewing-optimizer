@@ -41,7 +41,13 @@ def run(stage,root):
         assert values['layers'][2]['onHash']!=values['layers'][2]['offHash']
         save('interactive-browser',result)
         with PdfReader(root/'matrix.pdf') as reader:pages=list(range(1,len(reader.pages)+1))
-        save('matrix-browser',check_browser(root/'matrix.pdf',root/'matrix.dedup.pdf',pages))
+        result=check_browser(root/'matrix.pdf',root/'matrix.dedup.pdf',pages)
+        traces=result['results']['source']['bookmarkTrace']
+        assert all(row['target'] in row['viewport']['visible'] and row['viewport']['state']==3 for row in traces)
+        assert [row['title'] for row in traces[-2:]]==['Repeated Fit one','Repeated Fit two']
+        assert traces[-2]['viewport']==traces[-1]['viewport']
+        assert traces[-1]['target']==len(pages), 'Fixture must exercise the final-page bookmark'
+        save('matrix-browser',result)
 
 
 if __name__=='__main__':

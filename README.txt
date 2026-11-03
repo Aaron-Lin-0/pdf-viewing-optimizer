@@ -9,7 +9,35 @@ resampling or recompression to a lossy format. Drawing-call optimizations target
 recognized BOOX structures; other PDFs can benefit from verified object/storage
 compression, but a smaller file is not necessarily faster to draw.
 
-Viewing copy (recommended for measured rendering cost)
+Direct optimization (no benchmarks): default Windows and drag-and-drop mode
+
+Choose Direct optimization (no benchmarks) in Create Viewing Copies.cmd, or run:
+  python optimize_pdf.py "input.pdf" --viewing-copy --viewing-profile quick
+
+Runs one chain of exact supported handwriting inlining, safe deduplication,
+current-document cleanup and lossless qpdf packing. Retains useful transformations
+without exhaustive optimizer comparisons or rendering-speed benchmarks. A smaller
+copy must pass geometry/navigation, exact all-page PDFium/PDF.js and
+high-resolution/print/detail checks. Live annotations remain editable. Unreachable
+editor/recovery objects may be omitted from the separate copy; originals stay intact.
+Thirty seconds is aspirational, not an acceptance gate or reason to remove useful
+transformations. Processing time varies; faster viewing is not measured or promised.
+Unsupported/unresolved preservation produces reports only. No browser is launched;
+native-browser development qualification remains pending in this environment.
+
+Direct setup needs pypdf 6.10.0, pypdfium2 5.14.0, Pillow 12.3.0, Node/PDF.js 6.4.299
+and bundled qpdf 12.4.2. Run "Setup Dependencies.cmd" --quick for this subset;
+without the argument setup installs thorough dependencies too. Direct mode needs
+neither PyMuPDF nor a browser. In the GUI Alt+M selects mode. Engine/worker/parallel
+controls apply to thorough mode; direct verification uses up to two workers.
+
+For compression only, add --viewing-optimizer qpdf with the quick profile. That
+narrower lane preserves and compares all objects, including unreachable payloads,
+and performs no page rendering. It may save considerably less space than inlining.
+Direct jobs restart after interruption. Completed recovery validates profile,
+policy/code/tool/renderer identities and source/output hashes. Profiles stay isolated.
+
+Thorough viewing copy (existing CLI/API default; measured rendering cost)
 
 After extracting the ZIP, open Setup Dependencies.cmd once. It creates a private
 .venv and installs the pinned Python and PDF.js packages. Python 3.10+, Node.js
@@ -137,11 +165,12 @@ legacy modes; viewing-copy mode selects its own passes and cannot combine flags.
 
 Dependencies (Python 3.10+, Node.js 22.13+, PDF.js 6.4.299)
 
-  python -m pip install "pypdf>=6.10" "pypdfium2>=5.14" Pillow "pymupdf>=1.28"
-  npm install pdfjs-dist@6.4.299 @napi-rs/canvas@1.0.13
+  python -m pip install -r requirements.txt
+  npm ci
 
-Legacy non-packing modes do not need PyMuPDF/Node/browser. Viewing-copy mode needs
-all dependencies and installed Zen/Firefox. Set PDF_PYTHON to select the launcher's Python interpreter. Otherwise it tries
+Legacy non-packing modes do not need PyMuPDF/Node/browser. Thorough viewing-copy
+mode needs all dependencies and installed Zen/Firefox; direct mode needs the
+subset listed above. Set PDF_PYTHON to select the launcher's Python interpreter. Otherwise it tries
 the current user's bundled Codex runtime, then Python on PATH. Install the
 dependencies in the interpreter you choose.
 Use PDF_NODE, PDF_NODE_MODULES or PDF_BROWSER to select other installed runtimes.

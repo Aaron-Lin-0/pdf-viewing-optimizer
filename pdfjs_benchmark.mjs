@@ -36,7 +36,12 @@ const compareSnapshots=(a,b,page,allow)=>{
   const mean=sum/(ink.length*3),ok=peak===0||(allow&&peak<=96&&mean<=1.5&&outside===0);
   return {page,width:a.width,height:a.height,ok,exact:peak===0,peak,mean,outsideEdgeBand:outside};
 };
-if(mode==='preflight'){console.log(JSON.stringify({version:pdfjs.version,dependencies:'ready'}));}
+if(mode==='preflight'){
+  const files=[require.resolve('pdfjs-dist/legacy/build/pdf.mjs'),require.resolve('@napi-rs/canvas'),
+    ...Object.keys(require.cache).filter(file=>file.endsWith('.node'))].sort();
+  const modules=files.map(file=>({file,sha256:createHash('sha256').update(fs.readFileSync(file)).digest('hex')}));
+  console.log(JSON.stringify({version:pdfjs.version,dependencies:'ready',modules}));
+}
 else if(mode==='compare-worker'){
   const candidate=pageNumber,workerWidth=Number(widthArg),allow=png==='edges';
   if(!Number.isInteger(workerWidth)||workerWidth<1)throw new Error('Invalid verification width.');
@@ -54,6 +59,8 @@ else if(mode==='compare-worker'){
       const page=Number(line);
       try{const a=await snapshot(sourceDocument,page);const b=await snapshot(candidateDocument,page);console.log(JSON.stringify(compareSnapshots(a,b,page,allow)));}
       catch(error){console.log(JSON.stringify({page,error:String(error?.message||error)}));}
+      await Promise.all([sourceDocument.cleanup(),candidateDocument.cleanup()]);
+      globalThis.gc?.();
     }
   }
   await Promise.all(tasks.map(task=>task.destroy()));

@@ -6,9 +6,24 @@ from pypdf.errors import EmptyFileError, PdfReadError
 from pypdf.generic import IndirectObject, StreamObject, NullObject, NumberObject, FloatObject
 
 
+MAX_INPUT_OBJECTS = 500_000
+TRAILER_STORAGE_KEYS = {'/Size', '/Prev', '/XRefStm', '/ID'}
+
+
+class _PreservingReader(PdfReader):
+    def _process_xref_stream(self, stream):
+        self.preserved_xref_trailer = {
+            key: value for key, value in stream.items()
+            if key not in {'/Type', '/W', '/Index', '/Length', '/Filter', '/DecodeParms'}
+        }
+        return super()._process_xref_stream(stream)
+
+
 def reader_for(path):
     try:
-        reader=PdfReader(path)
+        reader=_PreservingReader(path)
+        for key,value in getattr(reader,'preserved_xref_trailer',{}).items():
+            reader.trailer.setdefault(key,value)
         if reader.is_encrypted:return reader
         return _repair_layer_references(reader)
     except EmptyFileError:raise
@@ -35,24 +50,33 @@ def _repair_layer_references(reader):
     return reader
 
 
+def is_signature_object(obj):
+    return isinstance(obj,dict) and (obj.get('/Type')=='/Sig' or obj.get('/FT')=='/Sig' or
+                                     '/ByteRange' in obj and '/Contents' in obj)
+
+
+def _current_objects(reader):
+    refs={(n,g) for g,rows in reader.xref.items() for n,offset in rows.items()
+          if n and offset>0 and not reader.xref_free_entry.get(g,{}).get(n,False)}
+    refs.update((n,0) for n in reader.xref_objStm)
+    if len(refs)>MAX_INPUT_OBJECTS:
+        raise ValueError('PDF object inventory limit exceeded; signature safety cannot be established.')
+    for n,g in refs:
+        try:obj=reader.get_object(IndirectObject(n,g,reader))
+        except Exception as exc:
+            raise ValueError(f'PDF object inventory could not be inspected; signature safety cannot be established ({exc}).') from exc
+        if obj is None:
+            raise ValueError('PDF object inventory contains an unresolved object; signature safety cannot be established.')
+        yield obj
+
+
 def validate_input(reader):
     if reader.is_encrypted:
         raise ValueError('Encrypted PDFs are not supported; their protection would be lost.')
-    if '/Perms' in reader.trailer['/Root'] or any(
-            f.get('/FT') == '/Sig' for f in (reader.get_fields() or {}).values()):
+    if '/Perms' in reader.trailer['/Root'] or any(is_signature_object(obj) for obj in _current_objects(reader)):
         raise ValueError('PDFs with signatures or signature fields are not supported.')
     if not len(reader.pages):
         raise ValueError('Empty PDF: no pages to optimize.')
-    # Signature widgets can be missing from the catalog's field tree.
-    for page in reader.pages:
-        for ref in (page['/Annots'] if '/Annots' in page else []):
-            obj = ref.get_object()
-            seen = set()
-            while isinstance(obj, dict) and id(obj) not in seen:
-                seen.add(id(obj))
-                if obj.get('/FT') == '/Sig':
-                    raise ValueError('Signature fields are not supported.')
-                obj = obj['/Parent'] if '/Parent' in obj else None
 
 
 class Graph:
@@ -179,4 +203,6 @@ def navigation_fingerprint(reader, excluded_ink=None):
         graph.memo.clear()
     labels = tuple(graph.value({k:v for k,v in page.items() if k not in {'/Parent','/Contents','/Resources','/Annots'}})
                    for page in reader.pages)
-    return toc, outline_root, catalog, tuple(retained), labels, graph.value(dict(reader.metadata or {}))
+    trailer=graph.value({k:v for k,v in reader.trailer.items()
+                         if k not in TRAILER_STORAGE_KEYS | {'/Root','/Info','/Encrypt'}})
+    return toc, outline_root, catalog, tuple(retained), labels, graph.value(dict(reader.metadata or {})), trailer

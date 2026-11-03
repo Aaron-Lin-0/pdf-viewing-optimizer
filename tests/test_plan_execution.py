@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import shutil
 import unittest
 from unittest.mock import patch
 
@@ -79,6 +80,27 @@ class PlanExecutionTests(unittest.TestCase):
             entry_count = len(list((root/'interrupt-run'/'operations').rglob('*')))
             self.assertEqual(execute(interrupt_args)['status'], 'complete')
             self.assertEqual(len(list((root/'interrupt-run'/'operations').rglob('*'))), entry_count)
+            completed_copy=root/'completed-copy';shutil.copytree(root/'interrupt-run',completed_copy)
+            completed_args=argparse.Namespace(**vars(interrupt_args));completed_args.output=completed_copy
+            context=json.loads((completed_copy/'context.json').read_text())
+            context['runner_sha256']=__import__('viewing_copy').filehash(ROOT/'tools'/'run_optimization_plan.py')
+            (completed_copy/'context.json').write_text(json.dumps(context))
+            candidate=completed_copy/'qpdf-flate'/'output.pdf';candidate.write_bytes(b'changed')
+            with self.assertRaisesRegex(RuntimeError,'output changed'):
+                execute(completed_args)
+            shutil.rmtree(completed_copy);shutil.copytree(root/'interrupt-run',completed_copy)
+            (completed_copy/'qpdf-flate'/'output.pdf').unlink()
+            with self.assertRaisesRegex(RuntimeError,'output changed'):
+                execute(completed_args)
+            shutil.rmtree(completed_copy);shutil.copytree(root/'interrupt-run',completed_copy)
+            saved=json.loads((completed_copy/'result.json').read_text());saved['candidates'][0].pop('output_sha256')
+            (completed_copy/'result.json').write_text(json.dumps(saved))
+            with self.assertRaisesRegex(RuntimeError,'hash evidence'):
+                execute(completed_args)
+            shutil.rmtree(completed_copy);shutil.copytree(root/'interrupt-run',completed_copy)
+            (completed_copy/'source.pdf').unlink()
+            with self.assertRaisesRegex(RuntimeError,'source snapshot'):
+                execute(completed_args)
             interrupt_args.timeout = 31
             with self.assertRaisesRegex(ValueError, 'Resume context'):
                 execute(interrupt_args)

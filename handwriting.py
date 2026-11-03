@@ -20,6 +20,10 @@ PEN_STATE = {'/AIS': False, '/BM': '/Normal', '/CA': 1, '/LC': 2,
              '/Type': '/ExtGState', '/ca': 1}
 
 
+class NoSupportedHandwriting(ValueError):
+    """The exact inlining pass found no applicable Form containers."""
+
+
 def _inline_leaf(form):
     if form.get('/Subtype') != '/Form' or list(form['/Matrix'] if '/Matrix' in form else [1, 0, 0, 1, 0, 0]) != [1, 0, 0, 1, 0, 0]:
         return None
@@ -117,7 +121,7 @@ def inline_handwriting(writer):
         parent.set_data(b''.join(parts))
         parents += 1
     if not forms:
-        raise ValueError('No supported BOOX handwriting Forms found; use the default lossless mode.')
+        raise NoSupportedHandwriting('No supported BOOX handwriting Forms found; use the default lossless mode.')
     print(f'Inlined {forms:,} handwriting Form calls in {parents:,} containers; retained every clipping boundary.', flush=True)
     return forms, parents
 

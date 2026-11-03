@@ -18,6 +18,9 @@ try{
   const start=performance.now(),bus=new EventBus(),links=new PDFLinkService({eventBus:bus});
   const viewer=new PDFViewer({container:document.querySelector('#container'),viewer:document.querySelector('#viewer'),eventBus:bus,linkService:links,imageResourcesPath:'/modules/pdfjs-dist/web/images/',enableScripting:false});
   links.setViewer(viewer);
+  let destinationNavigation=null;
+  const goToDestination=links.goToDestination.bind(links);
+  links.goToDestination=dest=>(destinationNavigation=goToDestination(dest));
   const finishedText=new Set(),finishedAnnotations=new Set(),layerErrors=[];
   for(const [name,finished]of [['textlayerrendered',finishedText],['annotationlayerrendered',finishedAnnotations]])bus.on(name,event=>{if(event.error)layerErrors.push(String(event.error));finished.add(event.pageNumber);});
   let initialized=false;bus.on('pagesinit',()=>{initialized=true;viewer.currentScaleValue='page-width';});
@@ -31,16 +34,35 @@ try{
   let resourceCleanups=0;
   async function releasePages(){
     for(let index=0;index<doc.numPages;index++)viewer.getPageView(index).reset();
+    finishedText.clear();finishedAnnotations.clear();
     await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
     for(let attempt=0;attempt<120;attempt++){
       try{await doc.cleanup(true);resourceCleanups++;return;}
       catch(error){if(!String(error.message).startsWith('startCleanup:')||attempt===119)throw error;await new Promise(r=>setTimeout(r,250));}
     }
   }
-  async function settled(number){
-    await wait(()=>viewer.currentPageNumber===number&&viewer.getPageView(number-1).renderingState===RenderingStates.FINISHED,
-      ()=>`target=${number} current=${viewer.currentPageNumber} state=${viewer.getPageView(number-1).renderingState}`);
-    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+  function viewportState(number,destination){
+    const container=viewer.container,box=container.getBoundingClientRect(),target=viewer.getPageView(number-1);
+    const rect=target.div.getBoundingClientRect(),visible=[];
+    for(let index=0;index<doc.numPages;index++){
+      const r=viewer.getPageView(index).div.getBoundingClientRect();
+      if(r.bottom>box.top&&r.top<box.bottom&&r.right>box.left&&r.left<box.right)visible.push(index+1);
+    }
+    return {target:number,destination,current:viewer.currentPageNumber,state:target.renderingState,
+      visible,scale:viewer.currentScale,scrollTop:container.scrollTop,scrollLeft:container.scrollLeft,
+      targetRect:[rect.left-box.left,rect.top-box.top,rect.width,rect.height]};
+  }
+  async function settled(number,destination=null){
+    let previous='',stableSince=performance.now(),state;
+    await wait(()=>{
+      state=viewportState(number,destination);const serialized=JSON.stringify(state);
+      if(serialized!==previous){previous=serialized;stableSince=performance.now();}
+      // Bottom-of-document scrolling can leave the preceding page as current.
+      return state.state===RenderingStates.FINISHED&&state.visible.includes(number)&&
+        finishedText.has(number)&&finishedAnnotations.has(number)&&performance.now()-stableSince>=100;
+    },()=>JSON.stringify(state));
+    assert(!layerErrors.length,'Text/annotation layer failed: '+layerErrors.join('; '));
+    return state;
   }
   const sequence=params.get('pages').split(',').map(Number).filter(p=>p<=doc.numPages);
   const events=[];
@@ -57,7 +79,7 @@ try{
   phase='release page-sequence resources';await releasePages();
   const labels=await doc.getPageLabels(),destinations=await doc.getDestinations(),outlines=await doc.getOutline();
   let tested=0;const bookmarkTrace=[];
-  async function checkOutline(items){for(const item of items||[]){if(item.dest){phase='bookmark '+item.title;const dest=typeof item.dest==='string'?await doc.getDestination(item.dest):item.dest;const target=typeof dest[0]==='object'?await doc.getPageIndex(dest[0])+1:dest[0]+1;await links.goToDestination(item.dest);await settled(target);bookmarkTrace.push({title:item.title,target,destination:[target,...dest.slice(1)],scale:viewer.currentScale});tested++;phase='release bookmark '+item.title;await releasePages();}await checkOutline(item.items);}}
+  async function checkOutline(items){for(const item of items||[]){if(item.dest){phase='bookmark '+item.title;const dest=typeof item.dest==='string'?await doc.getDestination(item.dest):item.dest;const target=typeof dest[0]==='object'?await doc.getPageIndex(dest[0])+1:dest[0]+1;const before=[viewer.container.scrollTop,viewer.container.scrollLeft,viewer.currentScale];await links.goToDestination(item.dest);if(before[0]===viewer.container.scrollTop&&before[1]===viewer.container.scrollLeft&&before[2]===viewer.currentScale)viewer.forceRendering();const viewport=await settled(target,[target,...dest.slice(1)]);bookmarkTrace.push({title:item.title,target,destination:[target,...dest.slice(1)],scale:viewer.currentScale,viewport});tested++;phase='release bookmark '+item.title;await releasePages();}await checkOutline(item.items);}}
   await checkOutline(outlines);
   const retained=[],interactive=[];
   for(let number=1;number<=doc.numPages;number++){
@@ -67,7 +89,7 @@ try{
       let normalizedDest=null;
       if(a.dest){const d=typeof a.dest==='string'?await doc.getDestination(a.dest):a.dest;normalizedDest=[typeof d[0]==='object'?await doc.getPageIndex(d[0])+1:d[0]+1,...d.slice(1)];}
       retained.push({page:number,url:a.url||null,unsafeUrl:a.unsafeUrl||null,dest:normalizedDest,rect:a.rect});
-      if(a.dest&&!a.hidden){const target=normalizedDest[0];viewer.currentPageNumber=number;await settled(number);await wait(()=>viewer.getPageView(number-1).div.querySelector('section[data-annotation-id="'+CSS.escape(a.id)+'"] a'));viewer.getPageView(number-1).div.querySelector('section[data-annotation-id="'+CSS.escape(a.id)+'"] a').click();await settled(target);retained.at(-1).scale=viewer.currentScale;tested++;}
+      if(a.dest&&!a.hidden){const target=normalizedDest[0];viewer.currentPageNumber=number;await settled(number);await wait(()=>viewer.getPageView(number-1).div.querySelector('section[data-annotation-id="'+CSS.escape(a.id)+'"] a'));const previousNavigation=destinationNavigation;viewer.getPageView(number-1).div.querySelector('section[data-annotation-id="'+CSS.escape(a.id)+'"] a').click();assert(destinationNavigation!==previousNavigation,'Internal link did not navigate');await destinationNavigation;retained.at(-1).viewport=await settled(target,normalizedDest);retained.at(-1).scale=viewer.currentScale;tested++;}
     }else if(a.subtype==='Text'||a.subtype==='Widget'){
       const item={page:number,subtype:a.subtype,rect:a.rect,contents:a.contentsObj?.str||'',fieldName:a.fieldName||null,fieldValue:a.fieldValue??null,fieldType:a.fieldType||null,readOnly:!!a.readOnly,hidden:!!a.hidden};
       if(a.subtype==='Text'&&item.contents&&!a.hidden){

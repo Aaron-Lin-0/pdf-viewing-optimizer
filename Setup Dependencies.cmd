@@ -24,10 +24,13 @@ if not exist ".venv\Scripts\python.exe" (
     if errorlevel 1 goto :failed
 )
 
+if /i "%~1"=="--quick" goto :quick_packages
+
 echo Installing pinned Python packages...
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 if errorlevel 1 goto :failed
 
+:node_packages
 where node >nul 2>nul
 if errorlevel 1 goto :node_missing
 node -e "const [a,b]=process.versions.node.split('.').map(Number);process.exit(a>22||(a===22&&b>=13)?0:1)"
@@ -42,11 +45,18 @@ echo Installing pinned PDF.js packages...
 call npm ci
 if errorlevel 1 goto :failed
 
+:complete
 echo.
 echo Setup complete. Open Create Viewing Copies.cmd to begin.
-if not exist "C:\Program Files\Zen Browser\zen.exe" echo Note: Install Zen or Firefox and set PDF_BROWSER if the browser check cannot find it.
+if /i not "%~1"=="--quick" if not exist "C:\Program Files\Zen Browser\zen.exe" echo Note: Install Zen or Firefox and set PDF_BROWSER if the browser check cannot find it.
 pause
 exit /b 0
+
+:quick_packages
+echo Installing direct-mode transformation and preservation dependencies.
+".venv\Scripts\python.exe" -m pip install "pypdf==6.10.0" "pypdfium2==5.14.0" "Pillow==12.3.0"
+if errorlevel 1 goto :failed
+goto :node_packages
 
 :python_missing
 echo Python 3.10 or newer was not found. Install it from https://www.python.org/downloads/ and run this setup again.

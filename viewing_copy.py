@@ -15,7 +15,7 @@ import time
 import sys
 import multiprocessing
 from PIL import ImageChops, ImageFilter, ImageStat
-from pypdf import PdfReader, PdfWriter
+from pypdf import PdfWriter
 from pypdf.generic import NameObject
 import pypdfium2 as pdfium
 from navigation import navigation_fingerprint, reader_for, validate_input
@@ -23,40 +23,15 @@ from annotation_ink import flatten_ink, consolidate_ink, verify_flattened, verif
 from geometry import page_signature
 from tools.evidence_cache import EvidenceCache
 import verification_worker
+from pdf_runtime import (RunBudget, TimeBudgetExceeded, DiskBudgetExceeded, _run,
+                         filehash, qpdf_identity as _qpdf_identity, build_qpdf_candidate)
 from verification_worker import DeltaAccumulator, bitmap_size, halo, page_delta, render_rows
 
 
 CHECKPOINT_SCHEMA = 1
 CHECKPOINT_CODE = ('viewing_copy.py','handwriting.py','annotation_ink.py','geometry.py',
                    'navigation.py','browser_check.py','pdfjs_benchmark.mjs','browser_harness.html',
-                   'verification_worker.py','tools/evidence_cache.py')
-
-
-class TimeBudgetExceeded(RuntimeError):
-    pass
-
-
-class DiskBudgetExceeded(RuntimeError):
-    pass
-
-
-class RunBudget:
-    def __init__(self, seconds=None, bytes_limit=None, checkpoint=None):
-        self.started=time.monotonic();self.seconds=seconds;self.bytes_limit=bytes_limit
-        self.checkpoint=Path(checkpoint) if checkpoint else None
-
-    def check(self, stage, paths=()):
-        if self.seconds is not None and time.monotonic()-self.started>=self.seconds:
-            raise TimeBudgetExceeded(f'Time budget exhausted before {stage}.')
-        if self.bytes_limit is not None:
-            roots=[self.checkpoint,*map(Path,paths)] if self.checkpoint else list(map(Path,paths))
-            total=sum(path.stat().st_size for root in roots if root and root.exists()
-                      for path in ([root] if root.is_file() else root.rglob('*')) if path.is_file())
-            if total>self.bytes_limit:raise DiskBudgetExceeded(f'Disk budget exhausted before {stage}.')
-
-    def timeout(self, maximum):
-        if self.seconds is None:return maximum
-        return max(.001,min(maximum,self.seconds-(time.monotonic()-self.started)))
+                   'verification_worker.py','tools/evidence_cache.py','pdf_runtime.py')
 
 
 def _version(distribution):
@@ -78,28 +53,12 @@ def _context(operation,source_hash,candidate_hash,renderer,renderer_version,deta
             'metric_version':f'production-{CHECKPOINT_SCHEMA}'}
 
 
-def _run(command,maximum,budget,stage,**kwargs):
-    timeout=budget.timeout(maximum) if budget else maximum
-    budget_limited=budget is not None and timeout<maximum
-    try:return subprocess.run(command,timeout=timeout,**kwargs)
-    except subprocess.TimeoutExpired as exc:
-        if budget_limited:raise TimeBudgetExceeded(f'Time budget exhausted during {stage}.') from exc
-        raise ValueError(f'{stage} timed out after {maximum:g} seconds.') from exc
-
-
 def _store_candidate(cache,context,path):
     payload=cache.store_file(context,path)
     digest=filehash(payload)
     if filehash(path)!=digest:
         Path(path).unlink();shutil.copyfile(payload,path)
     return digest
-
-
-def filehash(path):
-    digest=hashlib.sha256()
-    with Path(path).open('rb') as stream:
-        while block:=stream.read(1024*1024):digest.update(block)
-    return digest.hexdigest()
 
 
 def render(path,index,scale=2,crop=None,print_mode=False):
@@ -298,27 +257,7 @@ def node_identity(node,budget=None):
 
 
 def qpdf_identity(budget=None):
-    requested=os.environ.get('PDF_QPDF')
-    bundled=Path(__file__).resolve().parent/'vendor'/'qpdf'/'bin'/'qpdf.exe'
-    executable=shutil.which(requested) if requested else (
-        str(bundled) if sys.platform=='win32' and bundled.is_file() else shutil.which('qpdf'))
-    if not executable:raise ValueError('qpdf is unavailable; restore the bundled runtime or set PDF_QPDF.')
-    version=_run([executable,'--version'],30,budget,'qpdf version check',capture_output=True,text=True,
-                 creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
-    if version.returncode:raise ValueError('qpdf version preflight failed: '+version.stderr[-500:])
-    executable_hash=filehash(executable) if Path(executable).is_file() else hashlib.sha256(executable.encode()).hexdigest()
-    return executable,version.stdout.strip().splitlines()[0],executable_hash
-
-
-def build_qpdf_candidate(source,destination,budget=None,identity=None):
-    executable,version_text,_=identity or qpdf_identity(budget)
-    command=[executable,str(source),'--recompress-flate','--compression-level=9',
-             '--object-streams=generate','--stream-data=compress',str(destination)]
-    child=_run(command,1800,budget,'qpdf candidate generation',capture_output=True,text=True,
-               creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
-    if child.returncode not in (0,3):raise ValueError('qpdf failed: '+child.stderr[-1500:])
-    if not Path(destination).is_file():raise ValueError('qpdf produced no output.')
-    return version_text
+    return _qpdf_identity(budget,root=Path(__file__).resolve().parent)
 
 
 def benchmark_worker(path,page,mode,width=1404,budget=None,node=None):
@@ -395,8 +334,16 @@ def benchmarks(paths,pages,runs=3,results=None,checkpoint=None,budget=None,node=
     return results
 
 
+def pdfjs_heap_args(workers=1):
+    from batch_workflow import system_resources
+    available=system_resources()['available_ram_bytes']
+    # Leave half of available RAM for native canvases, PDF buffers and other work.
+    mib=min(8192,available//(2*workers*1024**2)) if available else 0
+    return [f'--max-old-space-size={mib}'] if mib>4096 else []
+
+
 def verify_pdfjs_page(source,candidate,page,allow_edges=False,budget=None,node=None):
-    command=[node or runtime_node(),'--expose-gc',str(Path(__file__).with_name('pdfjs_benchmark.mjs')),str(source),str(page),'compare','1404',str(candidate)]
+    command=[node or runtime_node(),*pdfjs_heap_args(),'--expose-gc',str(Path(__file__).with_name('pdfjs_benchmark.mjs')),str(source),str(page),'compare','1404',str(candidate)]
     if allow_edges:command.append('edges')
     child=_run(command,300,budget,f'PDF.js page {page} acceptance',capture_output=True,text=True,
                creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
@@ -406,6 +353,8 @@ def verify_pdfjs_page(source,candidate,page,allow_edges=False,budget=None,node=N
 
 def verify_pdfjs(source,candidate,count,allow_edges=False,budget=None,node=None,workers=None):
     workers=min(count,verification_resources(workers)['effective_workers'])
+    heap_args=pdfjs_heap_args(workers)
+    if heap_args:print(f'PDF.js verification: {workers} workers, {heap_args[0]} MiB per worker.',flush=True)
     groups=[list(range(start,count+1,workers)) for start in range(1,workers+1)]
     processes=[]
     def run_group(child,pages):
@@ -430,7 +379,7 @@ def verify_pdfjs(source,candidate,count,allow_edges=False,budget=None,node=None,
         return rows
     try:
         for _group in groups:
-            command=[node or runtime_node(),'--expose-gc',str(Path(__file__).with_name('pdfjs_benchmark.mjs')),
+            command=[node or runtime_node(),*heap_args,'--expose-gc',str(Path(__file__).with_name('pdfjs_benchmark.mjs')),
                      str(source),str(candidate),'compare-worker','1404']
             if allow_edges:command.append('edges')
             processes.append(subprocess.Popen(command,stdin=subprocess.PIPE,stdout=subprocess.PIPE,
@@ -445,10 +394,21 @@ def verify_pdfjs(source,candidate,count,allow_edges=False,budget=None,node=None,
             pool.shutdown(wait=True,cancel_futures=True)
             raise
         pool.shutdown(wait=True)
-    except BaseException:
+    except BaseException as exc:
         for child in processes:
             if child.poll() is None:child.terminate()
         for child in processes:child.wait()
+        if isinstance(exc,ValueError) and any(marker in str(exc).lower() for marker in
+                             ('heap limit','out of memory','allocation failed')):
+            print('PDF.js worker exhausted memory; retrying all pages in fresh sequential processes.',flush=True)
+            records=[]
+            for page in range(1,count+1):
+                row=verify_pdfjs_page(source,candidate,page,allow_edges,budget,node)
+                if row.get('page')!=page or row.get('error') or not row.get('ok'):
+                    raise ValueError(f'PDF.js page {page} failed isolated acceptance.') from exc
+                records.append(row)
+                print(f'PDF.js appearance verified: {page}/{count}',flush=True)
+            return records
         raise
     records.sort(key=lambda row:row['page'])
     if [row['page'] for row in records]!=list(range(1,count+1)):
@@ -487,7 +447,7 @@ def choose_candidate(source,candidates,results):
 
 
 def build_candidate(source,destination,kind):
-    from handwriting import inline_handwriting,rewrite_handwriting
+    from handwriting import inline_handwriting,rewrite_handwriting,NoSupportedHandwriting
     reader=reader_for(source)
     writer=PdfWriter(clone_from=reader)
     original_pages=[dict(page) for page in writer.pages]
@@ -497,7 +457,7 @@ def build_candidate(source,destination,kind):
         if not manifest['count']:raise ValueError('No eligible leading BOOX ink annotations.')
         if kind in {'consolidated','combined'}:consolidate_ink(writer,manifest)
         if kind=='combined':inline_handwriting(writer)
-    elif kind in {'inline','batched'}:
+    elif kind in {'inline','batched','direct'}:
         if kind=='batched':
             # A local pen state does not clear an inherited soft mask.
             pending=list(writer._objects);seen=set()
@@ -513,7 +473,14 @@ def build_candidate(source,destination,kind):
                 else:pending.extend(obj)
             del pending,seen,obj
             rewrite_handwriting(writer)
-        inline_handwriting(writer)
+        if kind=='direct':
+            try:
+                forms,parents=inline_handwriting(writer)
+                manifest.update(inlined_form_calls=forms,inlined_containers=parents)
+            except NoSupportedHandwriting:
+                manifest.update(inlined_form_calls=0,inlined_containers=0,
+                                inlining_skipped='No supported handwriting Forms; retain deduplication and cleanup.')
+        else:inline_handwriting(writer)
     baseline_navigation=navigation_fingerprint(reader,{int(k):v for k,v in manifest.get('converted',{}).items()})
     unmerged=Path(destination).with_suffix('.unmerged.pdf')
     writer.write(unmerged)
@@ -558,7 +525,7 @@ def build_candidate(source,destination,kind):
         merged_reader=unmerged_reader=None
         gc.collect()
     with selected.open('rb') as stream:
-        rebuilt=PdfWriter(clone_from=PdfReader(stream));rebuilt.write(destination);rebuilt.close()
+        rebuilt=PdfWriter(clone_from=reader_for(stream));rebuilt.write(destination);rebuilt.close()
     del rebuilt;gc.collect()
     if navigation_fingerprint(reader_for(destination))!=baseline_navigation:
         raise ValueError('Deduplication changed protected navigation/identities; candidate rejected.')
@@ -568,10 +535,10 @@ def build_candidate(source,destination,kind):
 
 
 def report_text(report):
-    lines=['# Vector viewing-copy report','',f"Status: {report['status']}",f"Classification: {report.get('classification','no qualifying improvement')}",f"Optimizer: {report.get('optimizer','adaptive')}",f"Original: {report['source']}",f"Original bytes: {report.get('source_bytes','see source file')}",f"Original SHA256: {report['source_sha256']}",'','OCR/search text retained. If ink annotations are converted, only the viewing copy loses their individual annotation editing. Originals remain unchanged.','', '| Candidate | Bytes | Exact tested appearance | CPU reduction | Regression |','| --- | ---: | --- | ---: | --- |']
+    lines=['# Vector viewing-copy report','',f"Status: {report['status']}",f"Classification: {report.get('classification','no qualifying improvement')}",f"Total elapsed time: {report.get('total_elapsed_seconds',0):.3f}s",f"Optimizer: {report.get('optimizer','adaptive')}",f"Original: {report['source']}",f"Original bytes: {report.get('source_bytes','see source file')}",f"Original SHA256: {report['source_sha256']}",'','OCR/search text retained. If ink annotations are converted, only the viewing copy loses their individual annotation editing. Originals remain unchanged.','', '| Candidate | Bytes | Exact tested appearance | CPU reduction | Regression |','| --- | ---: | --- | ---: | --- |']
     resources=report.get('verification_resources',{});reuse=report.get('source_evidence_reuse',{})
     lines[8:8]=['',f"Verification workers: requested={resources.get('requested_workers','default')}, effective={resources.get('effective_workers','unavailable')}",
-                f"Conservative verification RAM estimate: {resources.get('estimated_ram_bytes',0)/1024**3:.1f} GiB (planning estimate, not a measured peak or limit).",
+                f"PDFium verification RAM estimate: {resources.get('estimated_ram_bytes',0)/1024**3:.1f} GiB (planning estimate, not a measured peak or limit; PDF.js heap allowance is separate).",
                 f"Source evidence: {reuse.get('source_renders_created',0)} renders created, {reuse.get('source_renders_reused',0)} reused; {reuse.get('source_signatures_created',0)} signatures created, {reuse.get('source_signatures_reused',0)} reused."]
     for c in report.get('candidates',[]):
         reduction='unresolved (timer resolution)' if c.get('cpu_resolution_limited') else f"{c.get('cpu_reduction',0)*100:.1f}%"
@@ -615,6 +582,7 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
     targets=[destination,destination.with_suffix('.json'),destination.with_suffix('.md')]
     if any(p.exists() or p.is_symlink() for p in targets):raise FileExistsError('Output/report already exists. Choose a new filename.')
     if not destination.parent.is_dir():raise ValueError('The output folder does not exist.')
+    run_started=time.monotonic()
     source_bytes=source.stat().st_size;source_hash=filehash(source)
     if expected_source_sha256 is not None:
         if not re.fullmatch(r'[0-9a-fA-F]{64}',expected_source_sha256):
@@ -630,7 +598,7 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
     budget.check('renderer preflight')
     print('Stage: renderer preflight',flush=True)
     node_runtime=node_identity(node,budget)
-    benchmark_worker(source,1,'preflight',budget=budget,node=node)
+    pdfjs_preflight=benchmark_worker(source,1,'preflight',budget=budget,node=node)
     if filehash(source)!=source_hash:raise ValueError('Original changed during renderer preflight.')
     code_hash=_code_hash()
     run_identity={'schema':CHECKPOINT_SCHEMA,'source_sha256':source_hash,'code_sha256':code_hash,
@@ -678,6 +646,7 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
     pages=benchmark_pages(source)
     kinds=(['dedup']+(['annotations','consolidated','combined'] if has_ink else [])+['inline','batched']) if optimizer=='adaptive' else []
     report={'status':'no improvement','optimizer':optimizer,'source':str(source),'source_bytes':source_bytes,'source_sha256':source_hash,'pages':count,'benchmark_pages':pages,'candidates':[],'rejected':[],
+            'renderer_preflight':pdfjs_preflight,
             'checkpoint':{'schema':CHECKPOINT_SCHEMA,'path':str(checkpoint),'resumed':False},
             'budgets':{'time_seconds':time_budget_seconds,'disk_bytes':disk_budget_bytes},
             'verification_resources':resources,
@@ -868,7 +837,9 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
             timing_hash=hashlib.sha256(json.dumps([(c['kind'],filehash(c['path'])) for c in valid],sort_keys=True).encode()).hexdigest()
             lock=Path(__file__).with_name('package-lock.json')
             node_context={'pages':pages,'runs':3,'order':[c['kind'] for c in valid],
-                          'node':node_runtime,'package_lock':filehash(lock) if lock.is_file() else None,'code':code_hash}
+                          'node':node_runtime,'pdfjs':{'version':pdfjs_preflight.get('version'),
+                          'module_hashes':sorted(item.get('sha256') for item in pdfjs_preflight.get('modules',[]) if item.get('sha256'))},
+                          'package_lock':filehash(lock) if lock.is_file() else None,'code':code_hash}
             timing_context=_context('production-timing',source_hash,timing_hash,'pdfjs-node',node_runtime['version'],node_context)
             measured=cache.load_json(timing_context)
             if measured is None:
@@ -907,6 +878,7 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
                     budget.check(f'final acceptance: {chosen["kind"]}',(Path(temporary),))
                     if isinstance(exc,(TimeBudgetExceeded,DiskBudgetExceeded)):raise
                     report['rejected'].append({'kind':chosen['kind'],'reason':'Final renderer/browser acceptance: '+str(exc)})
+                    report['classification']='no publishable candidate: final acceptance failed'
                     valid.remove(chosen)
                     chosen=choose_candidate(source,valid,measured)
             if chosen:
@@ -928,6 +900,7 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
             finish_stage()
             report['stages']=stage_records
             report['stage_wall_seconds']={row['stage']:row['wall_seconds'] for row in stage_records}
+            report['total_elapsed_seconds']=time.monotonic()-run_started
             for suffix,body in [('.json',json.dumps(report,indent=2)),('.md',report_text(report))]:
                 if expected_source_sha256 and filehash(source)!=expected_source_sha256.lower():raise ValueError('Original changed after review.')
                 target=destination.with_suffix(suffix)
