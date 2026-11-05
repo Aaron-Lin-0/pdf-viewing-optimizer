@@ -12,18 +12,15 @@ TRAILER_STORAGE_KEYS = {'/Size', '/Prev', '/XRefStm', '/ID'}
 
 class _PreservingReader(PdfReader):
     def _process_xref_stream(self, stream):
-        self.preserved_xref_trailer = {
-            key: value for key, value in stream.items()
-            if key not in {'/Type', '/W', '/Index', '/Length', '/Filter', '/DecodeParms'}
-        }
+        for key, value in stream.items():
+            if key not in {'/Type', '/W', '/Index', '/Length', '/Filter', '/DecodeParms'}:
+                self.trailer.setdefault(key, value)
         return super()._process_xref_stream(stream)
 
 
 def reader_for(path):
     try:
         reader=_PreservingReader(path)
-        for key,value in getattr(reader,'preserved_xref_trailer',{}).items():
-            reader.trailer.setdefault(key,value)
         if reader.is_encrypted:return reader
         return _repair_layer_references(reader)
     except EmptyFileError:raise
@@ -73,10 +70,20 @@ def _current_objects(reader):
 def validate_input(reader):
     if reader.is_encrypted:
         raise ValueError('Encrypted PDFs are not supported; their protection would be lost.')
-    if '/Perms' in reader.trailer['/Root'] or any(is_signature_object(obj) for obj in _current_objects(reader)):
+    if ('/Perms' in reader.trailer['/Root'] or
+            any(is_signature_object(obj) for obj in _current_objects(reader)) or
+            any(is_signature_object(field) for field in (reader.get_fields() or {}).values())):
         raise ValueError('PDFs with signatures or signature fields are not supported.')
     if not len(reader.pages):
         raise ValueError('Empty PDF: no pages to optimize.')
+    for page in reader.pages:
+        for ref in (page['/Annots'] if '/Annots' in page else []):
+            obj=ref.get_object();seen=set()
+            while isinstance(obj,dict) and id(obj) not in seen:
+                seen.add(id(obj))
+                if is_signature_object(obj):
+                    raise ValueError('PDFs with signatures or signature fields are not supported.')
+                obj=obj['/Parent'] if '/Parent' in obj else None
 
 
 class Graph:

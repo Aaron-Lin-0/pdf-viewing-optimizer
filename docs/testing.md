@@ -54,6 +54,23 @@ reviewed output, and keep timeout and disk-budget results distinct. Final browse
 acceptance and publication remain uncached by construction and by interrupted-write
 tests.
 
+P15 follow-up regressions additionally cover newest-first incremental xref-stream
+trailer precedence (including mixed classic/stream revisions), direct signature
+widgets and signed parent dictionaries, stop/close preservation of timeout and
+disk-budget retry records, and Alt+S during blocked batch planning. The signature
+fixture must be direct inside `/Annots`; making it an indirect writer object exercises
+the separate inventory scan instead. Retry tests must confirm the saved status and
+the exact output/checkpoint paths after reselection, not only the displayed skipped
+state. The GUI shortcut test must invoke the root binding while setup is disabled
+and then prove the original review callback occurs exactly once.
+
+Browser destination waits may correct delayed post-navigation reflow only after the
+requested target has already been observed. `/XYZ` correction uses PDF.js's viewport
+conversion and is bounded to two attempts; final acceptance still requires rendered
+canvas/text/annotation layers, a visible target, 100 ms stable viewport and exact
+source/candidate navigation evidence. The generated interaction fixture exercises
+this path with a page-2 link that changes zoom to 150%.
+
 Verification-worker tests compare identical acceptance evidence with one and two
 spawned PDFium workers, assert one source render/signature per setting across
 candidates, exercise ordered persistent PDF.js results and missing-result failure,

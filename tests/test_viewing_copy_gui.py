@@ -62,6 +62,7 @@ class ViewingCopyGuiTests(unittest.TestCase):
                 optimizer=next(child for child in combos if child is not profile)
                 worker=next(child for child in descendants(root) if isinstance(child,ttk.Spinbox))
                 self.assertTrue(optimizer.instate(['disabled']));self.assertTrue(worker.instate(['disabled']))
+                wait_for(lambda:profile.instate(['!disabled']))
                 profile.set(PROFILE_LABELS['thorough'])
                 wait_for(lambda:optimizer.instate(['!disabled']) and worker.instate(['!disabled']))
                 profile.set(PROFILE_LABELS['quick'])
@@ -80,27 +81,38 @@ class ViewingCopyGuiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
             source=Path(folder)/'source.pdf';make_pdf(source);gate=threading.Event();ticks=[]
             def blocked(*args,**kwargs):
-                gate.wait(2);return ()
+                gate.wait(2);return plan_batch(*args,**kwargs)
             def smoke(root):
                 root.withdraw()
                 def descendants(widget):
                     for child in widget.winfo_children():
                         yield child;yield from descendants(child)
                 deadline=time.monotonic()+2
-                choose=None
+                choose=setup_button=None
                 while time.monotonic()<deadline:
                     root.update();time.sleep(.01)
                     choose=next((child for child in descendants(root)
                                  if isinstance(child,ttk.Button) and 'Choose PDFs' in str(child['text'])),None)
+                    setup_button=next((child for child in descendants(root)
+                                 if isinstance(child,ttk.Button) and 'Check setup' in str(child['text'])),None)
                     if choose and choose.instate(['!disabled']):break
-                self.assertIsNotNone(choose);choose.invoke();root.after(10,lambda:ticks.append(True))
+                self.assertIsNotNone(choose);self.assertIsNotNone(setup_button)
+                choose.invoke();root.after(10,lambda:ticks.append(True))
                 deadline=time.monotonic()+.3
                 while time.monotonic()<deadline and not ticks:root.update();time.sleep(.01)
                 self.assertTrue(ticks);self.assertTrue(choose.instate(['disabled']))
-                root.tk.call(root.protocol('WM_DELETE_WINDOW'));gate.set()
+                self.assertTrue(setup_button.instate(['disabled']))
+                root.event_generate('<Alt-s>');root.update()
+                self.assertEqual(setup.call_count,1)
+                gate.set();deadline=time.monotonic()+2
+                while time.monotonic()<deadline and not review.called:root.update();time.sleep(.01)
+                self.assertEqual(review.call_count,1);runner.assert_not_called()
+                root.tk.call(root.protocol('WM_DELETE_WINDOW'))
             with patch.object(tk.Tk,'mainloop',smoke),\
-                 patch('viewing_copy_gui.dependency_diagnostics',return_value=()),\
+                 patch('viewing_copy_gui.dependency_diagnostics',return_value=()) as setup,\
                  patch('viewing_copy_gui.plan_batch',side_effect=blocked),\
+                 patch('viewing_copy_gui.review_jobs',return_value=False) as review,\
+                 patch('batch_workflow.BatchController.run') as runner,\
                  patch('tkinter.filedialog.askopenfilenames',return_value=(str(source),)),\
                  patch('tkinter.messagebox.askyesno',return_value=False):
                 main()
@@ -363,14 +375,24 @@ class ViewingCopyGuiTests(unittest.TestCase):
                 self.assertEqual(recovered.status,'ready')
                 self.assertEqual(recovered.output,result.output)
 
-    def test_cancelled_retry_remains_recoverable(self):
-        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
-            source=Path(folder)/'source.pdf';make_pdf(source);job=plan_batch([source])[0]
-            _save_job(replace(job,status='timeout',error='late'))
-            retry=plan_batch([source])[0];self.assertEqual(retry.output,job.output)
-            BatchController((retry,)).cancel()
-            recovered=plan_batch([source])[0]
-            self.assertEqual(recovered.status,'ready');self.assertEqual(recovered.output,job.output)
+    def test_stop_and_close_preserve_retry_checkpoint(self):
+        for saved_status in ('timeout','budget exhausted'):
+            for action in ('stop','close'):
+                with self.subTest(saved_status=saved_status,action=action),\
+                     tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+                    source=Path(folder)/'source.pdf';make_pdf(source);job=plan_batch([source])[0]
+                    _save_job(replace(job,status=saved_status,error='saved progress'))
+                    retry=plan_batch([source])[0]
+                    self.assertEqual(retry.output,job.output)
+                    controller=BatchController((retry,),runner=lambda *_:self.fail('launched'))
+                    if action=='close':self.assertTrue(controller.request_close())
+                    else:controller.request_stop();controller.run()
+                    self.assertEqual(controller.jobs[0].status,'skipped');self.assertEqual(controller.launches,0)
+                    record=json.loads(job.output.with_suffix('.checkpoint').joinpath('job.json').read_text())
+                    self.assertEqual(record['status'],saved_status)
+                    recovered=plan_batch([source])[0]
+                    self.assertEqual(recovered.status,'ready');self.assertEqual(recovered.output,job.output)
+                    self.assertEqual(recovered.output.with_suffix('.checkpoint'),job.output.with_suffix('.checkpoint'))
 
     def test_restart_recovers_valid_terminal_report_and_resumes_incomplete_job(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:

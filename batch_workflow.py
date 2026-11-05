@@ -420,7 +420,8 @@ class BatchController:
 
     def _record(self, index, status, error=None):
         self.jobs[index] = replace(self.jobs[index], status=status, error=error)
-        if status in {'optimized','no improvement','failed','timeout','budget exhausted'} or _job_record(self.jobs[index]).is_file():
+        if status != 'skipped' and (status in {'optimized','no improvement','failed','timeout','budget exhausted'} or
+                                    _job_record(self.jobs[index]).is_file()):
             try:_save_job(self.jobs[index])
             except (OSError,ValueError):pass
         self.emit("result", self.jobs[index])

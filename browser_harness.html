@@ -53,12 +53,19 @@ try{
       targetRect:[rect.left-box.left,rect.top-box.top,rect.width,rect.height]};
   }
   async function settled(number,destination=null){
-    let previous='',stableSince=performance.now(),state;
+    let previous='',stableSince=performance.now(),state,seenTarget=false,corrections=0,aligned=true;
     await wait(()=>{
       state=viewportState(number,destination);const serialized=JSON.stringify(state);
       if(serialized!==previous){previous=serialized;stableSince=performance.now();}
+      if(state.visible.includes(number))seenTarget=true;
+      let offset=state.targetRect[1];aligned=true;
+      if(destination?.[1]?.name==='XYZ'){
+        const page=viewer.getPageView(number-1),y=destination[3]??page.pdfPage.view[3];
+        offset-= -page.viewport.convertToViewportPoint(destination[2]??0,y)[1];aligned=Math.abs(offset)<=.5;
+      }else if(destination)aligned=state.visible.includes(number);
+      if(destination&&seenTarget&&!aligned&&corrections<2){viewer.container.scrollTop+=offset;viewer.forceRendering();corrections++;return false;}
       // Bottom-of-document scrolling can leave the preceding page as current.
-      return state.state===RenderingStates.FINISHED&&state.visible.includes(number)&&
+      return aligned&&state.state===RenderingStates.FINISHED&&state.visible.includes(number)&&
         finishedText.has(number)&&finishedAnnotations.has(number)&&performance.now()-stableSince>=100;
     },()=>JSON.stringify(state));
     assert(!layerErrors.length,'Text/annotation layer failed: '+layerErrors.join('; '));

@@ -18,8 +18,9 @@ and batch restart recovery are implemented as described under P11.
 
 ## Current foundation and immediate priority
 
-**Next action (2026-11-03): finish P15's native two-file review smoke, then return
-to P13/P14 performance work.** Preserve the existing milestone numbers and completed history.
+**Next action (2026-11-04): resume P13/P14 performance work from the ordered plans
+below. P15 is release-qualified.** Preserve the existing milestone numbers and
+completed history.
 The objective remains smaller, efficiently rendered copies without sacrificing
 required content; these repairs make preservation and selection evidence reliable.
 
@@ -32,8 +33,8 @@ before speculative adaptive selection. The default direct chain retains those
 transformations, packs once and verifies preservation. The earlier compression-only
 lane remains an explicit qpdf option. [design.md](design.md) defines both profiles;
 thorough gates remain unchanged. Fresh generated matrix and interaction fixtures
-now pass the native-browser harness; the separate two-file GUI review smoke remains
-open as recorded under P15.
+pass the native-browser harness, and P15's native two-file GUI/release checks are
+complete.
 
 The maintained implementation already includes:
 
@@ -62,7 +63,11 @@ Do not change the running implementation during an active comparison.
 
 ## P15: repair the six confirmed audit findings
 
-**Status: implemented and regression-qualified; final native two-file review smoke pending.** The numbers below retain the audit finding
+**Status: completed and release-qualified 2026-11-04.** The
+[implementation walkthrough](audit-repair-walkthrough.md) covers
+incremental trailer precedence, inline signature widgets, skipped retry recovery
+and the setup keyboard race. Its four finding numbers are from the second audit.
+The numbers below retain the original audit finding
 numbers; execution order is 1, 2, 4, 3, 5, 6. Keep private reproduction files and
 document-specific results in ignored `audit-output/`. Use generated fixtures for
 committed regressions. Before executable changes, check for an active comparison
@@ -199,6 +204,62 @@ Close P15 only after all six exit criteria and required release checks have evid
   passed. The automation helper could not reliably target the multi-select filename
   control, so the required two-file review-dialog smoke was not completed. Keep P15
   open until that generated-fixture UI check is observed; no real/private PDF was used.
+
+### P15 follow-up audit repair notes — 2026-11-03
+
+- `_PreservingReader` now merges permitted xref-stream trailer entries into the
+  public trailer as each revision is parsed, so newest stream values survive older
+  stream and classic revisions. `test_newest_incremental_xref_stream_trailer_wins`
+  covers two appended revisions, mixed classic/stream precedence, qpdf validity and
+  rejection when writer cloning would drop the custom entry.
+- Shared input validation again walks direct page widgets and bounded parent chains
+  while retaining the current-object inventory. The direct widget, direct signed
+  parent, legacy optimizer and direct-profile rejection paths are covered by
+  `test_direct_signature_widgets_and_parents_are_rejected`; the separate cycle test
+  proves malformed parents terminate.
+- Skipping a queued recovered retry no longer replaces its saved timeout or
+  disk-budget record. `test_stop_and_close_preserve_retry_checkpoint` covers both
+  statuses and both stop/close paths with zero child launches and stable output and
+  checkpoint paths.
+- Setup now returns before changing state when the window is closed, optimization is
+  running or the setup control is disabled; root Alt+S invokes only the enabled
+  button. The blocked-planning GUI regression proves the original review callback
+  still runs exactly once and no optimizer launches after review cancellation.
+- Focused navigation, GUI/batch and direct-profile suites passed 9, 29 and 31 tests;
+  the GUI suite had one Windows symlink-permission skip. Ruff and all 213 regression
+  tests passed with the same single skip. Fresh direct fixtures passed 27-page and
+  interaction PDFium/PDF.js rendering plus isolated-browser checks. Fresh thorough
+  fixtures passed renderer checks, but the interaction browser check timed out after
+  a page-2 annotation navigation landed on page 3; no gate was relaxed or bypassed.
+- Windows automation was not approved to attach to the launched GUI, so the native
+  two-file picker/review/start/stop smoke remains pending. No release package was
+  built because P15 is not release-ready. Only generated PDFs under ignored
+  `audit-output/` were exercised; no original/private PDF or existing output changed.
+
+### P15 completion notes — 2026-11-04
+
+- The thorough-browser timeout reproduced as delayed PDF.js `/XYZ` destination
+  reflow after the target had first become visible. `settled()` now permits at most
+  two measured corrections only after observing the requested target, normalizes
+  `/XYZ` position with PDF.js's own viewport conversion and still requires complete
+  rendering, text/annotation layers, 100 ms stability and exact source/candidate
+  viewport equality. Fresh direct and thorough 27-page matrix and three-page
+  interaction fixtures passed PDFium/PDF.js rendering and isolated-browser checks.
+- The native Windows GUI selected two generated PDFs in one system picker, displayed
+  both source/output mappings, ran them sequentially and reached 2/2 with one
+  hash-valid optimized result and one honest no-improvement result. A second two-file
+  run used the review Alt+S binding and main-window Alt+T while file 1 was active;
+  the terminal summary was exactly one optimized and one skipped, with no second
+  child launch.
+- Ruff and all 213 regression tests pass; one directory-symlink test is skipped where
+  Windows denies creating that fixture. Three GUI-produced reports matched their
+  published output hashes or reports-only state. The final release builder verified
+  55 ZIP members and 31 installed-skill runtime files byte-for-byte.
+- A clean extracted ZIP created its private environment, installed pinned Python and
+  PDF.js dependencies, reported zero npm vulnerabilities and published a smaller
+  generated interaction-fixture copy with matching report/output SHA-256 and complete
+  all-page PDFium/PDF.js verification. No private PDF was used, no original was
+  modified, and no acceptance threshold or public interface was relaxed.
 
 ## Scope and fixed boundaries
 
@@ -440,7 +501,7 @@ Suggested module names above do not imply implemented APIs.
 - [x] **P12 — Windows product hardening and release (completed 2026-10-26).** Complete accessibility,
   dependency diagnostics, generated-fixture UI acceptance, clean install/package
   validation and supportable failure reporting before calling the GUI released.
-- [ ] **P15 — Audit repairs (next priority; see detailed plan above).** Complete
+- [x] **P15 — Audit repairs (completed 2026-11-04; see detailed evidence above).** Complete
   trailer/signature preservation, renderer-bound timing, batch recovery,
   completed-result validation and responsive planning before further P13/P14 work.
 - [ ] **P13 — Faster verification through reuse and bounded page workers.** Reuse

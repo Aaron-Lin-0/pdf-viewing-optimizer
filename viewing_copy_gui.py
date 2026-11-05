@@ -92,6 +92,7 @@ def main():
 
     def check_setup(show_dialog=True):
         nonlocal setup_ready,task_token
+        if closed or running or setup_button.instate(['disabled']):return
         task_token+=1;token=task_token
         setup_ready=False
         set_status('Checking setup…');setup_button.configure(state='disabled');choose_button.configure(state='disabled')
@@ -309,7 +310,7 @@ def main():
         update_optimizer_controls();check_setup(False)
     profile_choice.trace_add('write',change_profile)
     update_optimizer_controls()
-    root.bind('<Alt-s>',lambda _event:check_setup())
+    root.bind('<Alt-s>',lambda _event:setup_button.invoke() if setup_button.instate(['!disabled']) else None)
     root.bind('<Alt-p>',lambda _event:choose() if str(choose_button['state'])!='disabled' else None)
     root.bind('<Alt-t>',lambda _event:stop())
     root.bind('<Alt-g>',lambda _event:parallel_selector.invoke() if parallel_selector.instate(['!disabled']) else None)
