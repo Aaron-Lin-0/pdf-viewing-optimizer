@@ -9,7 +9,6 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(Path(__file__).resolve().parent)]
 from compare_optimizers import independent_checks
-from comparison_metrics import image_metrics
 from navigation import reader_for
 from viewing_copy import detail_crop, filehash, render
 
@@ -146,6 +145,8 @@ def priority(metrics):
 
 
 def appearance_checks(source, candidates, directory, progress=print):
+    from comparison_metrics import image_metrics
+
     with reader_for(source) as reader:
         count = len(reader.pages)
         geometries = [(float(page.cropbox.width) * float(page.get('/UserUnit', 1)),

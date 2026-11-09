@@ -197,7 +197,9 @@ The Node and browser harnesses load the complete PDF.js font/image resources and
 
 Bookmark and internal-link checks await destination navigation, target rendering
 and text/annotation layers, then require a visible target and unchanged viewport
-for 100 ms. They compare source/candidate scroll position, scale, visible pages,
+for 100 ms. The harness disables browser scroll anchoring during PDF.js zoom and
+requires Fit destinations to reach the page top or the scroll limit. It compares
+source/candidate scroll position, scale, visible pages,
 current page and target rectangle exactly. The current-page label need not equal
 the destination page when scrolling is clamped at the document end. Timeout
 diagnostics include that viewport and the normalized destination. Structural

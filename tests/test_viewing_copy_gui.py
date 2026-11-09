@@ -218,6 +218,42 @@ class ViewingCopyGuiTests(unittest.TestCase):
             complete(quick,'optimized',profile='quick')
             with self.assertRaisesRegex(RuntimeError,'verification'):validate_result(quick)
 
+    def test_direct_verification_failure_is_distinct_from_no_size_benefit(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            sources = [Path(folder) / name for name in ('renderer.pdf', 'small.pdf')]
+            for source in sources:
+                make_pdf(source)
+            jobs = plan_batch(sources, profile='quick')
+
+            def runner(job, emit, started):
+                started()
+                failed = job.source == sources[0]
+                complete(job, 'no improvement', profile='quick',
+                         classification='verification failed' if failed else 'no size benefit',
+                         reason='Renderer stopped' if failed else 'Candidate was not smaller')
+
+            results = BatchController(jobs, runner=runner).run()
+            self.assertEqual([job.status for job in results], ['failed', 'no improvement'])
+            self.assertEqual(results[0].error, 'Verification failed: Renderer stopped')
+            self.assertIsNone(results[1].error)
+            self.assertEqual(json.loads(jobs[0].targets[1].read_text())['status'], 'no improvement')
+
+    def test_incremental_pdf_review_shows_thorough_option_and_report_policy(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            source, revised = (Path(folder) / name for name in ('source.pdf', 'revised.pdf'))
+            make_pdf(source)
+            writer = PdfWriter(source, incremental=True)
+            writer.add_metadata({'/Title': 'Revision'})
+            writer.write(revised)
+            job = plan_batch([revised], profile='quick')[0]
+            self.assertEqual(job.status, 'rejected')
+            review = confirmation_text((job,))
+            self.assertIn('incremental revisions', review)
+            self.assertIn('Select Thorough optimization', review)
+            self.assertIn('do not receive output reports', review)
+            self.assertEqual(plan_batch([revised], profile='thorough')[0].status, 'ready')
+            self.assertCountEqual(Path(folder).iterdir(), (source, revised))
+
     def test_picker_accumulates_pdfs_across_folders(self):
         batches=iter([('first/a.pdf','first/b.pdf'),('second/c.pdf',)])
         prompts=[]

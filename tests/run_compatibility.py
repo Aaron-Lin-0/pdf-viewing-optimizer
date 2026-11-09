@@ -56,8 +56,9 @@ def run(stage,root):
         result=check_browser(root/'matrix.pdf',root/'matrix.dedup.pdf',pages)
         traces=result['results']['source']['bookmarkTrace']
         assert all(row['target'] in row['viewport']['visible'] and row['viewport']['state']==3 for row in traces)
-        assert [row['title'] for row in traces[-2:]]==['Repeated Fit one','Repeated Fit two']
-        assert traces[-2]['viewport']==traces[-1]['viewport']
+        assert [row['title'] for row in traces[-3:]]==[
+            'Shared image indirect resources','Repeated Fit one','Repeated Fit two']
+        assert all(row['viewport']==traces[-1]['viewport'] for row in traces[-3:])
         assert traces[-1]['target']==len(pages), 'Fixture must exercise the final-page bookmark'
         save('matrix-browser',result)
         source,out=root/'mixed-transparency.pdf',root/'mixed-transparency.batched.pdf'

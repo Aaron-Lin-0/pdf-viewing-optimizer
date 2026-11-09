@@ -182,10 +182,12 @@ def main():
             set_status('Ready')
             return
         if not any(job.status == "ready" for job in jobs):
-            recovered=[job for job in jobs if job.status in {'optimized','no improvement'}]
+            recovered=[job for job in jobs if job.status in {'optimized','no improvement','failed'}]
             if recovered:
                 write(f"Recovered {len(recovered)} completed result(s); nothing needs to run.")
-                for job in recovered:write(f"{job.status.title()}: {job.source}")
+                for job in recovered:
+                    detail = f" — {job.error}" if job.error else ""
+                    write(f"{job.status.title()}: {job.source}{detail}")
                 choose_button.configure(state='normal');inspect_button.configure(state='normal');set_status('Ready')
                 return
             write("No selected PDF passed preflight.")
@@ -335,6 +337,10 @@ def main():
                         summary = (f"Finished: {counts['optimized']} optimized, {counts['no improvement']} no improvement, "
                                    f"{counts['failed']} failed, {counts['timeout']} timed out, {counts['budget exhausted']} over budget, "
                                    f"{counts['rejected']} rejected, {counts['skipped']} skipped.")
+                        failures = [f"{item.source.name} — {item.error}" for item in value
+                                    if item.status == "failed" and item.error]
+                        if failures:
+                            summary += "\n\n" + "\n".join(failures)
                         write("\n" + summary)
                         messagebox.showinfo("PDF Viewing Optimizer", summary, parent=root)
                         choose_button.focus_set()

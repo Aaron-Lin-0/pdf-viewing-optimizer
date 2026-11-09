@@ -1,20 +1,25 @@
 """Tests for P16-C deterministic calibration controls and small-writing verifier."""
+import importlib.util
 import math
 from pathlib import Path
 import sys
 import tempfile
 import unittest
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
+from pypdf import PdfReader, PdfWriter
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / 'tools')]
-from calibration_controls import (build_calibration_fixtures,
-                                  check_transform_support,
-                                  evaluate_calibration_preservation,
-                                  render_page)
+HAS_METRICS = all(importlib.util.find_spec(name) for name in ('numpy', 'scipy', 'skimage'))
+if HAS_METRICS:
+    from calibration_controls import (build_calibration_fixtures,
+                                      check_transform_support,
+                                      evaluate_calibration_preservation,
+                                      render_page)
 
 
+@unittest.skipUnless(HAS_METRICS, 'Install requirements-comparison.txt for calibration tests')
 class CalibrationControlsTests(unittest.TestCase):
     def test_transform_support_detection(self):
         # Uniform scaling and translation: supported
@@ -72,13 +77,13 @@ class CalibrationControlsTests(unittest.TestCase):
                 with self.subTest(label=label):
                     before = reference
                     after = render_page(damaged[label], scale=4)
-                    size_pt = 150
+                    size_pt = (before.width / 4, before.height / 4)
                     if defect == 'thickness_change':
                         # Measure the edited stroke locally, clear of adjacent glyphs and caps.
                         crop = (48 * 4, (150 - 54) * 4, 56 * 4, (150 - 46) * 4)
                         before, after = before.crop(crop), after.crop(crop)
-                        size_pt = 8
-                    result = evaluate_calibration_preservation(before, after, (size_pt * 25.4 / 72,) * 2,
+                        size_pt = (8, 8)
+                    result = evaluate_calibration_preservation(before, after, tuple(size * 25.4 / 72 for size in size_pt),
                                                                min_stroke_width_mm=0.28, min_gap_mm=0.28)
                     self.assertEqual(result['verdict'], 'rejected', result['reason'])
                     self.assertEqual(result['defect'], defect, result['reason'])
@@ -91,6 +96,39 @@ class CalibrationControlsTests(unittest.TestCase):
                 build_calibration_fixtures(folder)
             self.assertEqual(existing.read_bytes(), b'existing fixture')
             self.assertEqual(list(Path(folder).iterdir()), [existing])
+
+    def test_symbol_ink_fits_reference_and_damaged_pages(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            reference, damaged = build_calibration_fixtures(folder)
+            expanded = Path(folder) / 'expanded.pdf'
+            original_box = None
+            writer = PdfWriter()
+            for path, index in [(reference, 1), *((path, 0) for label, path in damaged.items()
+                                                  if label != 'unsupported_shear')]:
+                page = writer.add_page(PdfReader(path).pages[index])
+                box = tuple(page.mediabox)
+                original_box = box if original_box is None else original_box
+                self.assertEqual(box, original_box)
+                page.mediabox.lower_left = (-10, -10)
+                page.mediabox.upper_right = (box[2] + 10, box[3] + 10)
+                page.cropbox = page.mediabox
+            writer.write(expanded)
+            for index in range(len(writer.pages)):
+                image = render_page(expanded, index, scale=4)
+                bounds = ImageChops.difference(image, Image.new('RGB', image.size, 'white')).getbbox()
+                self.assertIsNotNone(bounds)
+                left, top, right, bottom = bounds
+                self.assertTrue(40 < left < right < image.width - 40, bounds)
+                self.assertTrue(40 < top < bottom < image.height - 40, bounds)
+
+    def test_faint_ink_loss_at_threshold_250_is_rejected(self):
+        after = Image.new('RGB', (50, 50), 'white')
+        before = after.copy()
+        ImageDraw.Draw(before).line((5, 10, 35, 10), fill=(240, 240, 240), width=2)
+        result = evaluate_calibration_preservation(before, after, (5, 5), tolerance_mm=.01)
+        self.assertEqual(result['verdict'], 'rejected')
+        self.assertEqual(result['defect'], 'missing_component')
+        self.assertIn('Threshold 250', result['reason'])
 
     def test_zero_tolerance_and_color_checks(self):
         before = Image.new('RGB', (50, 50), 'white')

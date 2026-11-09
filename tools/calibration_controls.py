@@ -11,11 +11,12 @@ import pypdfium2 as pdfium
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / 'tools')]
-from comparison_metrics import image_metrics
+from comparison_metrics import THRESHOLDS, image_metrics
 from pdf_characterize import check_transform_support as check_transform_support
 
 
 CALIBRATION_LADDER_MM = [0.0, 0.01, 0.025, 0.05]
+SYMBOL_PAGE_WIDTH = 160
 
 
 def stream(writer, data):
@@ -154,8 +155,8 @@ def build_calibration_fixtures(directory):
     def save(name, *pages):
         path = dir_path / (name + '.pdf')
         with path.open('xb') as output, PdfWriter() as writer:
-            for data in pages:
-                page = writer.add_blank_page(width=150, height=150)
+            for width, data in pages:
+                page = writer.add_blank_page(width=width, height=150)
                 page[NameObject('/Contents')] = stream(writer, data)
             writer.write(output)
         return path
@@ -167,8 +168,9 @@ def build_calibration_fixtures(directory):
     def layout(symbols):
         return '\n'.join(f'q\n{group}\nQ' for group in (small, symbols, large)).encode()
 
-    ref_path = save('calibration_reference', make_geometric_controls_stream(), layout(middle),
-                    b'q 1.2 0 0 1.2 10 10 cm 1 w 10 10 m 50 50 l S Q')
+    ref_path = save('calibration_reference', (150, make_geometric_controls_stream()),
+                    (SYMBOL_PAGE_WIDTH, layout(middle)),
+                    (150, b'q 1.2 0 0 1.2 10 10 cm 1 w 10 10 m 50 50 l S Q'))
 
     edits = {
         'deleted_decimal': ('q 1 J 1.20 w 97.00 45.50 m 97.00 45.50 l S Q', ''),
@@ -189,8 +191,8 @@ def build_calibration_fixtures(directory):
         if middle.count(original) != 1:
             raise ValueError(f'Calibration edit must match one shape: {label}')
         changed = middle.replace(original, replacement, 1)
-        damaged[label] = save('damaged_' + label, layout(changed))
-    damaged['unsupported_shear'] = save('unsupported_shear', b'q 1 0.5 0 1 10 10 cm 1 w 10 10 m 50 50 l S Q')
+        damaged[label] = save('damaged_' + label, (SYMBOL_PAGE_WIDTH, layout(changed)))
+    damaged['unsupported_shear'] = save('unsupported_shear', (150, b'q 1 0.5 0 1 10 10 cm 1 w 10 10 m 50 50 l S Q'))
     return ref_path, damaged
 
 
@@ -207,59 +209,62 @@ def evaluate_calibration_preservation(source_rendered, candidate_rendered, page_
         return {'verdict': 'rejected', 'reason': 'Zero tolerance requires exact pixels',
                 'defect': 'pixel_difference', 'effective_tolerance_mm': effective_tolerance, 'metrics': metrics}
 
-    th_225 = metrics.get('thresholds', {}).get('225', {})
-    if not th_225:
-        return {'verdict': 'rejected', 'reason': 'Image analysis threshold 225 unavailable', 'defect': 'metric_error'}
+    thresholds = metrics.get('thresholds', {})
+    for threshold in THRESHOLDS:
+        result = thresholds.get(str(threshold))
+        if not result:
+            return {'verdict': 'rejected', 'reason': f'Image analysis threshold {threshold} unavailable',
+                    'defect': 'metric_error'}
+        missing_components = result.get('potential_missing_components', [])
+        added_components = result.get('potential_added_components', [])
+        merges = result.get('potential_breaks_merges', [])
+        topo_before = result.get('topology_before', {})
+        topo_after = result.get('topology_after', {})
+        # Check 1: Missing components (deleted decimal, fraction bar, dot)
+        if missing_components:
+            return {
+                'verdict': 'rejected',
+                'reason': f'Threshold {threshold}: Missing component detected ({len(missing_components)} component(s) lost)',
+                'defect': 'missing_component',
+                'effective_tolerance_mm': effective_tolerance,
+                'metrics': metrics,
+            }
 
-    missing_components = th_225.get('potential_missing_components', [])
-    added_components = th_225.get('potential_added_components', [])
-    merges = th_225.get('potential_breaks_merges', [])
-    topo_before = th_225.get('topology_before', {})
-    topo_after = th_225.get('topology_after', {})
+        # Check 2: Added components
+        if added_components:
+            return {
+                'verdict': 'rejected',
+                'reason': f'Threshold {threshold}: Added component detected ({len(added_components)} component(s) added)',
+                'defect': 'added_component',
+                'effective_tolerance_mm': effective_tolerance,
+                'metrics': metrics,
+            }
+
+        # Check 3: Breaks and merges (joined letters or broken strokes)
+        if merges:
+            kinds = set(m.get('kind', '') for m in merges)
+            return {
+                'verdict': 'rejected',
+                'reason': f'Threshold {threshold}: Break or merge detected ({", ".join(sorted(kinds))})',
+                'defect': 'break_or_merge',
+                'effective_tolerance_mm': effective_tolerance,
+                'metrics': metrics,
+            }
+
+        # Check 4: Topology holes / loops (opened loop or closed loop)
+        if topo_before.get('holes', 0) != topo_after.get('holes', 0):
+            return {
+                'verdict': 'rejected',
+                'reason': f'Threshold {threshold}: Loop topology altered (holes: {topo_before.get("holes")} vs {topo_after.get("holes")})',
+                'defect': 'loop_topology',
+                'effective_tolerance_mm': effective_tolerance,
+                'metrics': metrics,
+            }
+
+    th_225 = thresholds['225']
     disp = th_225.get('stroke_displacement_mm', {})
     thick_change = th_225.get('thickness_absolute_change_mm', {})
     rgb_diff = metrics['rgb_foreground_absolute_difference']
-
-    # Check 1: Missing components (deleted decimal, fraction bar, dot)
-    if missing_components:
-        return {
-            'verdict': 'rejected',
-            'reason': f'Missing component detected ({len(missing_components)} component(s) lost)',
-            'defect': 'missing_component',
-            'effective_tolerance_mm': effective_tolerance,
-            'metrics': metrics,
-        }
-
-    # Check 2: Added components
-    if added_components:
-        return {
-            'verdict': 'rejected',
-            'reason': f'Added component detected ({len(added_components)} component(s) added)',
-            'defect': 'added_component',
-            'effective_tolerance_mm': effective_tolerance,
-            'metrics': metrics,
-        }
-
-    # Check 3: Breaks and merges (joined letters or broken strokes)
-    if merges:
-        kinds = set(m.get('kind', '') for m in merges)
-        return {
-            'verdict': 'rejected',
-            'reason': f'Break or merge detected ({", ".join(sorted(kinds))})',
-            'defect': 'break_or_merge',
-            'effective_tolerance_mm': effective_tolerance,
-            'metrics': metrics,
-        }
-
-    # Check 4: Topology holes / loops (opened loop or closed loop)
-    if topo_before.get('holes', 0) != topo_after.get('holes', 0):
-        return {
-            'verdict': 'rejected',
-            'reason': f'Loop topology altered (holes: {topo_before.get("holes")} vs {topo_after.get("holes")})',
-            'defect': 'loop_topology',
-            'effective_tolerance_mm': effective_tolerance,
-            'metrics': metrics,
-        }
 
     max_disp = disp.get('max')
     max_thick = thick_change.get('max')

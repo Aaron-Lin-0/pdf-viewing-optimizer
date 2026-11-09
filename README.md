@@ -65,8 +65,11 @@ and one lossless packing step. It retains useful transformations without a candi
 tournament or rendering-speed benchmarks. A smaller copy must pass geometry,
 navigation, exact all-page PDFium/PDF.js and high-resolution/print/detail checks.
 Live annotations remain editable; unreachable editor/recovery data may be omitted
-from the separate viewing copy. Originals remain intact. Unsupported or unresolved
-PDFs receive a report; the app does not silently start thorough optimization.
+from the separate viewing copy. Originals remain intact. Batch review shows
+preflight rejections before processing, including the Thorough option for PDFs
+with incremental revisions. Those rejections produce no report. Jobs that reach
+verification write reports for unresolved checks, and verification failures count
+as failures in the batch summary.
 Choose **Thorough optimization** for the existing candidate comparison, rendering
 benchmarks and visual/browser acceptance. Its **Optimizer** selector supports the
 adaptive pipeline, qpdf or PyMuPDF, all under the original thorough gates. Use **Stop
@@ -211,6 +214,8 @@ npm ci
 .\.venv\Scripts\python.exe -m unittest discover -s tests -p 'test_*.py'
 .\.venv\Scripts\python.exe tools/build_release.py --output dist/RELEASE_NAME
 ```
+
+Install `requirements-comparison.txt` in the same environment to include the calibration tests.
 
 Choose a release directory that does not already exist. The repository root is the maintained implementation. The packaging script copies those same files into a ZIP and a Codex skill, then compares their bytes. Generated releases go under `dist/` and are not committed. No duplicate implementation is maintained inside the skill source directory. `.venv/`, `node_modules/` and local test results are also excluded from Git. Codex uses your existing model and permission settings; this project does not override them.
 

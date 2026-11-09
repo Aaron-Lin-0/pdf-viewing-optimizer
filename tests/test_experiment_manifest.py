@@ -24,6 +24,19 @@ def stream(writer, data):
 
 
 class ExperimentManifestTests(unittest.TestCase):
+    def test_path_crossing_graphics_state_transform_is_ineligible(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            source = Path(folder) / 'source.pdf'
+            writer = PdfWriter()
+            for data in (b'q 1 .5 0 1 0 0 cm 10 10 m 20 20 l Q 30 30 l S',
+                         b'q 2 0 0 2 0 0 cm 10 10 m 20 20 l Q 30 30 l S',
+                         b'q 10 10 m 20 20 l Q 30 30 l S'):
+                page = writer.add_blank_page(width=100, height=100)
+                page[NameObject('/Contents')] = stream(writer, data)
+            writer.write(source)
+            pages = analyze_drawing_opportunity(source)['pages']
+            self.assertEqual([page['eligible_runs'] for page in pages], [0, 0, 1])
+
     def test_eligibility_uses_graphics_state_at_each_paint(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
             source = Path(folder) / 'source.pdf'

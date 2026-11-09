@@ -285,7 +285,9 @@ def _recover_job(source,source_hash,optimizer,profile='thorough'):
                     output.with_suffix('.checkpoint')!=folder.absolute() or job.status not in RECOVERABLE_STATUSES or
                     job.optimizer!=optimizer or job.profile!=profile):
                 continue
-            try:return replace(job,status=validate_result(job,recovering=True))
+            try:
+                status, error = validate_result(job, recovering=True)
+                return replace(job, status=status, error=error)
             except Exception:
                 if _paths_fit(output, profile) and _targets_available(output):
                     return replace(job,status='ready',error=None)
@@ -347,16 +349,19 @@ def confirmation_text(jobs, verification_workers=None, resources=None, parallel_
     if not quick:
         from viewing_copy import default_verification_workers
         verification_workers=default_verification_workers() if verification_workers is None else verification_workers
-    ready=sum(job.status == 'ready' for job in jobs);recovered=sum(job.status in {'optimized','no improvement'} for job in jobs)
+    ready=sum(job.status == 'ready' for job in jobs);recovered=sum(job.status in {'optimized','no improvement','failed'} for job in jobs)
     lines = [f"Optimize {ready} PDF(s) and recover {recovered} completed result(s)?", ""]
     if jobs:lines.extend((f"Profile: {PROFILE_LABELS[jobs[0].profile]}",f"Optimizer: {OPTIMIZER_LABELS[jobs[0].optimizer]}",""))
     for job in jobs:
         if job.status == "ready":
             lines.extend((str(job.source), f"  → {job.output}", ""))
-        elif job.status in {'optimized','no improvement'}:
-            lines.extend((str(job.source),f"  Recovered: {job.status}",""))
+        elif job.status in {'optimized','no improvement','failed'}:
+            detail = f" — {job.error}" if job.error else ""
+            lines.extend((str(job.source),f"  Recovered: {job.status}{detail}",""))
         else:
             lines.extend((str(job.source), f"  Rejected: {job.error}", ""))
+    if any(job.status == 'rejected' for job in jobs):
+        lines.extend(("PDFs rejected during review do not receive output reports.", ""))
     if quick:
         lines.extend((('Exact inlining, safe deduplication, cleanup and compression.' if jobs[0].optimizer=='adaptive' else 'Compression only; unreferenced objects retained.'),
                       'No optimizer tournament or rendering-speed benchmarks. Preservation checks remain.',
@@ -435,7 +440,11 @@ def validate_result(job,recovering=False):
             raise RuntimeError('quick copy is not smaller')
     elif output.exists() or output.is_symlink():
         raise RuntimeError("no-improvement report unexpectedly published an output")
-    return status
+    classification = report.get('classification')
+    if job.profile == 'quick' and status == 'no improvement' and classification in (
+            'verification failed', 'unsupported verification'):
+        return 'failed', f"{classification.capitalize()}: {report.get('reason') or 'See the report for details.'}"
+    return status, None
 
 
 class BatchController:
@@ -533,9 +542,9 @@ class BatchController:
                 self.runner(job, self.emit, mark_started)
                 if not started:
                     raise RuntimeError("optimizer runner returned without starting a process")
-                status = validate_result(job)
+                status, error = validate_result(job)
                 with self._lock:
-                    self._record(index, status)
+                    self._record(index, status, error)
             except Exception as exc:
                 with self._lock:
                     status="timeout" if isinstance(exc,JobTimeout) else ("budget exhausted" if isinstance(exc,JobBudgetExceeded) else "failed")

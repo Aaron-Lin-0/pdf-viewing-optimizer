@@ -6,6 +6,8 @@ Comparison-specific dependencies, calibration and native-viewer smoke coverage
 are documented in [comparison.md](comparison.md#validation).
 
 Install `requirements-dev.txt` and the Node packages before running tests. Tests generate PDFs in temporary directories; no private notes or downloaded fixtures are required.
+Install `requirements-comparison.txt` to run the calibration tests. Discovery
+skips them when NumPy, SciPy or scikit-image is unavailable.
 
 ```powershell
 python -m ruff check .

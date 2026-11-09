@@ -276,6 +276,8 @@ def characterize_page(reader, page, page_number):
                 if not graphics_stack:
                     issue('Unbalanced graphics-state restore')
                 else:
+                    if path and ctm != graphics_stack[-1][0]:
+                        path_supported = False
                     ctm, width, width_declared, opacity, dashed, supported_transform = graphics_stack.pop()
                 continue
             if operator == b'cm':

@@ -59,7 +59,7 @@ class _StrictReader(PdfReader):
     def _process_xref_stream(self, xrefstream):
         # pypdf omits /Prev from the public trailer of an xref-stream PDF.
         if '/Prev' in xrefstream:
-            raise UnsupportedPDF('Incremental PDF revisions require thorough processing.')
+            raise UnsupportedPDF('This PDF has incremental revisions. Select Thorough optimization and review the file again.')
         # The public trailer retains only pypdf's known keys. Do not lose
         # application-defined trailer entries when reading a stream-based xref.
         self.quick_trailer={key:value for key,value in xrefstream.items()
@@ -104,7 +104,7 @@ def strict_reader(path):
     for key,value in getattr(reader,'quick_trailer',{}).items():reader.trailer.setdefault(key,value)
     validate_input(reader)
     if '/Prev' in reader.trailer:
-        raise UnsupportedPDF('Incremental PDF revisions require thorough processing.')
+        raise UnsupportedPDF('This PDF has incremental revisions. Select Thorough optimization and review the file again.')
     root = reader.trailer['/Root']
     if '/AcroForm' in root and '/XFA' in root['/AcroForm']:
         raise UnsupportedPDF('XFA is unsupported in quick mode.')
