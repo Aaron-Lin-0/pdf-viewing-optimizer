@@ -6,9 +6,9 @@ import sys
 
 REPO=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(REPO),str(Path(__file__).resolve().parent)]
-from test_pdf_compatibility import compatibility_fixture,interactive_fixture
-from viewing_copy import build_candidate,filehash,verify_candidate,verify_pdfjs
-from browser_check import check_browser
+from test_pdf_compatibility import compatibility_fixture,interactive_fixture,mixed_transparency_fixture
+from viewing_copy import build_candidate,filehash,verify_candidate,verify_pdfjs,page_delta,detail_crop
+from browser_check import check_browser,probe_browser
 from pypdf import PdfReader
 
 
@@ -30,6 +30,18 @@ def run(stage,root):
         source,out=root/'interactive.pdf',root/'interactive.dedup.pdf'
         interactive_fixture(source)
         save('interactive-structural',verify_candidate(source,out,build_candidate(source,out,'dedup')))
+        source,out=root/'mixed-transparency.pdf',root/'mixed-transparency.batched.pdf'
+        mixed_transparency_fixture(source)
+        manifest=build_candidate(source,out,'batched')
+        checks=verify_candidate(source,out,manifest,allow_edges=True)
+        checks['pdfjs']=verify_pdfjs(source,out,4,allow_edges=True)
+        for page in range(4):
+            page_delta(source,out,page,allow_edges=True,scale=4)
+            page_delta(source,out,page,allow_edges=True,print_mode=True)
+        page,crop=detail_crop(source,[1,2,3,4])
+        checks['detail']=page_delta(source,out,page-1,allow_edges=True,scale=8,crop=crop)
+        checks.update(manifest=manifest,source_sha256=filehash(source),output_sha256=filehash(out))
+        save('mixed-transparency',checks)
     else:
         result=check_browser(root/'interactive.pdf',root/'interactive.dedup.pdf',[1,2,3])
         values=result['results']['candidate']
@@ -48,6 +60,9 @@ def run(stage,root):
         assert traces[-2]['viewport']==traces[-1]['viewport']
         assert traces[-1]['target']==len(pages), 'Fixture must exercise the final-page bookmark'
         save('matrix-browser',result)
+        source,out=root/'mixed-transparency.pdf',root/'mixed-transparency.batched.pdf'
+        probe=probe_browser(source,[1,2,3,4])
+        save('mixed-transparency-browser',check_browser(source,out,[1,2,3,4],source_result=probe))
 
 
 if __name__=='__main__':

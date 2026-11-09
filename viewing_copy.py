@@ -96,12 +96,13 @@ def verification_resources(requested=None):
 
 
 class VerificationSession:
-    def __init__(self, source, directory, workers, budget=None):
+    def __init__(self, source, directory, workers, budget=None, revision_evidence=None):
         from verification_worker import compare_page, render_source
         self.source = Path(source).absolute();self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
         self.reader = reader_for(self.source);self.budget = budget
         self._render_source = render_source;self._compare_page = compare_page
+        self.revision_evidence = revision_evidence
         self.pool = ProcessPoolExecutor(max_workers=workers,
                                         mp_context=multiprocessing.get_context('spawn'))
         self.signatures = {};self.stats = {'source_renders_created': 0,
@@ -123,6 +124,12 @@ class VerificationSession:
         return self.directory / (hashlib.sha256(settings.encode()).hexdigest() + '.png')
 
     def compare(self, candidate, pages, allow_edges=False, scale=2, crop=None, print_mode=False):
+        requested = pages
+        reused = set()
+        if (self.revision_evidence and self.revision_evidence[0] == Path(candidate).absolute() and
+                not allow_edges and scale == 2 and crop is None and not print_mode):
+            reused = self.revision_evidence[1].intersection(pages)
+            pages = [index for index in pages if index not in reused]
         source_paths = [self._source_path(index, scale, crop, print_mode) for index in pages]
         missing = [(index, path) for index, path in zip(pages, source_paths) if not path.exists()]
         futures = [self.pool.submit(self._render_source,
@@ -141,7 +148,11 @@ class VerificationSession:
                        for future in results]
             if len(ordered) != len(pages) or [row.get('page') for row in ordered] != [i + 1 for i in pages]:
                 raise ValueError('Verification worker returned missing or unordered page evidence.')
-            return ordered
+            if not reused:
+                return ordered
+            rows = {row['page'] - 1: row for row in ordered}
+            return [({'page': index + 1, 'exact': True, 'peak': 0, 'mean': 0, 'reused_revision': True}
+                     if index in reused else rows[index]) for index in requested]
         except BaseException:
             self.close(force=True)
             raise
@@ -459,27 +470,26 @@ def build_candidate(source,destination,kind):
         if kind=='combined':inline_handwriting(writer)
     elif kind in {'inline','batched','direct'}:
         if kind=='batched':
-            # A local pen state does not clear an inherited soft mask.
-            pending=list(writer._objects);seen=set()
-            while pending:
-                obj=pending.pop()
-                if not isinstance(obj,(dict,list)) or id(obj) in seen:continue
-                seen.add(id(obj))
-                if isinstance(obj,dict):
-                    if ('/Group' in obj or obj.get('/CA',1)!=1 or obj.get('/ca',1)!=1 or
-                        obj.get('/SMask','/None')!='/None' or obj.get('/BM','/Normal')!='/Normal'):
-                        raise ValueError('Batching skipped: transparency requires retaining separate paint operations.')
-                    pending.extend(obj.values())
-                else:pending.extend(obj)
-            del pending,seen,obj
-            rewrite_handwriting(writer)
-        if kind=='direct':
+            from handwriting import batching_contexts
+            contexts=batching_contexts(writer)
+            eligible={identity for identity,reasons in contexts.items() if not reasons}
+            skipped={reason:sum(reason in reasons for reasons in contexts.values())
+                     for reason in sorted({reason for reasons in contexts.values() for reason in reasons})}
+            manifest['batching']={'reachable_forms':len(contexts),'opaque_forms':len(eligible),
+                                  'skipped_forms':sum(bool(v) for v in contexts.values()),'skip_reasons':skipped}
+            if not eligible:
+                raise ValueError('Batching skipped: no proven opaque Form invocation; '+json.dumps(manifest['batching'],sort_keys=True))
+            try:forms,segments,draws,_=rewrite_handwriting(writer,eligible_forms=eligible)
+            except ValueError as exc:
+                raise ValueError(str(exc)+'; '+json.dumps(manifest['batching'],sort_keys=True)) from exc
+            manifest['batching'].update(changed_forms=forms,segments=segments,stroke_calls=draws)
+        if kind in {'direct','batched'}:
             try:
                 forms,parents=inline_handwriting(writer)
                 manifest.update(inlined_form_calls=forms,inlined_containers=parents)
             except NoSupportedHandwriting:
                 manifest.update(inlined_form_calls=0,inlined_containers=0,
-                                inlining_skipped='No supported handwriting Forms; retain deduplication and cleanup.')
+                                inlining_skipped='No supported inlining containers; retain prior transformations, deduplication and cleanup.')
         else:inline_handwriting(writer)
     baseline_navigation=navigation_fingerprint(reader,{int(k):v for k,v in manifest.get('converted',{}).items()})
     unmerged=Path(destination).with_suffix('.unmerged.pdf')
@@ -541,8 +551,14 @@ def report_text(report):
                 f"PDFium verification RAM estimate: {resources.get('estimated_ram_bytes',0)/1024**3:.1f} GiB (planning estimate, not a measured peak or limit; PDF.js heap allowance is separate).",
                 f"Source evidence: {reuse.get('source_renders_created',0)} renders created, {reuse.get('source_renders_reused',0)} reused; {reuse.get('source_signatures_created',0)} signatures created, {reuse.get('source_signatures_reused',0)} reused."]
     for c in report.get('candidates',[]):
-        reduction='unresolved (timer resolution)' if c.get('cpu_resolution_limited') else f"{c.get('cpu_reduction',0)*100:.1f}%"
+        reduction=('unmeasured' if 'cpu_reduction' not in c else
+                   'unresolved (timer resolution)' if c.get('cpu_resolution_limited') else f"{c['cpu_reduction']*100:.1f}%")
         lines.append(f"| {c['kind']} | {c['bytes']} | {c.get('exact')} | {reduction} | {c.get('regression','unmeasured')} |")
+    viability=report.get('source_browser_viability',{})
+    if viability.get('ok') is False:
+        lines.extend(['','Source browser blocker: '+viability['error']])
+    for c in report.get('candidates',[]):
+        if c.get('batching'):lines.append('Batching '+c['kind']+': '+json.dumps(c['batching'],sort_keys=True))
     lines.extend(['','Rejected/skipped passes:']+[f"- {r['kind']}: {r['reason']}" for r in report.get('rejected',[])])
     rows=report.get('measurements',[])
     if rows:
@@ -832,6 +848,20 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
             retire_session()
         report['source_evidence_reuse']=evidence_stats
         if valid:
+            from browser_check import probe_browser
+            stage('source browser viability',(Path(temporary),))
+            try:
+                source_browser=probe_browser(source,pages,budget.timeout(1200))
+                report['source_browser_viability']=source_browser
+            except Exception as exc:
+                finish_stage('interrupted' if isinstance(exc,(TimeBudgetExceeded,DiskBudgetExceeded)) else 'failed')
+                budget.check('source browser viability',(Path(temporary),))
+                if isinstance(exc,(TimeBudgetExceeded,DiskBudgetExceeded)):raise
+                report['classification']='source-browser incompatibility: no publishable candidate'
+                report['source_browser_viability']={'ok':False,'error':str(exc)}
+                report['candidates']=[{k:v for k,v in c.items() if k not in {'path','manifest'}} | {'batching':c['manifest'].get('batching')} for c in valid]
+                valid=[]
+        if valid:
             stage('balanced performance timing',(Path(temporary),))
             timing_paths=[source]+[Path(c['path']) for c in valid]
             timing_hash=hashlib.sha256(json.dumps([(c['kind'],filehash(c['path'])) for c in valid],sort_keys=True).encode()).hexdigest()
@@ -852,7 +882,7 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
                 report['checkpoint']['resumed']=True
             report['measurements']=measured
             chosen=choose_candidate(source,valid,measured)
-            report['candidates']=[{k:v for k,v in c.items() if k not in {'path','manifest'}} | {'benchmark_file':Path(c['path']).name,'converted_annotations':c['manifest'].get('count',0)} for c in valid]
+            report['candidates']=[{k:v for k,v in c.items() if k not in {'path','manifest'}} | {'benchmark_file':Path(c['path']).name,'converted_annotations':c['manifest'].get('count',0),'batching':c['manifest'].get('batching')} for c in valid]
             while chosen:
                 try:
                     stage(f'final acceptance: {chosen["kind"]}',(Path(temporary),))
@@ -870,7 +900,7 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
                     acceptance['detail_crop']={'page':detail_page,'crop':crop,'dpi':576,**delta}
                     from browser_check import check_browser
                     budget.check('browser acceptance',(Path(temporary),))
-                    acceptance['browser']=check_browser(source,chosen['path'],pages,budget.timeout(1200))
+                    acceptance['browser']=check_browser(source,chosen['path'],pages,budget.timeout(1200),source_result=source_browser)
                     report.update(acceptance)
                     break
                 except Exception as exc:
@@ -885,7 +915,7 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
                 if filehash(source)!=report['source_sha256']:raise ValueError('Original changed during processing.')
                 report.update({'status':'optimized','classification':'faster' if chosen['cpu_reduction']>=.1 else 'storage-only','selected':chosen['kind'],'output':str(destination),'output_sha256':filehash(chosen['path'])})
                 report['selected_transformations']={k:chosen['manifest'][k] for k in
-                    ['kind','count','converted','skipped','deduplication_skipped'] if k in chosen['manifest']}
+                    ['kind','count','converted','skipped','deduplication_skipped','batching'] if k in chosen['manifest']}
         if filehash(source)!=report['source_sha256']:raise ValueError('Original changed during processing.')
         stage('publication',(Path(temporary),))
         report['checkpoint']['stats']=dict(cache.stats)

@@ -18,11 +18,29 @@ and batch restart recovery are implemented as described under P11.
 
 ## Current foundation and immediate priority
 
-**Next action (2026-11-04): resume P13/P14 performance work from the ordered plans
-below. P15 is release-qualified.** Preserve the existing milestone numbers and
+**Next action (2026-11-04): continue P13/P14 through code and automated validation;
+Computer Use is excluded by user instruction. Native P13 qualification is deferred
+and P14 real-document holdout acceptance remains open. Scoped batching and source
+browser viability are implemented and generated-fixture qualified below.
+P15 is release-qualified.** Preserve the existing milestone numbers and
 completed history.
 The objective remains smaller, efficiently rendered copies without sacrificing
 required content; these repairs make preservation and selection evidence reliable.
+
+**Next queued initiative: [P16 — approximate handwriting research](#p16-approximate-handwriting-research-and-conditional-product-option).**
+The user has requested a procedure for testing bounded point reduction and curve
+optimization while protecting small writing. P16-A repairs the legacy transparency
+gap before experimental rewriting; P16-B through P16-E establish eligibility,
+quality checks and measured benefit. Curve fitting and a public option are
+conditional follow-ups. Existing P13/P14 qualification remains open as recorded;
+this plan neither completes it nor changes current exact-mode acceptance.
+
+**Additional research option: [P17 — notes to LaTeX study copies](#p17-notes-to-latex-study-copy-research).**
+Investigate the local `pdf-text-extractor` companion as an ingestion/UI starting
+point for editable `.tex` plus a compiled PDF. This is content transcription and
+retypesetting, with its own review contract; it cannot qualify as an exact viewing
+copy or a P16 geometry-preserving treatment. P17 research may proceed independently
+of P16, without displacing the current direct-mode and P13/P14 qualification work.
 
 **Current priority (corrected 2026-11-02): direct viewing copies.** Keep useful
 transformations and comparable storage savings while removing exhaustive optimizer
@@ -60,6 +78,87 @@ relevant run's completed records, final status, hashes and report for current
 facts; do not infer completion from an older chat or partial assessment. Keep
 private files, paths, screenshots and detailed comparison reports out of commits.
 Do not change the running implementation during an active comparison.
+
+## Fresh-agent handoff for P16/P17
+
+An agent can start these tracks without the preceding chat. Read `AGENTS.md`,
+this roadmap's current-priority paragraph and relevant P16/P17 phases, then
+[design.md](design.md), [testing.md](testing.md), and
+[comparison.md](comparison.md#read-the-evidence) before changing transformations
+or collecting research measurements. P16/P17 are plans, not shipped capabilities.
+P16-A's legacy opacity repair remains required until its stated exit is proved;
+P17's source inspection and compiler probes did not run recognition or compile notes.
+
+### Locate inputs and establish the current checkout
+
+1. Read the actual working-tree diff and check for active optimizer/comparison
+   processes before touching executable files. Preserve pre-existing edits;
+   historical test counts and roadmap notes do not establish this checkout's
+   status. Identify a running job's owned source/code context rather than assuming
+   that a readable PDF or an old `running` note proves current activity.
+2. On the original machine, optional local resource locations are in
+   `audit-output/research-handoff.local.json`. It records the caller-selected
+   `pdf-text-extractor` directory, local generated reproduction evidence and source
+   hashes. Read it as a locator, recheck files/hashes, and keep it ignored. It is
+   not portable authorization or a current run verdict. Do not copy its machine
+   paths or detailed reports into tracked documentation.
+3. If that index or the companion checkout is absent, use the portable P16-A recipe
+   below and the pinned P17-B upstream links. Request the companion location only
+   when work actually needs it; independent generated tests and upstream inspection
+   can proceed. Follow the companion's applicable instructions and filesystem
+   permissions before editing it. No change to that other repository is implied
+   by this optimizer roadmap.
+4. Use the repository virtual environment and pinned dependencies described in
+   README. Resolve browser/Node/qpdf/TeX tools in the current environment; do not
+   copy paths or assume that a previous compiler version probe tested packages,
+   model hardware, safe execution or a working notebook conversion.
+
+### First bounded deliverable by requested track
+
+| Request being continued | First deliverable | Stop/advance condition |
+| --- | --- | --- |
+| Existing optimizer/direct-mode work | Follow the current P13/P14 priority and inspect their actual outstanding evidence | Do not replace these tasks with a new feature just because P16/P17 appear later in the roadmap |
+| Approximate coordinate/point-reduction work | P16-A: reconstruct the inherited-mask case, add a failing regression, repair the shared eligibility boundary | Focused and full tests pass and the altered transparent result cannot publish; then begin P16-B/C before the simplifier |
+| Notes-to-LaTeX research | P17-A/B: inspect the companion, write the transcription contract, and qualify one recognition backend on generated/reference cases | Preserve source coverage and distinguish recognizer output from a compiling skeleton; a known-source TeX smoke under P17-D may be developed independently |
+| Public experimental option | Implement the relevant qualified research treatment first | P16-G or P17-F is conditional; no new public mode or automatic default is needed to start research |
+
+For P16-A, the existing focused tests can be run from the root with
+`.\.venv\Scripts\python.exe -m unittest discover -s tests -p 'test_*handwriting.py'`;
+extend these with the new regression, then use the full-suite and compatibility
+commands under [P16 execution](#p16-execution-commands-and-evidence-basis).
+
+### Decisions deliberately left open
+
+- The exact simplifier/parser implementation, its independently checked bound,
+  protected-feature detector and calibrated safe tolerance remain P16 research.
+  The numerical ladder in P16-C is experimental input, not a released preset.
+- P17 has no selected or benchmark-qualified model. An agent may choose one pilot
+  backend after inspecting available hardware and its model/code terms, testing
+  generated/reference inputs and recording requirements. Do not infer cloud or
+  paid-service authorization from an upstream example or from this roadmap.
+- Public option names, final manifest/report schemas and companion-versus-adapter
+  ownership are settled at their implementation gates. Keep one maintained
+  implementation; a backend choice does not require adopting its whole UI/stack.
+- Personal holdouts and review decisions need explicit input identity and applicable
+  task authorization; an old dated holdout reference is not a new input selection.
+  The plans do not promise that private corpus files exist in this checkout.
+- Unavailable native measurements and deferred native GUI qualification remain
+  pending. Continue independent code/generated work without treating them as passes
+  or requesting Computer Use that the current instructions exclude.
+
+At minimum, a research record must identify its track/phase, source/baseline/output
+hashes, treatment, code/tool/model/prompt/policy identities, settings/units,
+page/region coverage, completed checks and raw timing references, review state,
+terminal outcome and unresolved limitations. P17 adds block-to-source anchors and
+`.tex`/asset/build identities. A completion marker comes after its payload; a partial
+record, missing metric or absent review cannot become an accepted result.
+
+The existing comparison runner has a closed `PROFILES` registry and validates
+tool/profile imports. An agent cannot enable a new simplifier or retypesetter by
+inventing a profile in local configuration. Implement and test the research adapter
+and its supported configuration, or use a deliberately scoped research harness,
+before documenting its commands. Reflowed P17 content needs its own mapping-based
+evaluation; do not substitute it into the runner's current page-equality checks.
 
 ## P15: repair the six confirmed audit findings
 
@@ -260,6 +359,582 @@ Close P15 only after all six exit criteria and required release checks have evid
   generated interaction-fixture copy with matching report/output SHA-256 and complete
   all-page PDFium/PDF.js verification. No private PDF was used, no original was
   modified, and no acceptance threshold or public interface was relaxed.
+
+## P16: approximate handwriting research and conditional product option
+
+**Status: planned; procedure adopted 2026-11-04.** No point simplifier, curve fitter
+or approximate public option is implemented by this roadmap update. The hypothesis
+is that removing redundant path segments can improve first rendering and redraws
+beyond exact inlining/packing. Point-count reduction, smaller bytes and fewer PDF
+commands are explanatory measurements, not evidence of a rendering speedup.
+
+Execute P16-A through P16-E in order. P16-F is conditional on the measured limits
+of point reduction; P16-G requires a useful, qualified treatment from P16-E or
+P16-F. P16-H lists later extensions with explicit entry conditions. P13/P14's
+applicable state/resource and automated acceptance checks are prerequisites for
+reuse; deferred native qualification remains deferred, never an inferred pass.
+Do not add these features to routine direct jobs while research is incomplete.
+
+### P16 scope, ownership and evidence
+
+- Preserve the current CLI/API, exact/default modes and their acceptance rules.
+  Approximate research gets a distinct transformation and quality-policy identity;
+  a future supported option requires the separate design change in P16-G.
+- No handwriting rasterization, OCR removal, image resampling, text rewriting or
+  general PDF regeneration. Navigation, hit areas, labels, attachments, images,
+  fonts, retained interactive identities, layers and non-target drawing data keep
+  their existing preservation requirements. Never overwrite originals or reports.
+- Research artifacts stay in fresh ignored `audit-output/` directories. Record
+  source/baseline/candidate SHA-256, recipe and code hashes, versions, tolerances,
+  renderer settings, hardware, coverage, raw observations and terminal status.
+  Review decisions bind those identities; changing any candidate invalidates them.
+- Do generated work first. Real PDFs require authorization for the specific input
+  and run one document at a time. Use disposable browser profiles and owned-process
+  cleanup; no Computer Use is required by this procedure. Check for active
+  comparisons before changing executable code and preserve unrelated dirty work.
+  Use a suitable existing checkout; a separate development branch may be named
+  `codex/approximate-handwriting`, without copying the maintained implementation.
+- Benchmarks, image analysis and other heavy checks run in separate phases.
+  Missing dependencies, unresolved content, zero-resolution timers, failed checks
+  and interrupted work retain explicit unavailable/unproven states.
+
+| Maintained area | Planned responsibility; existing mechanisms to reuse |
+| --- | --- |
+| `handwriting.py`, `annotation_ink.py` | Shared opacity/eligibility proof, supported path parsing, explicit experimental transform; retain annotation safeguards |
+| `geometry.py`, `navigation.py`, `lossless_verify.py` | Existing exact checks remain intact; independently check declared approximate edits and exact unaffected structures |
+| `tools/pdf_characterize.py`, `tools/plan_optimization.py` | Count eligible geometry and explain skip reasons; do not automatically recommend a new family before qualification |
+| `tools/compare_optimizers.py`, `tools/firefox_measure.py`, `pdfjs_benchmark.mjs` | Research-only candidate adapter, sequential measurements, true native redraw evidence and versioned records |
+| `tools/comparison_metrics.py`, `tools/feature_loss.py` | Local displacement, width, topology, color and feature findings; no aggregate semantic-safety score |
+| `tests/`, compatibility runners | Generated geometry, small-writing, negative-control and integration fixtures; all-page renderer checks |
+| `optimize_pdf.py`, `viewing_copy.py`, `quick_lossless.py` | Public integration only at P16-G; never route approximate output through an exact manifest or relax an existing comparator |
+| `batch_workflow.py`, `viewing_copy_gui.py`, release builder and documentation | Explicit future mode/review, recovery isolation, packaging and accurate user-facing claims |
+
+Prefer existing helpers and dependencies. A separate root transformation module
+is justified only if the prototype cannot remain clear beside the supported
+handwriting code. The table names affected areas, not a requirement to edit every
+file or build a new framework.
+
+### P16-A — Close the legacy opacity gap
+
+1. Trace all callers of `rewrite_handwriting`. Viewing-copy batching supplies the
+   scoped `batching_contexts` eligibility set; legacy `--fast-handwriting` currently
+   calls it without that proof. Reuse the shared proof for the legacy route, with
+   conservative handling of duplicate-layer removal and unsupported Forms.
+2. Commit a generated regression with crossing strokes under an inherited soft
+   mask. It must establish that the legacy whole-page peak/mean guard can miss an
+   interior compositing change, and that the repaired route leaves unsafe strokes
+   unchanged or rejects the job before publication. Exercise both CLI/API callers.
+3. Cover shared safe/unsafe Forms, groups, blend modes, both alpha values,
+   overprint, state resets and mask/annotation/font/pattern resource references.
+   Unrelated proven opaque Forms must remain eligible. Keep exact inlining
+   distinct from stroke merging; do not disable it merely because batching skips.
+
+**Exit:** focused tests and the full suite pass; the counterexample cannot publish
+the altered transparency; originals, shared resources, existing callers and
+output cleanup remain intact. Repairing this gate is independent of whether P16's
+approximate experiment succeeds.
+
+**Portable reconstruction recipe:** reuse `make_boox` from
+`tests/test_handwriting.py` to obtain a 200-by-200-point page and its `/FFT0` Form.
+Retain that Form's recognized opaque local `/GS` state and `HEADER`, but replace
+its body with these two separately painted round-capped strokes:
+
+```text
+10 w 20 20 m 80 80 l S
+10 w 20 80 m 80 20 l S
+```
+
+Add a separate mask Form with `/BBox [0 0 200 200]`, an empty resource dictionary,
+`/Group << /S /Transparency /CS /DeviceGray /I true >>`, and body
+`0.5 g 0 0 200 200 re f`. Reference it through a page ExtGState named `/Masked`
+whose `/SMask` is `<< /S /Luminosity /G MASK_FORM_REFERENCE >>`. Set page content
+to `q /Masked gs /FFT0 Do Q`; do not retain `make_boox`'s duplicate-layer page
+commands or add a local `/SMask /None` reset to the pen Form. Write/reload the PDF.
+
+Before repair, legacy `optimize(..., fast_handwriting=True)` batches the crossing
+and can publish a lighter interior intersection; its whole-page peak/mean guard
+does not check the edge band. The scoped proof must report inherited `/SMask`,
+and viewing-copy batching must leave it unchanged or reject it. Check PDFium and
+PDF.js for interior differences, then assert the repaired legacy route cannot
+publish them. Avoid fixed pixel-count assertions tied to one renderer version.
+This fixture is generated and needs no original personal PDF or chat attachment.
+
+### P16-B — Freeze the experiment and identify real opportunities
+
+1. Inventory generated sources with the existing characterizer. Separate
+   multi-vertex stroked paths, separately painted two-point segments, curves,
+   variable-width runs, filled outlines, image stamps, annotations and raster
+   content. Record reachable invocation counts, decoded path bytes, point/segment
+   counts, paint calls, local widths, transforms and opacity skip reasons.
+2. Define the first supported subset: recognized opaque positive constant-width drawing
+   runs with resolvable resources, transforms, clipping and paint order. Keep
+   device-dependent hairlines, variable widths, filled outlines, live annotation
+   rewriting and unresolved structures unchanged. A document with no supported opportunity reports that
+   result before expensive candidate rendering.
+3. For each document, freeze its immutable original and best fully verified exact
+   baseline; use the original if no exact candidate qualifies. Verify the baseline
+   under its own existing policy. Record all eligible exact baselines and selection
+   rules so choosing a weak comparator cannot manufacture an improvement.
+4. Freeze the treatment table below, quality policy, target viewing operation,
+   renderer versions, viewport/device scale, sample pages, tolerance ladder and
+   run budget before inspecting candidate timings. Characterize every page; timing
+   samples include page 1, source-only slow/dense pages and representative small
+   writing. Do not choose pages from candidate results.
+
+| Treatment | Purpose |
+| --- | --- |
+| Original | Source reference and absolute behavior |
+| Best accepted exact copy | Primary incremental-benefit comparator |
+| Existing opacity-qualified batching | Distinguish paint-call savings from point reduction |
+| Zero-tolerance experimental control | Prove the new path is a no-op when no reduction is requested |
+| Point reduction alone | Isolate fewer vertices from other transformations |
+| Point reduction plus qualified batching | Measure the combination, with the same packing settings |
+| Curve fitting, only after P16-F opens | Determine whether fewer curve commands actually beat line reduction |
+
+Generate each treatment from the immutable source using its declared recipe; do
+not repeatedly simplify a previous approximate output. Record packing separately
+and hold it constant across comparable treatments. Existing experimental/legacy
+output is a comparator, never an assumed quality-approved baseline.
+
+**Exit:** a versioned experiment manifest and an opportunity report explain every
+planned treatment, page, bound and skip. No-op, already-efficient, raster-only and
+unsupported inputs are represented, not silently removed from the denominator.
+
+### P16-C — Calibrate preservation of small writing before simplifying it
+
+1. Generate deterministic paths with known dimensions and expected topology:
+   straight oversampled lines; smooth arcs; cusps; open/closed loops; self-crossings;
+   narrow gaps; touching strokes; short pen lifts; zero-length dots; repeated points;
+   and widths spanning the supported range. Include dense and already-minimal cases.
+2. Add text-like and mathematical groups at several physical sizes: `e/c`, `o/c`,
+   `1/l`, `rn/m`, decimals, primes, accents, subscripts, exponents, minus/equality
+   signs, fraction bars, arrows and small looped letters. Treat these as labelled
+   shape controls, not an OCR-based guarantee about arbitrary handwriting.
+3. Exercise translation/scaling, rotation, shear, page boxes, `UserUnit`, clipped
+   extents, optional layers, shared calls and mixed image/text/OCR pages. Unsupported
+   transforms must skip explicitly rather than misapply a tolerance. Add resource
+   cycles, malformed paths, signatures, encrypted inputs and publication races.
+4. Build deliberately damaged controls: delete a decimal or short bar, open/close a
+   loop, join letters, break a stroke, move a superscript, thin/thicken ink, fade a
+   color and alter mask overlap. The checker must detect the labelled failures.
+   Exact structural rewrites and zero-tolerance controls must remain accepted.
+5. Reuse the existing local foreground metrics at all supported thresholds. Record
+   physical-unit displacement, width changes, matched coverage, missing/added
+   components, loops and joins, color/contrast and raster quantization. Foreground
+   is not automatically handwriting-only. The existing 0.1 mm skeleton matching
+   radius is a measurement parameter, not an acceptance tolerance.
+6. Select a small research ladder, initially zero, 0.01, 0.025 and 0.05 mm maximum
+   path deviation, further capped at 10% of the local minimum stroke width and
+   relevant gap. These are proposed calibration inputs, not validated safe presets.
+   Convert through page units and every invocation transform. If width, gap,
+   visibility or a conservative bound cannot be established, preserve that run.
+   Freeze the resulting policy before held-out testing; do not tune on failures.
+
+**Exit:** known harmful controls are rejected, exact controls pass and unresolved
+cases are exposed. Every supported tolerance has documented limits. Whole-page
+similarity, OCR agreement, average displacement and point counts cannot certify
+that small letters or mathematical meaning stayed the same.
+
+### P16-D — Implement bounded point reduction as a research treatment
+
+1. Start with redundant-point removal on supported constant-width line paths using
+   an error-bounded polyline algorithm. Preserve endpoints, closure/winding,
+   protected corners/cusps, dots, tiny components, crossings, narrow loop necks,
+   width changes and disjoint subpaths. Skip ambiguous regions instead of inventing
+   a pen-up, pressure or stroke identity from matching endpoints alone.
+2. Distinguish paths already painted as one connected stroke from BOOX exports
+   composed of separately capped/painted segments. First implement the former.
+   Reconstruct the latter only as a separately labelled treatment after proving
+   its supported grammar/continuity and bounding its actual stroked envelope,
+   including caps and joins. If no safe reconstruction is established, report no
+   opportunity for those exports; do not silently join segments to force a gain.
+3. Keep literal retained coordinates and widths; do not add global coordinate
+   rounding or pressure averaging. Copy resources before editing, retain external
+   drawing/layer order and preserve clipping. A Form shared with any unsafe context
+   stays unchanged in this first version; cloning is deferred to P16-H.
+4. Write a manifest for each changed run: source/output body hashes, resource and
+   invocation identities, original/result point and paint counts, protected indices,
+   tolerance/units, algorithm version and claimed error bound. Record skipped runs
+   and reasons. Read the saved PDF back; in-memory counts are insufficient.
+5. Verify independently from saved source/output paths. Bound deviation in both
+   directions, check stroke envelopes/caps/joins and preserved topology, and
+   compare unaffected drawing/resource graphs and PDF functions exactly. Do not
+   reuse the simplifier's own decision as its proof, blanket-ignore changed Forms,
+   normalize approximate geometry as exact, or call dense sampling a certified
+   continuous-path bound. Unproved bounds make a treatment ineligible.
+6. Test deterministic output, tolerance boundaries, transformed/shared invocations,
+   bounded work, no-op behavior, parser errors, interrupted writes and changed-source
+   rejection. The zero-tolerance control leaves target path bytes unchanged. Keep
+   the new treatment in the research adapter; no public flag is required yet.
+
+**Exit:** generated positive cases remove points within the independent bound;
+negative cases retain protected features or fail closed. Existing exact-mode tests
+still pass without altered thresholds. Fewer vertices are not yet a speed claim.
+
+### P16-E — Run the quality/performance experiment and decide whether to proceed
+
+1. Run focused regressions, then the full suite and existing exact/direct generated
+   compatibility checks. Produce fresh experimental fixtures and completion records.
+   New experimental runner stages must be implemented and documented before their
+   commands are presented as runnable; existing runners do not test simplification.
+2. Do a structural/syntax screen and coarse all-page appearance/feature check before
+   timing. Then release all readers/workers. Measure qualified treatments sequentially
+   before expensive crop/metric analysis, avoiding concurrent heavy work. Finish
+   full quality evaluation before issuing any recommendation.
+3. Measure standalone PDF.js operator preparation, cold-render CPU/wall time and
+   cached drawing separately. Use fresh processes and alternating/rotating treatment
+   order; three repetitions extend to five for noisy or close results. Never add
+   preparation and cold-render timings or include optimization/verification time as
+   viewing latency. Retain startup/load and optimization costs separately.
+4. Use the native Firefox protocol in [comparison.md](comparison.md#read-the-evidence)
+   for first visible render, cached page revisits and real page-width/100%/200%
+   canvas/detail redraws. Freeze hardware, browser/viewer identity and preferences.
+   CSS-scaled previews, no-op zooms and readiness polling are not completed redraw
+   timings. Native unavailability stays unavailable; standalone PDF.js cannot
+   establish a native-viewer result. Record sampled process-tree RSS as sampled
+   memory, not peak memory.
+5. On every changed page, compare PDFium at 144/288 DPI and PDF.js at width 1404.
+   Add print checks and true 576-DPI crops for every flagged/protected small-writing
+   region, plus predetermined unflagged controls. Compare in source coordinates
+   without alignment/warping, across the normal zoom range; record background and
+   alpha settings. Keep current exact gates for unchanged pages/structures. The
+   approximate policy is distinct from today's one-pixel edge-shading guard.
+6. Index all changed pages and flagged regions with source/candidate views, overlays,
+   local metrics and review status. A reviewer checks every changed page at readable
+   zoom, all small/protected marks and flagged crops. Missing coverage or ambiguous
+   writing stays unproven. Human review of changed writing is required for research
+   acceptance; no language model, OCR score or aggregate metric replaces it.
+7. After generated calibration, freeze the implementation/policy and test authorized
+   whole-document holdouts not used for tuning. Include dense notes with small math,
+   mixed/raster-heavy pages, shared resources and a low-opportunity control where
+   available. Report unavailable categories rather than fabricating corpus coverage.
+   A failed holdout returns to implementation and requires a new untuned holdout;
+   it must not be turned into a successful run by loosening its limits.
+
+**Planned go/no-go criteria:** quality and independent non-target preservation must
+pass before performance matters. Require at least 10% lower aggregate median
+cold-render CPU than the best accepted exact baseline, plus at least 10% and 50 ms
+lower median latency for the preregistered slow native viewing operation. Retain
+the existing no-regression limit (the greater of 10% or 50 ms) on each sampled
+cold/cached/zoom latency against both source and exact baseline. Show raw runs and
+uncertainty; unresolved timer/noise or missing native evidence cannot qualify.
+These are proposed P16 experiment gates, not changes to production selection.
+
+**Exit:** a completed, hash-bound report labels each treatment useful, no worthwhile
+gain, quality failure or unproven/unavailable. Report worst pages, eligible/changed/
+skipped coverage, point/paint changes, bytes, CPU, each latency operation, sampled
+memory and reviewer findings separately. An approximate copy that only saves bytes
+does not justify a rendering feature. If no treatment qualifies, close the experiment
+with that result and retain the exact path; do not build a public option by default.
+
+### P16-F — Conditional curve fitting
+
+Open this work only if P16-E shows that supported path processing remains material
+and an opportunity remains after line reduction. Fit bounded curves to eligible
+opaque runs, preserve the same protected features and independently verify the
+continuous geometry/stroked envelope. Curves are subdivided by renderers, so fewer
+PDF commands alone do not establish reduced rasterization work. Repeat the full
+P16-C/E controls, measuring against point reduction as well as the exact baseline.
+Do not add curve fitting if it offers no repeatable incremental viewing benefit.
+
+**Exit:** an independently checked curve treatment clears the same quality and
+performance gates, or is explicitly deferred/rejected with its limiting evidence.
+
+### P16-G — Conditional opt-in product integration and delivery
+
+1. Before changing product behavior, specify the separate approximate contract in
+   [design.md](design.md): supported content, calibrated limits, required human
+   review, unavailable/unproven states, performance gates and publication policy.
+   The initial contract requires hash-bound review of changed writing before
+   publication; automate approval only after a separately justified future policy.
+2. Add one explicit experimental selection through the existing CLI/API and reviewed
+   batch plan. Preserve defaults and old caller signatures; reject incompatible
+   combinations. Keep tolerance presets limited to qualified values. Distinguish
+   generation of private research artifacts from publishing a reviewed viewing copy;
+   unresolved quality produces reports only and retains the original/exact baseline.
+3. Version recipe/checkpoint/report contexts with algorithm, tolerance, baseline,
+   quality-policy, reviewer decision and renderer identities. Prove that approximate
+   artifacts cannot satisfy exact-mode recovery or reuse another tolerance's review.
+   Final source/output hashes, browser/function checks and exclusive publication
+   remain mandatory. Browser appearance evidence must explicitly use the new policy
+   while navigation/interactions retain exact checks; do not weaken shared checks.
+4. Exercise API/CLI compatibility, batch failure isolation, cancellation, recovery,
+   missing dependencies, source mutations, collisions, cleanup and reports-only
+   outcomes. Align the new mode's scope in AGENTS.md and README, relevant launchers/
+   GUI labels, tests, fixture runners and release packaging together while retaining
+   the exact-mode rules. Disclose modified geometry and reviewed coverage;
+   do not describe approximate output as lossless or universally word-preserving.
+5. Run the full suite, new calibrated fixture matrix, all-page/print/detail/function
+   and code-driven browser checks, then a fresh authorized holdout. Package to a new
+   destination with the existing builder, verify maintained-source/ZIP/skill bytes,
+   and test a clean extracted install. Honor any still-deferred native GUI work;
+   list it as pending rather than substituting generated render success.
+
+**Exit:** a supported, explicit option has a documented preservation/review contract,
+repeatable measured benefit, isolated recovery, verified packaging and honest limits.
+Do not promote it to a default as part of P16.
+
+### P16-H — Additional features, only when evidence identifies a remaining cost
+
+| Deferred feature | Entry condition and required additional tests |
+| --- | --- |
+| Per-invocation Form cloning | Shared safe/unsafe Forms exclude material opportunities; prove copy-on-write resource identity, unchanged unsafe invocations, clipping/layers and bounded size growth |
+| Variable-width / pressure-aware reduction | Constant-width treatment leaves a measured bottleneck; independently bound the full width envelope, pressure extrema, dots and joins without averaging away features |
+| Filled-outline simplification | Outline-heavy supported files remain slow; preserve winding, holes, self-intersections, narrow counters and fill rules, with a separate calibrated geometry proof |
+| Transparent-stroke simplification | A separate compositing-preservation method is demonstrated; add overlapping highlights, masks, isolated/knockout groups, blend/color spaces and multiple backgrounds; fixing P16-A does not authorize this |
+| Automatic adaptive selection or approval | Held-out evidence supports routing and the explicit review/publication policy; prove no false-safe decision on known harmful controls, budgeted selection, honest uncertainty and exact fallback |
+
+These are conditional backlog items, not bundled commitments. Each receives its
+own implementation scope, calibration controls and measured exit before activation.
+Do not add rasterization, semantic rewriting or a broad optimizer tournament to
+make a point-reduction experiment appear successful.
+
+### P16 execution commands and evidence basis
+
+The commands below exist today and verify existing behavior; choose fresh
+`P16_EXACT_NEW_NAME` and `P16_DIRECT_NEW_NAME` directories. They do not implement or
+qualify the planned approximate treatment. After each executable change, run the
+new behavior's focused regressions before these broader checks:
+
+```powershell
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m unittest discover -s tests -p 'test_*.py'
+.\.venv\Scripts\python.exe tests/run_compatibility.py fixtures --output audit-output/P16_EXACT_NEW_NAME
+.\.venv\Scripts\python.exe tests/run_compatibility.py browser --output audit-output/P16_EXACT_NEW_NAME
+.\.venv\Scripts\python.exe tests/run_quick_compatibility.py fixtures --output audit-output/P16_DIRECT_NEW_NAME
+.\.venv\Scripts\python.exe tests/run_quick_compatibility.py render --output audit-output/P16_DIRECT_NEW_NAME
+.\.venv\Scripts\python.exe tests/run_quick_compatibility.py browser --output audit-output/P16_DIRECT_NEW_NAME
+```
+
+Before P16-E, add the research adapter, generated approximate fixtures, calibrated
+verifier and documented commands beside the existing maintained runners. Store a
+completion checklist for each experiment: manifest/hashes; calibration and negative
+controls; saved-geometry/non-target checks; renderer coverage; raw timings; local
+review; terminal decision. Run summaries enter this roadmap only after completion,
+with portable generated evidence and explicit limits; private details stay ignored.
+
+Evidence behind the plan:
+
+- [Current handwriting transformations](../handwriting.py) retain segments and
+  separate opacity proof from exact inlining; [candidate generation](../viewing_copy.py)
+  supplies scoped eligibility. These are the implementation baseline, not a point
+  simplifier. [Historical measurements](validation.md#refreshed-rendering-measurements)
+  show why storage savings cannot establish viewing gains.
+- [PDF.js path construction/painting](https://github.com/mozilla/pdf.js/blob/master/src/display/canvas.js)
+  and [MuPDF curve subdivision](https://github.com/ArtifexSoftware/mupdf/blob/master/source/fitz/draw-path.c)
+  support the mechanism hypothesis: fewer path commands may remove work, while
+  curve rasterization and unchanged compositing still require measurement.
+- [BOOX Note Optimizer's decimation algorithm](https://github.com/nrontsis/boox-note-optimizer#decimation-optimization-algorithm)
+  demonstrates attribute-aware point reduction with protected corners/endpoints
+  for `.note` files. It does not establish a PDF speedup, compatible pressure data
+  in arbitrary PDFs or semantic preservation for this project.
+- [Comparison evidence limits](comparison.md#read-the-evidence) distinguish local
+  foreground findings from handwriting-only/semantic proof and standalone PDF.js
+  from native viewer timing. P16 must preserve those distinctions.
+
+## P17: notes to LaTeX study-copy research
+
+**Status: researched/planned 2026-11-04; no converter implemented or notes sent to
+a recognition service.** The local companion and selected upstream implementation
+files were inspected read-only. Compiler version probes establish tool availability,
+not successful compilation of a notebook. Project claims and upstream sample
+results below are not independently established accuracy or performance results.
+
+The proposed output is an editable LaTeX project and a newly typeset study PDF.
+Its purpose is readable/searchable notes with potentially less handwriting drawing
+work. The rendering benefit is a hypothesis until equivalent content is reviewed
+and measured. Original page layout, page count, handwriting, editing identity and
+interactive features are not automatically reproduced by retypesetting. Preserve
+the original separately and explicitly report what the derivative carries forward.
+
+### P17-A — Define the contract and reuse the local companion selectively
+
+The inspected `pdf-text-extractor` currently has:
+
+- `pdf_extract.py`: `read_pages` uses pypdf text extraction; `extract` sends only
+  pages classified as text-poor to Tesseract; `ocr_pages` renders with PDFium and
+  adds an invisible text layer; `save_outputs` writes plain text and HTML.
+- `pdf_app.py`: sequential document work on a background thread with a queue to
+  the Tk UI. These are useful orchestration patterns, not math transcription.
+- A 20-alphanumeric-character page heuristic and prose cleanup including joining
+  line-end hyphens. A printed page with substantial extracted text can still have
+  unrecognized handwritten equations. Do not reuse this heuristic to skip math
+  recognition or apply prose cleanup to raw LaTeX/symbols.
+
+Keep the companion's existing search/extraction behavior intact. Start with a
+research adapter or a separately selected output path, not a replacement for the
+original extractor or the optimizer's exact CLI. Do not copy its whole application
+into this repository, hard-code a personal checkout path, or assume its ordinary
+write/error behavior meets this repository's exclusive-publication requirements.
+Record local source hashes and caller-selected paths only in ignored provenance.
+The companion is not vendored or changed by this research update.
+
+For the first pilot, choose one recognition backend and a small trusted template.
+Output must include `notes.tex`, `notes.pdf` when compilation succeeds, an `assets/`
+directory for retained figures, source-page/region mapping, compiler logs and a
+content-review report. Include exact compiler/package/font identities and a build
+command with portable relative asset paths. Unreviewed artifacts are drafts; do
+not label them verified viewing copies or silently replace a user's original.
+
+**Exit:** document the supported input/output contract and source-to-output coverage
+rules. Preserve original wording, notation, corrections, color meaning and figure
+content unless the user explicitly chooses a disclosed editorial transformation.
+Unknown symbols remain marked/unresolved; the system must not solve equations,
+complete proofs or silently guess missing words.
+
+### P17-B — Implementation lessons from existing projects
+
+| Project and inspected evidence | Reusable idea | Limit or adaptation required |
+| --- | --- | --- |
+| [notes2latex pipeline](https://github.com/advaypakhale/notes2latex/blob/6bbc18067e79341f7e665e2ec4e50caedc94f998/src/agent/graph.py) and [compiler](https://github.com/advaypakhale/notes2latex/blob/6bbc18067e79341f7e665e2ec4e50caedc94f998/src/compiler/compiler.py) | Sequential page recognition, rolling context/open environments, bounded generate-compile-repair loop and structured compiler errors | Compile success checks syntax, not transcription; restrict repairs to logged syntax changes and keep content review separate |
+| [notes2latex-hybrid context](https://github.com/Tools-sammeng5232/notes2latex-hybrid/blob/b0a5d8537620e0cae82bd0cce8e2ba10a6b980a6/n2lh/pipeline/context.py), [strips](https://github.com/Tools-sammeng5232/notes2latex-hybrid/blob/b0a5d8537620e0cae82bd0cce8e2ba10a6b980a6/n2lh/pipeline/tiles.py) and [figures](https://github.com/Tools-sammeng5232/notes2latex-hybrid/blob/b0a5d8537620e0cae82bd0cce8e2ba10a6b980a6/n2lh/pipeline/figures.py) | Separate context, dense-page crops and source-figure placement from recognition | Measure whole-page versus crop quality per backend; preserve small marks at crop edges and independently review figure bounds; upstream thresholds are not calibrated for our notes |
+| [mathocr](https://github.com/huy209vn/mathocr) | Uses Xournal++ source strokes for region extraction and tests content errors separately from compilation; detects empty/repetitive output | Its `.xopp` input and author-reported model/crop results do not establish arbitrary PDF accuracy; reliable source-stroke separation may be unavailable in exported PDFs |
+| [Marker](https://github.com/datalab-to/marker#json) | Page/block JSON with structure, equations and extracted images suggests a reviewable intermediate representation | Markdown/JSON extraction is not a complete `.tex` compilation path; independently qualify handwritten math and retain source-region evidence |
+| [pix2tex / LaTeX-OCR](https://github.com/lukas-blecher/LaTeX-OCR) | A formula-image-to-LaTeX component with a Python interface | It is not a whole-notebook layout/prose/figure converter; the README leaves handwriting support qualified and asks users to check predictions |
+
+Two concrete upstream behaviors must not become our defaults:
+
+- The [notes2latex transcription prompt](https://github.com/advaypakhale/notes2latex/blob/6bbc18067e79341f7e665e2ec4e50caedc94f998/src/agent/prompts/transcribe.md)
+  deliberately reflows meaning, omits crossed-out material and does not reproduce
+  color visually. Our contract must explicitly choose how these marks are retained;
+  do not import that prompt as if it were a literal archival transcription.
+- The hybrid project's [engine table](https://github.com/Tools-sammeng5232/notes2latex-hybrid/blob/b0a5d8537620e0cae82bd0cce8e2ba10a6b980a6/README.md#engines)
+  identifies its heuristic mode as a compiling structure skeleton, not recognition;
+  hybrid mode needs a real checkpoint or VLM for content. Compilation failure alone
+  cannot decide which pages need escalation: empty or incorrect math may compile.
+
+Tesseract itself [documents](https://tesseract-ocr.github.io/tessdoc/FAQ.html#can-i-use-tesseract-for-handwriting-recognition)
+that it is designed for printed text and handwriting works poorly. Existing
+plain-text output wrapped in a LaTeX template is a useful typed-text control, not a
+handwritten-math recognizer. [Nougat](https://github.com/facebookresearch/nougat#faq)
+was trained on arXiv/PMC scientific papers; do not infer handwritten-note quality
+from that domain. Pin code, model weights and their separate license requirements
+before selecting or redistributing a backend; keep ML dependencies out of routine
+exact optimization. A small sequential controller can reuse these ideas without
+adopting an upstream web app, database or agent framework.
+
+**Exit:** select one backend for a controlled pilot with documented local/cloud
+requirements, model/prompt/preprocessing identities and known missing capabilities.
+Do not choose from published benchmark scores or compiler pass rates alone.
+
+### P17-C — Build a traceable recognition-to-source pipeline
+
+1. Snapshot and hash the authorized source; reject unsupported protected inputs
+   consistently with repository policy. Inventory extracted text, handwriting,
+   formulas, tables, diagrams, marginalia and layers on every page. Existing PDF
+   text is evidence, not proof that handwriting recognition can be skipped.
+2. Render source pages/crops with declared resolution, color and geometry mapping.
+   Store source page, region bounds, reading order and crop hash for each block.
+   Compare full-page and region treatments on held-out samples; neither strategy
+   is universally superior. Handle overlap without dropping/duplicating boundary
+   words, integral limits, fraction bars or table rows.
+3. Use a small intermediate record for prose, inline/display math, table, figure
+   and unresolved content. Keep raw recognition alongside corrected LaTeX and
+   source anchors. Escape prose as text; retain equations in a validated math block
+   instead of feeding them through the extractor's prose normalization.
+4. Carry bounded previous-page context and environment state to improve continuity,
+   but require new content to have source evidence. Detect missing/duplicated pages,
+   empty outputs, repetitive tokens and invented continuation before compilation
+   can report success. Confidence/agreement flags prioritize review, not approval.
+5. Preserve source diagrams as reviewed crops/assets in the first version rather
+   than inventing TikZ replacements. Verify coverage, arrows, labels, color and crop
+   edges. Prefer independently verified vector crops when supported; otherwise
+   disclose raster resolution. This derivative policy is separate from the exact
+   viewing-copy prohibition on rasterizing handwriting.
+6. Generate a minimal document with stable source anchors, editable math and a
+   source-page index. Report changed pagination/layout and any source bookmarks,
+   links, attachments, comments/forms or layers not reproduced in the derivative.
+   Do not apply source/destination page-number equality to a reflowed document.
+
+**Exit:** every source region has a transcribed, retained-as-asset or unresolved
+record; there are no silently missing blocks. Revisions invalidate review of the
+changed block and any affected context-dependent downstream output.
+
+### P17-D — Compile code-generated LaTeX reproducibly
+
+Use an installed TeX toolchain through an argument-array subprocess with a timeout,
+owned-process cleanup and a fresh work directory. [latexmk](https://ctan.org/pkg/latexmk)
+automates the required compile sequence; the inspected upstream compiler writes
+UTF-8 `.tex`, runs it and parses the log. XeLaTeX is an initial candidate when
+Unicode text is required; package/font support still needs a real compile test.
+Keep logs and both generated/repaired sources rather than copying the hybrid
+wrapper's automatic log deletion. Bound repair attempts and expose each content
+diff; a repair that deletes equations or substitutes a summary is a failure.
+
+[Tectonic](https://tectonic-typesetting.github.io/book/latest/v2cli/compile.html)
+is an alternative standalone compiler with `--keep-logs`, `--only-cached` and
+`--untrusted` controls. Evaluate it only if the chosen template/deployment needs it;
+there is no need to install a second engine to establish the pilot.
+
+Compiler success is independent of content correctness. Model-generated TeX is
+untrusted code: disable shell escape and automatic project/user compiler configs,
+restrict file access to the job and pinned TeX resources, and use bounded processes.
+A temporary folder, regex cleanup or disabled shell escape alone is not complete
+isolation. Provision packages separately; do not allow recognition output to trigger
+unreviewed package installs or arbitrary network access. Local recognition and cloud
+recognition are separate choices; remote uploads/cost require explicit authorization.
+Do not import credentials or provider settings from another application's files.
+
+**Exit:** generated known-good prose/math/figure and cross-page fixtures compile;
+missing packages/fonts, invalid TeX, timeout, harmful commands, malformed paths and
+failed repair have explicit outcomes. A clean rebuild from the exported `.tex` and
+assets works with the recorded toolchain without developer-specific paths. Check
+final-pass status, nonempty PDF, readable pages, missing glyphs, unresolved refs and
+clipped/overflowing equations; an old PDF left behind is never a fresh success.
+
+### P17-E — Qualify transcription, figures and reading performance separately
+
+1. Start with generated known-source prose, formulas and diagrams, then authorized
+   real handwriting with manually checked transcription. Include tiny subscripts,
+   signs, decimal points, Greek/Latin confusions, matrices, integral bounds, units,
+   crossed-out corrections, arrows/margins, colored annotations, mixed printed/ink
+   pages, tables and multi-page equations. Printed controls alone cannot qualify
+   a handwriting model. Freeze tuning and hold-out sets before model selection.
+2. Compare page/region coverage and actual words/symbols against references. Report
+   prose character/word errors, exact or carefully normalized formula matches,
+   symbol/sign/subscript errors, omissions, added content, order and diagram/label
+   coverage separately. Keep both per-region and document-weighted results;
+   cosmetic LaTeX normalization must not hide a changed mathematical expression.
+3. Add negative controls that compile: blank output, placeholders, missing equation,
+   wrong inequality/sign/exponent, duplicated proof, invented sentence, missing
+   diagram or shifted arrow label. Every such labelled content failure must remain
+   rejected/unresolved even if the compiler and PDF renderer succeed.
+4. Require side-by-side review of every changed content block and figure against
+   its source crop, with explicit unresolved markers. Whole-page image similarity
+   cannot validate reflowed typesetting. Reviewer acceptance binds source/model/
+   prompt/`.tex`/asset/PDF hashes; later repair/reflow invalidates affected decisions.
+5. Only after content/coverage qualification, measure first render, cached revisit
+   and real zoom redraw in the existing standalone and native viewer protocols.
+   Compare original, best exact copy and typed copy using matched source-content
+   spans, not nominal page numbers when reflow changes pagination. Include retained
+   diagram assets. Report conversion/compilation time, model runtime/API cost,
+   review effort, bytes and viewing latency independently; a content-empty or
+   simplified-summary PDF cannot qualify as faster notes.
+
+**Exit:** a completed hash-bound report distinguishes compile success, content
+acceptance, asset coverage and measured viewing benefit. Unavailable native timing
+stays unavailable. The pilot may conclude that transcription/review costs outweigh
+viewing benefits; no speed or semantic-preservation promise is made in advance.
+
+### P17-F — Conditional companion/product integration
+
+Only after P17-C/E demonstrate useful reviewed outputs, define a separate explicit
+study-copy contract in `design.md`, then add one reviewed CLI/API/GUI selection.
+Decide whether the maintained entry point belongs in the companion or an optimizer
+adapter; keep one implementation and preserve existing text/HTML/searchable-PDF
+outputs. ML/TeX dependencies are optional and isolated from exact mode. Add source
+mapping/review, cancellation, progress, budget/cost, resume invalidation, exclusive
+bundle publication and fresh-install/rebuild tests. Templates and assets ship with
+their source; no personal checkout paths, credentials or notes enter releases.
+
+Do not run the existing exact/geometry publication gates with weakened thresholds
+or put typeset output in an exact candidate manifest. Any future automatic selection
+must distinguish verified viewing copy, approximate geometry and reviewed typeset
+study copy, including content-review effort and unpreserved PDF functions.
+
+**Exit:** the user can deliberately export/rebuild `.tex` plus assets and PDF with
+accurate status, review coverage and limits. Drafts and accepted study copies remain
+distinct; the immutable original is always available.
 
 ## Scope and fixed boundaries
 
@@ -514,6 +1189,19 @@ Suggested module names above do not imply implemented APIs.
   browser behavior once before timing, reuse that fresh source-side evidence only
   within the invocation, and report qualified candidates that fail final acceptance
   separately from a genuine no-improvement result.
+- [ ] **P16 — Approximate handwriting research and conditional product option.**
+  Follow [P16-A through P16-H](#p16-approximate-handwriting-research-and-conditional-product-option):
+  P16-A (opacity repair & regression), P16-B (manifest & opportunity), and P16-C
+  (calibration controls & small-writing verifier) completed and verified 2026-11-05;
+  P16-D bounded point reduction in research and subsequent quality/performance
+  experiments remain queued. Existing exact modes and their gates stay unchanged;
+  no meaningful gain is a valid exit.
+- [ ] **P17 — Notes to LaTeX study-copy research.** Follow
+  [P17-A through P17-F](#p17-notes-to-latex-study-copy-research): reuse the companion's
+  ingestion/UI patterns, qualify a math-aware recognizer, preserve figures and
+  source-region coverage, export/rebuild `.tex` plus assets and PDF, and review
+  mathematical content independently of compiler success. This is a separately
+  selected derivative workflow; compare viewing benefit only after content checks.
 
 ### P0 progress notes — 2026-10-18
 
@@ -1104,6 +1792,39 @@ new optimizer settings. P12 retains broader accessibility and dependency-preflig
   sequential before/after runtime runs are completed. No speedup is claimed; no
   private PDF was used.
 
+### P13 direct verification follow-up — 2026-11-04
+
+- Direct high-resolution, print and cropped-detail comparisons now reuse one owned
+  PDFium document pair, rather than reopening both files for each sampled check.
+  Renderer settings, strip memory bounds and exact appearance gates stay unchanged;
+  this adds no persistent evidence cache or command-line option.
+- A generated regression compares reused and fresh-document evidence at 288 DPI,
+  print mode and cropped 576 DPI, counts two document opens and verifies closure
+  after success and appearance failure. End-to-end speed improvement remains
+  unmeasured; P13 and P14 remain open.
+- Validation: Ruff and all 214 regression tests pass (one Windows symlink
+  permission skip). Fresh 27-page matrix and three-page interaction fixtures
+  produce verified direct copies and pass all-page PDFium/PDF.js, high-resolution,
+  print and cropped-detail comparisons. Native-browser qualification is pending:
+  headless Zen exited with code 1 at startup. No private corpus or release package
+  was exercised for this follow-up.
+
+### P13 qualification follow-up — 2026-11-04
+
+- Three sequential before/after pairs on the generated three-page interaction
+  fixture all published verified copies. Only the direct document-reuse change
+  was toggled. Median high-resolution/print/detail time was 0.924 s before and
+  0.848 s after; full-job median was 3.689 s before and 3.812 s after. This small
+  fixture establishes no overall speed gain and does not qualify P13's broader
+  worker/reuse performance claim.
+- A live generated thorough/qpdf job hit a deliberately tiny time budget, then
+  reselection recovered the same output/checkpoint and completed a fresh source
+  browser probe, balanced timing and honest reports-only no-improvement result.
+  Six timing-run outputs and the extracted-package output match report hashes.
+- Native selector/two-file/timeout-resume qualification remains open: attaching
+  the Computer Use helper to the optimizer's pythonw window was not approved.
+  P15's historical two-file native acceptance remains recorded separately.
+
 ### Bundled qpdf refinement — 2026-10-27
 
 - The Windows ZIP and installed skill now include the qpdf 12.4.2 runtime and license.
@@ -1208,6 +1929,133 @@ Follow [testing.md](testing.md) and the comparison-specific checks in
 [comparison.md](comparison.md#validation). A future product-mode/API or external
 publication-policy change needs explicit design documentation and its own tests.
 Do not weaken existing guards to make a candidate qualify.
+
+### P13/P14 code-only continuation — 2026-11-04
+
+- Computer Use is excluded by user instruction. Native qualification remains
+  unverified and is not a blocker for independent implementation or automated tests.
+- Source-only browser probes now place disposable profiles in system temporary
+  storage, so readable originals do not also require writable parent folders.
+- The opacity walk carries enclosing groups/appearance protection into children,
+  while evaluating resettable transparency state at each actual invocation.
+  A parent's alpha can be reset before a child call; an inherited mask that is not
+  reset and an enclosing transparency group still prevent batching.
+- Batched candidates retain a successful rewrite when exact inlining finds no
+  supported container, matching direct mode's existing optional-inlining behavior.
+  Unexpected inlining errors still reject the candidate. Regression coverage
+  exercises this nested reset through saved geometry and both renderers, and
+  asserts unsafe pages remain exact.
+- Validation: Ruff and all 224 regression tests pass (one Windows symlink
+  permission skip). Fresh generated matrix, interaction and mixed-transparency
+  fixtures pass PDFium/PDF.js verification and code-driven isolated-browser
+  checks. The nested reset regression also passes all-page high-resolution/print
+  and cropped-detail checks. No Computer Use or private PDFs were used.
+
+### P14 implementation follow-up — 2026-11-04
+
+- Scoped batching now walks reachable page/Form invocations with graphics-state
+  stacks, cycle/work bounds and effective mask/blend/alpha/overprint checks. A
+  shared safe/unsafe Form remains unchanged. Annotation appearances and Forms
+  referenced through fonts, patterns or graphics-state resources are conservatively
+  protected. The scoped pass retains duplicate-layer draws. Counts and stable skip
+  reasons appear in candidate evidence; no opportunity exits before rendering.
+- Thorough runs probe source browser viability once after preservation and before
+  balanced timing. Source failure produces an explicit reports-only blocker and
+  skips timing/candidate browser retries. Successful source traces remain local to
+  the invocation; candidate traces are fresh and compared under unchanged gates.
+  Checkpoint resumes repeat the source probe. Direct mode is unaffected.
+- Regression coverage includes unrelated groups, inherited masks/blends/alpha/
+  overprint, shared safe/unsafe invocations, state restoration, mask/annotation
+  references, cycles, exact trace mutations, source failure before timing and
+  uncached probes on resume. Ruff and 221 tests pass (one Windows symlink skip).
+- Fresh 27-page matrix, three-page interaction and four-page mixed-transparency
+  fixtures pass PDFium/PDF.js verification and isolated-browser checks. The mixed
+  fixture additionally passes all-page high-resolution/print and cropped-detail
+  checks, preserves unsafe stream bytes and records one changed safe Form.
+- Release packaging verifies 55 ZIP members and 31 skill runtime files against
+  maintained sources. The extracted package publishes a hash-valid smaller direct
+  interaction-fixture copy with all required renderer checks.
+- P14 remains open for the authorized holdout's full acceptance run; no private
+  PDF was exercised in this follow-up. Generated-fixture success is not a claim
+  about a real document's preservation or performance.
+
+### P16-A through P16-C implementation notes — 2026-11-05
+
+- **P16-A legacy opacity repair and duplicate layer safety:** Reused the shared
+  scoped opacity proof (`batching_contexts`) for legacy `rewrite_handwriting`
+  callers when `eligible_forms is None`. Conservative duplicate layer removal
+  now verifies the target page has no `/Group` and the referenced layer Form
+  belongs to `eligible_forms`. Added generated crossing-stroke regression with
+  inherited `/SMask` demonstrating that the legacy peak/mean check (`peak <= 96`,
+  `mean <= 1.5`) misses interior compositing changes, while PDFium and PDF.js
+  detect differences outside the edge band. Verified the repaired legacy route
+  rejects unsafe jobs before publication for both API (`optimize(..., fast_handwriting=True)`)
+  and CLI (`optimize_pdf.py ... --fast-handwriting`), preserving original bytes
+  without output. Unrelated safe Forms in mixed documents remain eligible and are
+  batched into single stroke calls, while exact inlining remains operational and
+  distinct from stroke merging under transparency.
+- **P16-B experiment manifest & opportunity reporting:** Implemented
+  `tools/experiment_manifest.py` (schema `p16-b-v1`) and enhanced
+  `tools/pdf_characterize.py`. Analyzes drawing geometry by separating
+  multi-vertex stroked paths, separately painted two-point segments, curves,
+  variable-width runs, filled outlines, image stamps, annotations, raster
+  content, decoded path bytes, point counts, paint calls, local widths and skip
+  reasons. Defines the first supported subset (recognized opaque positive
+  constant-width drawing runs with resolvable resources, transforms, clipping
+  and paint order). Reports `no supported opportunity` before candidate rendering
+  for raster-only, text-only or unsupported inputs. Freezes the immutable baseline
+  comparator and the 7-treatment table (Original, Best accepted exact copy,
+  Existing opacity-qualified batching, Zero-tolerance experimental control,
+  Point reduction alone, Point reduction plus qualified batching, Curve fitting)
+  with complete denominator tracking.
+- **P16-C small-writing preservation calibration:** Implemented
+  `tools/calibration_controls.py`. Generates deterministic geometric topology
+  controls (oversampled/minimal lines, arcs, cusps, open/closed loops,
+  self-crossings, narrow gaps, touching strokes, short pen lifts, zero-length
+  dots, repeated points, width ladder) and symbolic text/math shapes at physical
+  sizes (`e/c`, `o/c`, `1/l`, `rn/m`, decimals, primes, accents, sub/superscripts,
+  minus/equals, fraction bars, arrows, small loops). Calibrated verifier reuses
+  `tools/comparison_metrics.py` local foreground metrics, enforcing the calibration
+  ladder (0, 0.01, 0.025, 0.05 mm) dynamically capped at 10% of local minimum
+  stroke width and relevant gap. Proves detection and rejection of all 10 labeled
+  damaged controls (`deleted_decimal`, `deleted_fraction_bar`, `opened_loop`,
+  `closed_loop`, `joined_letters`, `broken_stroke`, `moved_superscript`,
+  `thinned_ink`, `thickened_ink`, `faded_color`) while exact and zero-tolerance
+  controls pass. Unsupported shear and non-uniform transforms skip explicitly.
+- **Validation:** 236 regression tests pass (one Windows symlink skip). Full
+  generated matrix and interactive compatibility checks pass all 27 matrix pages,
+  3 interactive pages and 4 mixed-transparency pages through PDFium and PDF.js.
+  Ruff passes with 0 errors across the repository.
+- **Pending gates:** P13/P14 native viewer and real-holdout qualification stay
+  open. Headless Zen browser checks exit with code 1 in headless sandbox mode;
+  human review and real input gates remain pending. P16-D bounded point reduction
+  remains research-only and is not enabled as a public mode.
+
+### P16-A through P16-C review repairs — 2026-11-09
+
+- P16-A now protects Forms available to Type 3 glyphs that use caller or page
+  resources. The masked-glyph regression exercises both legacy and thorough
+  candidate generation.
+- P16-B uses the graphics state at each paint to count eligible runs, points and
+  paint calls. Hairlines and unsupported transforms remain in the inventory.
+  An exact-copy comparator requires its adjacent production verification report
+  and matching source and output hashes.
+- P16-C writes fixtures exclusively in an empty directory. Each damaged control
+  shares the reference layout and the test asserts its expected diagnosis.
+  Zero tolerance requires exact pixels. Color checks use RGB differences, and
+  shear checks use normalized axes. Approximate preservation on held-out inputs
+  remains open.
+- Release builds include the inspection modules and a fixed list of public
+  documents. The extracted ZIP has a code-driven inspection smoke test.
+
+### P11 follow-up — page reuse for revised Direct exports
+
+Replacing a PDF at its original path starts a new run. Direct can reuse a
+completed 144-DPI PDFium comparison for a self-contained page only when the
+source and candidate render inputs both match prior evidence. Page positions
+may change. Navigation, geometry, PDF.js and sampled higher-resolution checks
+run on the revised copy. This is separate from whole-document checkpoint
+recovery. See [design.md](design.md#direct-profile-cli-token-quick).
 
 ## Documentation maintenance
 

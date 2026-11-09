@@ -344,6 +344,42 @@ class DirectOptimizationTests(unittest.TestCase):
         self.assertEqual(report['transformations']['inlined_form_calls'],0)
         self.assertIn('safe deduplication',report['pipeline'])
 
+    def test_replaced_source_reuses_only_unchanged_page_comparison(self):
+        from batch_workflow import plan_batch
+        from test_inline_handwriting import fixture
+
+        def run():
+            job, = plan_batch([self.source], profile='quick')
+            job.output.parent.mkdir()
+            optimize_direct(job.source, job.output, expected_source_sha256=job.source_sha256)
+            report_path = job.output.with_suffix('.json')
+            report = json.loads(report_path.read_text(encoding='utf-8'))
+            self.assertEqual(report['status'], 'optimized', report.get('reason'))
+            return report_path, report
+
+        first_path, first = run()
+        writer, _, _ = fixture()
+        writer.pages[1].rotate(90)
+        writer.insert_blank_page(width=75, height=80, index=0)
+        writer._add_object(TextStringObject('obsolete editor recovery data '*3000))
+        replacement = self.root/'replacement.pdf'
+        writer.write(replacement)
+        replacement.replace(self.source)
+
+        second_path, second = run()
+        self.assertNotEqual(first['source_sha256'], second['source_sha256'])
+        self.assertEqual(second['revision_evidence']['pdfium_pages_reused'], [2])
+        self.assertEqual([row.get('reused_revision', False) for row in second['verification']['pages']],
+                         [False, True, False])
+        self.assertTrue(all(row['exact'] for row in second['pdfjs_all_pages']))
+        self.assertEqual(len(second['pdfjs_all_pages']), 3)
+
+        for path in (first_path, second_path):
+            with path.open('ab') as report:
+                report.write(b'\n')
+        _, third = run()
+        self.assertEqual(third['revision_evidence']['pdfium_pages_reused'], [])
+
     def test_unexpected_inlining_error_is_not_treated_as_ineligible(self):
         with patch('handwriting.inline_handwriting',side_effect=ValueError('unexpected transform error')):
             optimize_direct(self.source,self.output)

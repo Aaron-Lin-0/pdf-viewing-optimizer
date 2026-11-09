@@ -1,8 +1,14 @@
 """Accessible Windows picker for sequential verified viewing-copy jobs."""
 
+from pathlib import Path
 import queue
+import sys
 import threading
 import time
+
+ROOT = Path(__file__).resolve().parent
+if str(ROOT / 'tools') not in sys.path:
+    sys.path.insert(0, str(ROOT / 'tools'))
 
 from batch_workflow import (BatchController, OPTIMIZER_LABELS, PROFILE_LABELS, confirmation_text, dependency_diagnostics,
                             dependency_report, plan_batch, resource_summary, system_resources)
@@ -96,6 +102,7 @@ def main():
         task_token+=1;token=task_token
         setup_ready=False
         set_status('Checking setup…');setup_button.configure(state='disabled');choose_button.configure(state='disabled')
+        inspect_button.configure(state='disabled')
         profile={label:key for key,label in PROFILE_LABELS.items()}[profile_choice.get()]
         profile_selector.configure(state='disabled');optimizer_selector.configure(state='disabled')
         worker_selector.configure(state='disabled');parallel_selector.configure(state='disabled')
@@ -104,15 +111,38 @@ def main():
             except Exception as exc:events.put(('setup failed',(token,show_dialog,exc)))
         threading.Thread(target=work,daemon=True).start()
 
+    def inspect_pdf():
+        nonlocal task_token
+        if not setup_ready:
+            messagebox.showerror('Setup needs attention','Run Check setup and follow the listed fix before inspecting PDFs.',parent=root)
+            return
+        selected=filedialog.askopenfilename(parent=root,title="Choose PDF to inspect drawing opportunities",
+                                            filetypes=(("PDF files","*.pdf"),))
+        if not selected:return
+        task_token+=1;token=task_token
+        set_status('Inspecting drawing opportunities…')
+        write(f"\nInspecting drawing opportunities: {selected}…")
+        choose_button.configure(state='disabled');setup_button.configure(state='disabled')
+        inspect_button.configure(state='disabled');profile_selector.configure(state='disabled')
+        optimizer_selector.configure(state='disabled');worker_selector.configure(state='disabled')
+        parallel_selector.configure(state='disabled')
+        def work():
+            try:
+                from experiment_manifest import analyze_drawing_opportunity
+                report=analyze_drawing_opportunity(selected)
+                events.put(('inspection complete',(token,selected,report)))
+            except Exception as exc:events.put(('inspection failed',(token,selected,exc)))
+        threading.Thread(target=work,daemon=True).start()
+
     def choose():
         nonlocal task_token
         if not setup_ready:
-            messagebox.showerror('Setup needs attention','Run Check setup and follow the listed fix before selecting PDFs.')
+            messagebox.showerror('Setup needs attention','Run Check setup and follow the listed fix before selecting PDFs.',parent=root)
             return
         selected=collect_pdf_paths(
             lambda:filedialog.askopenfilenames(parent=root,title="Choose PDFs to add",filetypes=(("PDF files","*.pdf"),)),
             lambda count:messagebox.askyesno('Add PDFs from another folder?',
-                f'{count} {"PDF" if count==1 else "PDFs"} selected. Add PDFs from another folder?'))
+                f'{count} {"PDF" if count==1 else "PDFs"} selected. Add PDFs from another folder?',parent=root))
         if not selected:
             return
         profile={label:key for key,label in PROFILE_LABELS.items()}[profile_choice.get()]
@@ -121,15 +151,15 @@ def main():
         if profile=='thorough':
             try:workers=worker_count.get()
             except tk.TclError:
-                messagebox.showerror('Verification workers',f'Choose a whole number from 1 through {resources["logical_cpu_count"]}.')
+                messagebox.showerror('Verification workers',f'Choose a whole number from 1 through {resources["logical_cpu_count"]}.',parent=root)
                 return
             if not 1<=workers<=resources['logical_cpu_count']:
-                messagebox.showerror('Verification workers',f'Choose a whole number from 1 through {resources["logical_cpu_count"]}.')
+                messagebox.showerror('Verification workers',f'Choose a whole number from 1 through {resources["logical_cpu_count"]}.',parent=root)
                 return
         parallel=parallel_candidates.get() if profile=='thorough' else False
         task_token+=1;token=task_token
         set_status('Inspecting selected PDFs…');choose_button.configure(state='disabled');setup_button.configure(state='disabled')
-        profile_selector.configure(state='disabled');optimizer_selector.configure(state='disabled')
+        inspect_button.configure(state='disabled');profile_selector.configure(state='disabled')
         worker_selector.configure(state='disabled');parallel_selector.configure(state='disabled')
         def work():
             try:
@@ -147,24 +177,27 @@ def main():
             controller.cancel()
             write("Cancelled; no optimizer was started.")
             setup_button.configure(state='normal');profile_selector.configure(state='readonly');update_optimizer_controls()
-            choose_button.configure(state='normal' if setup_ready else 'disabled');set_status('Ready')
+            choose_button.configure(state='normal' if setup_ready else 'disabled')
+            inspect_button.configure(state='normal' if setup_ready else 'disabled')
+            set_status('Ready')
             return
         if not any(job.status == "ready" for job in jobs):
             recovered=[job for job in jobs if job.status in {'optimized','no improvement'}]
             if recovered:
                 write(f"Recovered {len(recovered)} completed result(s); nothing needs to run.")
                 for job in recovered:write(f"{job.status.title()}: {job.source}")
-                choose_button.configure(state='normal');set_status('Ready')
+                choose_button.configure(state='normal');inspect_button.configure(state='normal');set_status('Ready')
                 return
             write("No selected PDF passed preflight.")
             for job in jobs:
                 write(f"Rejected: {job.source} — {job.error}")
-            choose_button.configure(state='normal');set_status('Ready')
+            choose_button.configure(state='normal');inspect_button.configure(state='normal');set_status('Ready')
             return
         running=True;active_source=None;active_stage=None;batch_done=0;batch_started=time.monotonic();elapsed_status.set('Total elapsed: 0:00:00')
         batch_total=sum(job.status=='ready' for job in jobs)
         progress.configure(maximum=max(1,batch_total),value=0);progress_status.set(progress_text(0,batch_total))
         choose_button.configure(state='disabled');setup_button.configure(state='disabled');stop_button.configure(state='normal')
+        inspect_button.configure(state='disabled')
         worker_selector.configure(state='disabled')
         optimizer_selector.configure(state='disabled')
         profile_selector.configure(state='disabled')
@@ -188,90 +221,138 @@ def main():
         try:
             while True:
                 kind, value = events.get_nowait()
-                if kind == 'setup complete':
-                    token,show_dialog,rows=value
-                    if token!=task_token or closed:continue
-                    report=dependency_report(rows);write('\nSetup check\n'+report)
-                    blockers=[row for row in rows if not row['ok'] and not row['optional']]
-                    setup_ready=not blockers;setup_button.configure(state='normal')
-                    profile_selector.configure(state='readonly');update_optimizer_controls()
-                    choose_button.configure(state='normal' if setup_ready and not running else 'disabled')
-                    set_status('Ready' if setup_ready else 'Setup needs attention')
-                    if show_dialog:(messagebox.showinfo if setup_ready else messagebox.showerror)('Setup check',report)
-                elif kind == 'setup failed':
-                    token,show_dialog,error=value
-                    if token!=task_token or closed:continue
-                    setup_ready=False;setup_button.configure(state='normal');profile_selector.configure(state='readonly')
-                    update_optimizer_controls();set_status('Setup needs attention')
-                    write('Setup check failed: '+str(error))
-                    if show_dialog:messagebox.showerror('Setup check',str(error))
-                elif kind == 'planning progress':
-                    token,path=value
-                    if token==task_token and not closed:set_status('Inspecting '+path)
-                elif kind == 'planning complete':
-                    token,jobs,workers,parallel=value
-                    if token!=task_token or closed:continue
-                    setup_button.configure(state='normal');profile_selector.configure(state='readonly');update_optimizer_controls()
-                    review_planned(jobs,workers,parallel)
-                elif kind == 'planning failed':
-                    token,error=value
-                    if token!=task_token or closed:continue
-                    setup_button.configure(state='normal');profile_selector.configure(state='readonly');update_optimizer_controls()
-                    choose_button.configure(state='normal' if setup_ready else 'disabled')
-                    set_status('Selection failed');write('Selection failed: '+str(error));messagebox.showerror('Selection failed',str(error))
-                elif kind == "current":
-                    active_source = value.source
-                    set_status(str(value.source))
-                    write("\n" + str(value.source))
-                elif kind == "output":
-                    write(value)
-                elif kind == "stage":
-                    active_stage = value
-                elif kind == "result":
-                    batch_done=min(batch_total,batch_done+1);progress.configure(value=batch_done)
-                    progress_status.set(progress_text(batch_done,batch_total))
-                    if value.status == "optimized":
-                        write(f"Saved: {value.output}")
-                    elif value.status == "no improvement":
-                        write(f"No PDF published; see the report for the reason: {value.output.parent}")
-                    elif value.status in {"rejected", "failed", "timeout", "budget exhausted"}:
-                        write(f"{value.status.title()}: {value.source} — {value.error}")
-                    elif value.status == "skipped":
-                        write(f"Skipped: {value.source} — {value.error}")
-                elif kind == "complete":
-                    running = False
-                    elapsed=time.monotonic()-batch_started if batch_started is not None else 0
-                    elapsed_status.set(f'Total elapsed: {time.strftime("%H:%M:%S",time.gmtime(elapsed))}')
-                    active_stage = None
-                    batch_done=batch_total;progress.configure(value=batch_done);progress_status.set(progress_text(batch_done,batch_total))
-                    choose_button.configure(state="normal")
-                    setup_button.configure(state="normal")
-                    stop_button.configure(state="disabled")
-                    worker_selector.configure(state='normal')
-                    optimizer_selector.configure(state='readonly')
-                    profile_selector.configure(state='readonly')
-                    update_optimizer_controls()
-                    set_status("Complete")
-                    counts = {status: sum(item.status == status for item in value)
-                              for status in ("optimized", "no improvement", "failed", "timeout", "budget exhausted", "rejected", "skipped")}
-                    summary = (f"Finished: {counts['optimized']} optimized, {counts['no improvement']} no improvement, "
-                               f"{counts['failed']} failed, {counts['timeout']} timed out, {counts['budget exhausted']} over budget, "
-                               f"{counts['rejected']} rejected, {counts['skipped']} skipped.")
-                    write("\n" + summary)
-                    messagebox.showinfo("PDF Viewing Optimizer", summary)
-                    choose_button.focus_set()
+                try:
+                    if kind == 'setup complete':
+                        token,show_dialog,rows=value
+                        if token!=task_token or closed:continue
+                        report=dependency_report(rows);write('\nSetup check\n'+report)
+                        blockers=[row for row in rows if not row['ok'] and not row['optional']]
+                        setup_ready=not blockers;setup_button.configure(state='normal')
+                        profile_selector.configure(state='readonly');update_optimizer_controls()
+                        choose_button.configure(state='normal' if setup_ready and not running else 'disabled')
+                        inspect_button.configure(state='normal' if setup_ready and not running else 'disabled')
+                        set_status('Ready' if setup_ready else 'Setup needs attention')
+                        if show_dialog:(messagebox.showinfo if setup_ready else messagebox.showerror)('Setup check',report,parent=root)
+                    elif kind == 'setup failed':
+                        token,show_dialog,error=value
+                        if token!=task_token or closed:continue
+                        setup_ready=False;setup_button.configure(state='normal');profile_selector.configure(state='readonly')
+                        inspect_button.configure(state='disabled')
+                        update_optimizer_controls();set_status('Setup needs attention')
+                        write('Setup check failed: '+str(error))
+                        if show_dialog:messagebox.showerror('Setup check',str(error),parent=root)
+                    elif kind == 'planning progress':
+                        token,path=value
+                        if token==task_token and not closed:set_status('Inspecting '+path)
+                    elif kind == 'planning complete':
+                        token,jobs,workers,parallel=value
+                        if token!=task_token or closed:continue
+                        setup_button.configure(state='normal');profile_selector.configure(state='readonly');update_optimizer_controls()
+                        review_planned(jobs,workers,parallel)
+                    elif kind == 'planning failed':
+                        token,error=value
+                        if token!=task_token or closed:continue
+                        setup_button.configure(state='normal');profile_selector.configure(state='readonly');update_optimizer_controls()
+                        choose_button.configure(state='normal' if setup_ready else 'disabled')
+                        inspect_button.configure(state='normal' if setup_ready else 'disabled')
+                        set_status('Selection failed');write('Selection failed: '+str(error));messagebox.showerror('Selection failed',str(error),parent=root)
+                    elif kind == 'inspection complete':
+                        token,path,report=value
+                        if token!=task_token or closed:continue
+                        setup_button.configure(state='normal');profile_selector.configure(state='readonly');update_optimizer_controls()
+                        choose_button.configure(state='normal' if setup_ready else 'disabled')
+                        inspect_button.configure(state='normal' if setup_ready else 'disabled')
+                        set_status('Ready')
+                        inv=report['inventory'];sub=report['first_supported_subset'];denom=report['denominator_tracking']
+                        lines=[
+                            f"\nDrawing Opportunity Inspection: {path}",
+                            f"Status: {sub['status'].upper()}",
+                            f"Explanation: {sub['explanation']}",
+                            "Geometry inventory:",
+                            f"  Multi-vertex stroked paths: {inv['multi_vertex_stroked_paths']:,}",
+                            f"  Two-point stroke segments: {inv['two_point_segments']:,}",
+                            f"  Cubic curves: {inv['curves']:,}",
+                            f"  Variable-width transitions: {inv['variable_width_runs']:,}",
+                            f"  Filled outlines: {inv['filled_outlines']:,}",
+                            f"  Image stamps / annotations: {inv['image_stamps']:,} / {inv['annotations']:,}",
+                            f"  Raster calls / images: {inv['raster_content']['image_calls']:,} / {inv['raster_content']['unique_images']:,}",
+                            f"  Declared line widths: {', '.join(str(w) for w in inv['local_widths']) if inv['local_widths'] else 'none'}",
+                            f"  Decoded path points / paints: {inv['point_counts']:,} points, {inv['paint_calls']:,} paints",
+                        ]
+                        skips=[f"  {k.replace('_', ' ').capitalize()}: {v}" for k,v in sub['skip_reasons'].items() if v>0]
+                        if skips:
+                            lines.append("Skip reasons & constraints:")
+                            lines.extend(skips)
+                        lines.append(f"Pages: {denom['total_pages']} total ({denom['pages_with_supported_opportunity']} supported, "
+                                     f"{denom['pages_raster_only']} raster-only, {denom['pages_already_efficient']} already-efficient, "
+                                     f"{denom['pages_unsupported_or_no_op']} unsupported/no-op).")
+                        write("\n".join(lines))
+                    elif kind == 'inspection failed':
+                        token,path,error=value
+                        if token!=task_token or closed:continue
+                        setup_button.configure(state='normal');profile_selector.configure(state='readonly');update_optimizer_controls()
+                        choose_button.configure(state='normal' if setup_ready else 'disabled')
+                        inspect_button.configure(state='normal' if setup_ready else 'disabled')
+                        set_status('Inspection failed')
+                        write(f"\nInspection failed for {path}: {error}")
+                        messagebox.showerror('Inspection failed',str(error),parent=root)
+                    elif kind == "current":
+                        active_source = value.source
+                        set_status(str(value.source))
+                        write("\n" + str(value.source))
+                    elif kind == "output":
+                        write(value)
+                    elif kind == "stage":
+                        active_stage = value
+                    elif kind == "result":
+                        batch_done=min(batch_total,batch_done+1);progress.configure(value=batch_done)
+                        progress_status.set(progress_text(batch_done,batch_total))
+                        if value.status == "optimized":
+                            write(f"Saved: {value.output}")
+                        elif value.status == "no improvement":
+                            write(f"No PDF published; see the report for the reason: {value.output.parent}")
+                        elif value.status in {"rejected", "failed", "timeout", "budget exhausted"}:
+                            write(f"{value.status.title()}: {value.source} — {value.error}")
+                        elif value.status == "skipped":
+                            write(f"Skipped: {value.source} — {value.error}")
+                    elif kind == "complete":
+                        running = False
+                        elapsed=time.monotonic()-batch_started if batch_started is not None else 0
+                        elapsed_status.set(f'Total elapsed: {time.strftime("%H:%M:%S",time.gmtime(elapsed))}')
+                        active_stage = None
+                        batch_done=batch_total;progress.configure(value=batch_done);progress_status.set(progress_text(batch_done,batch_total))
+                        choose_button.configure(state="normal")
+                        setup_button.configure(state="normal")
+                        inspect_button.configure(state="normal")
+                        stop_button.configure(state="disabled")
+                        worker_selector.configure(state='normal')
+                        optimizer_selector.configure(state='readonly')
+                        profile_selector.configure(state='readonly')
+                        update_optimizer_controls()
+                        set_status("Complete")
+                        counts = {status: sum(item.status == status for item in value)
+                                  for status in ("optimized", "no improvement", "failed", "timeout", "budget exhausted", "rejected", "skipped")}
+                        summary = (f"Finished: {counts['optimized']} optimized, {counts['no improvement']} no improvement, "
+                                   f"{counts['failed']} failed, {counts['timeout']} timed out, {counts['budget exhausted']} over budget, "
+                                   f"{counts['rejected']} rejected, {counts['skipped']} skipped.")
+                        write("\n" + summary)
+                        messagebox.showinfo("PDF Viewing Optimizer", summary, parent=root)
+                        choose_button.focus_set()
+                except Exception as exc:
+                    write(f"UI event handling error ({kind}): {exc}")
         except queue.Empty:
             pass
-        if running and active_stage:
-            elapsed=time.monotonic()-batch_started if batch_started is not None else 0
-            elapsed_status.set(f'Total elapsed: {time.strftime("%H:%M:%S",time.gmtime(elapsed))}')
-            set_status(f"{active_source} — {active_stage[0]} ({time.monotonic()-active_stage[1]:.0f}s)")
-        if not closed:poll_after=root.after(100, poll)
+        finally:
+            if running and active_stage:
+                elapsed=time.monotonic()-batch_started if batch_started is not None else 0
+                elapsed_status.set(f'Total elapsed: {time.strftime("%H:%M:%S",time.gmtime(elapsed))}')
+                set_status(f"{active_source} — {active_stage[0]} ({time.monotonic()-active_stage[1]:.0f}s)")
+            if not closed:poll_after=root.after(100, poll)
 
     def close():
         nonlocal closed,task_token,poll_after
         if controller and not controller.request_close():
-            messagebox.showinfo("PDF Viewing Optimizer", "The current PDF must finish before this window can close.")
+            messagebox.showinfo("PDF Viewing Optimizer", "The current PDF must finish before this window can close.", parent=root)
             return
         closed=True;task_token+=1
         if poll_after is not None:
@@ -300,6 +381,8 @@ def main():
         optimizer_selector.configure(state='readonly' if not quick and not running else 'disabled')
         update_resources()
     optimizer_choice.trace_add('write',update_optimizer_controls)
+    inspect_button=ttk.Button(controls,text='Inspect PDF…',underline=0,command=inspect_pdf,state='disabled')
+    inspect_button.grid(row=3,column=2,sticky='e',padx=(0,8),pady=(8,0))
     setup_button=ttk.Button(controls,text='Check setup',underline=6,command=check_setup)
     setup_button.grid(row=3,column=3,padx=(0,8),pady=(8,0))
     choose_button=ttk.Button(controls,text='Choose PDFs…',underline=7,command=choose,state='disabled')
@@ -312,6 +395,7 @@ def main():
     update_optimizer_controls()
     root.bind('<Alt-s>',lambda _event:setup_button.invoke() if setup_button.instate(['!disabled']) else None)
     root.bind('<Alt-p>',lambda _event:choose() if str(choose_button['state'])!='disabled' else None)
+    root.bind('<Alt-i>',lambda _event:inspect_pdf() if str(inspect_button['state'])!='disabled' else None)
     root.bind('<Alt-t>',lambda _event:stop())
     root.bind('<Alt-g>',lambda _event:parallel_selector.invoke() if parallel_selector.instate(['!disabled']) else None)
     root.bind('<Alt-o>',lambda _event:optimizer_selector.focus_set() if optimizer_selector.instate(['!disabled']) else None)

@@ -1,5 +1,6 @@
 import json
 import os
+import subprocess
 from datetime import date
 from pathlib import Path
 import sys
@@ -7,6 +8,7 @@ import tempfile
 import threading
 import time
 import unittest
+import zipfile
 from dataclasses import replace
 
 from pypdf import PdfWriter
@@ -39,6 +41,27 @@ def complete(job, status="no improvement", **changes):
 
 
 class ViewingCopyGuiTests(unittest.TestCase):
+    def test_release_can_inspect_pdf_without_checkout_imports(self):
+        from tools.build_release import build
+
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            root = Path(folder).resolve()
+            release, extracted, source = (root / name for name in ('release', 'extracted', 'input.pdf'))
+            make_pdf(source)
+            build(release)
+            with zipfile.ZipFile(release / 'PDF Optimizer.zip') as archive:
+                self.assertNotIn('docs/antigravity-local-handoff.md', archive.namelist())
+                archive.extractall(extracted)
+            result = subprocess.run(
+                [sys.executable, '-I', '-c',
+                 'import sys; sys.path.insert(0, "."); import viewing_copy_gui; '
+                 'from experiment_manifest import analyze_drawing_opportunity; '
+                 'print(analyze_drawing_opportunity(sys.argv[1])["denominator_tracking"]["total_pages"])',
+                 str(source)],
+                cwd=extracted, capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), '1')
+
     def test_native_mode_controls_follow_profile_and_preflight(self):
         import tkinter as tk
         from tkinter import ttk
@@ -465,6 +488,118 @@ class ViewingCopyGuiTests(unittest.TestCase):
                 results = controller.run()
                 self.assertEqual([item.status for item in results], ["no improvement", "skipped"])
                 self.assertEqual(controller.launches, 1)
+
+    def test_inspect_button_inspects_drawing_opportunities(self):
+        import tkinter as tk
+        from tkinter import ttk
+        from unittest.mock import patch
+        from viewing_copy_gui import main
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / 'source.pdf'
+            make_pdf(source)
+
+            def smoke(root):
+                root.withdraw()
+                try:
+                    def descendants(widget):
+                        for child in widget.winfo_children():
+                            yield child
+                            yield from descendants(child)
+
+                    deadline = time.monotonic() + 3
+                    inspect_btn = None
+                    while time.monotonic() < deadline:
+                        root.update()
+                        time.sleep(0.01)
+                        inspect_btn = next((child for child in descendants(root)
+                                           if isinstance(child, ttk.Button) and 'Inspect PDF' in str(child['text'])), None)
+                        if inspect_btn and inspect_btn.instate(['!disabled']):
+                            break
+                    self.assertIsNotNone(inspect_btn)
+                    self.assertTrue(inspect_btn.instate(['!disabled']))
+
+                    log = next(child for child in descendants(root) if isinstance(child, tk.Text))
+                    inspect_btn.invoke()
+
+                    deadline = time.monotonic() + 3
+                    while time.monotonic() < deadline:
+                        root.update()
+                        time.sleep(0.01)
+                        if 'Drawing Opportunity Inspection' in log.get('1.0', 'end'):
+                            break
+                    log_content = log.get('1.0', 'end')
+                    self.assertIn('Drawing Opportunity Inspection', log_content)
+                    self.assertIn('Status: NO SUPPORTED OPPORTUNITY', log_content)
+                    self.assertIn('Explanation: Document contains no vector drawing operations.', log_content)
+                    self.assertIn('Pages: 1 total', log_content)
+                finally:
+                    root.tk.call(root.protocol('WM_DELETE_WINDOW'))
+
+            with patch.object(tk.Tk, 'mainloop', smoke), \
+                 patch('viewing_copy_gui.dependency_diagnostics', return_value=()), \
+                 patch('tkinter.filedialog.askopenfilename', return_value=str(source)):
+                main()
+
+    def test_inspect_formats_numeric_line_widths_without_crashing_event_loop(self):
+        import tkinter as tk
+        from tkinter import ttk
+        from unittest.mock import patch
+        from viewing_copy_gui import main
+        mock_report = {
+            'inventory': {
+                'multi_vertex_stroked_paths': 5, 'two_point_segments': 2, 'curves': 0,
+                'variable_width_runs': 0, 'filled_outlines': 0, 'image_stamps': 0, 'annotations': 0,
+                'raster_content': {'image_calls': 0, 'unique_images': 0},
+                'local_widths': [0.5, 1.0, 2.5],
+                'point_counts': 12, 'paint_calls': 3,
+            },
+            'first_supported_subset': {
+                'status': 'supported drawing opportunity',
+                'explanation': 'Opaque constant-width vector strokes found.',
+                'skip_reasons': {'device_dependent_hairlines': 0},
+            },
+            'denominator_tracking': {
+                'total_pages': 1, 'pages_with_supported_opportunity': 1,
+                'pages_raster_only': 0, 'pages_already_efficient': 0, 'pages_unsupported_or_no_op': 0,
+            },
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / 'drawing.pdf'
+            make_pdf(source)
+            def smoke(root):
+                root.withdraw()
+                try:
+                    def descendants(widget):
+                        for child in widget.winfo_children():
+                            yield child
+                            yield from descendants(child)
+
+                    deadline = time.monotonic() + 3
+                    inspect_btn = None
+                    while time.monotonic() < deadline:
+                        root.update(); time.sleep(0.01)
+                        inspect_btn = next((child for child in descendants(root)
+                                           if isinstance(child, ttk.Button) and 'Inspect PDF' in str(child['text'])), None)
+                        if inspect_btn and inspect_btn.instate(['!disabled']):
+                            break
+                    log = next(child for child in descendants(root) if isinstance(child, tk.Text))
+                    inspect_btn.invoke()
+                    deadline = time.monotonic() + 3
+                    while time.monotonic() < deadline:
+                        root.update(); time.sleep(0.01)
+                        if 'Declared line widths: 0.5, 1.0, 2.5' in log.get('1.0', 'end'):
+                            break
+                    log_content = log.get('1.0', 'end')
+                    self.assertIn('Declared line widths: 0.5, 1.0, 2.5', log_content)
+                    self.assertIn('Status: SUPPORTED DRAWING OPPORTUNITY', log_content)
+                finally:
+                    root.tk.call(root.protocol('WM_DELETE_WINDOW'))
+
+            with patch.object(tk.Tk, 'mainloop', smoke), \
+                 patch('viewing_copy_gui.dependency_diagnostics', return_value=()), \
+                 patch('tkinter.filedialog.askopenfilename', return_value=str(source)), \
+                 patch('experiment_manifest.analyze_drawing_opportunity', return_value=mock_report):
+                main()
 
 
 if __name__ == "__main__":

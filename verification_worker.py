@@ -1,5 +1,7 @@
 """Spawn-safe PDFium rendering workers used only by viewing-copy verification."""
 
+from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
 import math
 import os
@@ -90,26 +92,37 @@ class DeltaAccumulator:
         return {'exact': False, 'peak': self.peak, 'mean': mean}
 
 
-def page_delta(source, candidate, index, allow_edges=False, scale=2, crop=None, print_mode=False):
-    """Compare one PDFium page render of two files strip by strip."""
+@contextmanager
+def page_comparisons(source, candidate):
+    """Reuse two owned documents across settings; release them on every exit."""
     with pdfium.PdfDocument(source) as before, pdfium.PdfDocument(candidate) as after:
         before.init_forms()
         after.init_forms()
-        a, b = before[index], after[index]
-        try:
-            width, height = bitmap_size(a, scale, crop)
-            if (width, height) != bitmap_size(b, scale, crop):
-                raise ValueError('Rendered page dimensions changed.')
-            delta = DeltaAccumulator(allow_edges)
-            for top, bottom in strip_rows(width, height):
-                low, high = halo(top, bottom, height)
-                with render_rows(a, (low, high), height, scale, crop, print_mode) as old, \
-                        render_rows(b, (low, high), height, scale, crop, print_mode) as new:
-                    delta.add(old, new, (top - low, bottom - low))
-            return delta.result()
-        finally:
-            a.close()
-            b.close()
+        yield partial(_page_delta, before, after)
+
+
+def page_delta(source, candidate, index, allow_edges=False, scale=2, crop=None, print_mode=False):
+    """Compare one PDFium page render of two files strip by strip."""
+    with page_comparisons(source, candidate) as compare:
+        return compare(index, allow_edges, scale, crop, print_mode)
+
+
+def _page_delta(before, after, index, allow_edges=False, scale=2, crop=None, print_mode=False):
+    a, b = before[index], after[index]
+    try:
+        width, height = bitmap_size(a, scale, crop)
+        if (width, height) != bitmap_size(b, scale, crop):
+            raise ValueError('Rendered page dimensions changed.')
+        delta = DeltaAccumulator(allow_edges)
+        for top, bottom in strip_rows(width, height):
+            low, high = halo(top, bottom, height)
+            with render_rows(a, (low, high), height, scale, crop, print_mode) as old, \
+                    render_rows(b, (low, high), height, scale, crop, print_mode) as new:
+                delta.add(old, new, (top - low, bottom - low))
+        return delta.result()
+    finally:
+        a.close()
+        b.close()
 
 
 def _document(path,persistent=False):

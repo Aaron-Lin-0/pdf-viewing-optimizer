@@ -193,8 +193,28 @@ def interactive_fixture(path):
     w.write(path)
 
 
+def mixed_transparency_fixture(path):
+    from test_inline_handwriting import fixture
+    from handwriting import HEADER
+    writer,parents,leaf=fixture()
+    leaf.set_data(HEADER+b'2 w 10 10 m 20 10 l S\n2 w 30 30 m 40 30 l S\n2 w 50 50 m 50 50 l S\n')
+    unrelated=writer.add_blank_page(width=100,height=100)
+    unrelated[NameObject('/Group')]=DictionaryObject({NameObject('/S'):NameObject('/Transparency')})
+    stream=DecodedStreamObject();stream.set_data(b'0 0 1 rg 10 10 50 50 re f')
+    unrelated[NameObject('/Contents')]=writer._add_object(stream)
+    unsafe=DecodedStreamObject();unsafe.update(leaf);unsafe.set_data(leaf.get_data())
+    page=writer.add_blank_page(width=100,height=100)
+    page[NameObject('/Resources')]=DictionaryObject({NameObject('/XObject'):DictionaryObject({
+        NameObject('/Unsafe'):writer._add_object(unsafe)}),NameObject('/ExtGState'):DictionaryObject({
+        NameObject('/Half'):DictionaryObject({NameObject('/ca'):FloatObject(.5)})})})
+    stream=DecodedStreamObject();stream.set_data(b'q /Half gs /Unsafe Do Q /Unsafe Do')
+    page[NameObject('/Contents')]=writer._add_object(stream)
+    for index in range(len(writer.pages)):writer.add_outline_item('Paint context '+str(index+1),index)
+    writer.write(path)
+
+
 class CompatibilityTests(unittest.TestCase):
-    def test_viewing_batching_keeps_paint_operations_when_transparency_is_present(self):
+    def test_viewing_batching_without_reachable_forms_exits_before_rewrite(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
             source,out=Path(folder)/'a.pdf',Path(folder)/'b.pdf'
             w=PdfWriter();p=w.add_blank_page(width=60,height=60)
@@ -202,9 +222,70 @@ class CompatibilityTests(unittest.TestCase):
                 NameObject('/G'):DictionaryObject({NameObject('/CA'):FloatObject(.5)})})})
             w.write(source)
             with patch('handwriting.rewrite_handwriting') as rewrite,patch('handwriting.inline_handwriting'):
-                with self.assertRaisesRegex(ValueError,'transparency'):build_candidate(source,out,'batched')
+                with self.assertRaisesRegex(ValueError,'no proven opaque Form'):build_candidate(source,out,'batched')
                 rewrite.assert_not_called()
             self.assertFalse(out.exists())
+
+    def test_scoped_batching_preserves_mixed_transparency_geometry(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            source,out=Path(folder)/'mixed.pdf',Path(folder)/'batched.pdf'
+            mixed_transparency_fixture(source)
+            old=PdfReader(source).pages[3]['/Resources']['/XObject']['/Unsafe'].get_data()
+            with contextlib.redirect_stdout(io.StringIO()):
+                manifest=build_candidate(source,out,'batched')
+                proof=verify_candidate(source,out,manifest,allow_edges=True)
+            self.assertEqual(manifest['batching']['changed_forms'],1)
+            self.assertEqual(manifest['batching']['segments'],3)
+            self.assertIn('inherited /ca',manifest['batching']['skip_reasons'])
+            self.assertEqual(PdfReader(out).pages[3]['/Resources']['/XObject']['/Unsafe'].get_data(),old)
+            self.assertEqual(len(proof['pages']),4)
+            all_unsafe=Path(folder)/'all-unsafe.pdf';rejected=Path(folder)/'rejected.pdf'
+            writer=PdfWriter(clone_from=PdfReader(source))
+            for page in writer.pages:
+                page[NameObject('/Group')]=DictionaryObject({NameObject('/S'):NameObject('/Transparency')})
+            writer.write(all_unsafe)
+            with patch('handwriting.rewrite_handwriting') as rewrite:
+                with self.assertRaisesRegex(ValueError,'no proven opaque Form'):
+                    build_candidate(all_unsafe,rejected,'batched')
+                rewrite.assert_not_called()
+            self.assertFalse(rejected.exists())
+
+    def test_batching_survives_parent_alpha_reset_without_inline_containers(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            original,source,out=(Path(folder)/name for name in ('mixed.pdf','reset.pdf','batched.pdf'))
+            mixed_transparency_fixture(original)
+            writer=PdfWriter(clone_from=PdfReader(original))
+            for page in writer.pages[:2]:
+                parent=page['/Resources']['/XObject']['/Layer']
+                parent['/Resources']['/ExtGState'][NameObject('/Reset')]=DictionaryObject({
+                    NameObject('/CA'):NumberObject(1),NameObject('/ca'):NumberObject(1)})
+                parent.set_data(b'/Reset gs\n'+parent.get_data())
+                page['/Resources'][NameObject('/ExtGState')]=DictionaryObject({
+                    NameObject('/Half'):DictionaryObject({NameObject('/CA'):FloatObject(.5),
+                                                        NameObject('/ca'):FloatObject(.5)})})
+                content=DecodedStreamObject();content.set_data(b'/Half gs\n'+page.get_contents().get_data())
+                page[NameObject('/Contents')]=writer._add_object(content)
+            writer.write(source)
+            with contextlib.redirect_stdout(io.StringIO()):
+                manifest=build_candidate(source,out,'batched')
+                proof=verify_candidate(source,out,manifest,allow_edges=True)
+            self.assertEqual(manifest['batching']['changed_forms'],1)
+            self.assertEqual(manifest['inlined_form_calls'],0)
+            self.assertIn('inlining_skipped',manifest)
+            self.assertEqual(len(proof['pages']),4)
+            for page in range(1,5):
+                evidence=verify_pdfjs_page(source,out,page,True)
+                if page>2:self.assertTrue(evidence['exact'])
+            from viewing_copy import page_delta,detail_crop
+            for index in range(4):
+                page_delta(source,out,index,True,scale=4)
+                page_delta(source,out,index,True,print_mode=True)
+            page,crop=detail_crop(source,[1,2,3,4])
+            page_delta(source,out,page-1,True,scale=8,crop=crop)
+            with patch('handwriting.inline_handwriting',side_effect=ValueError('unexpected inlining error')):
+                with self.assertRaisesRegex(ValueError,'unexpected inlining error'):
+                    build_candidate(source,Path(folder)/'failed.pdf','batched')
+            self.assertFalse((Path(folder)/'failed.pdf').exists())
 
     def test_page_metadata_and_retained_appearance_references_protect_ink(self):
         from test_viewing_copy import annotation_fixture
@@ -333,6 +414,7 @@ class CompatibilityTests(unittest.TestCase):
                  patch('viewing_copy.benchmarks',return_value=[]),\
                  patch('viewing_copy.choose_candidate',side_effect=choose),\
                  patch('viewing_copy.verify_pdfjs',return_value=[]),\
+                 patch('browser_check.probe_browser',return_value={'ok':True}),\
                  patch('browser_check.check_browser',return_value={}),\
                  patch('viewing_copy.shutil.copyfileobj',side_effect=interrupted):
                 with contextlib.redirect_stdout(io.StringIO()),self.assertRaises(KeyboardInterrupt):
@@ -352,6 +434,7 @@ class CompatibilityTests(unittest.TestCase):
                  patch('viewing_copy.benchmarks',return_value=[]),\
                  patch('viewing_copy.choose_candidate',side_effect=choose),\
                  patch('viewing_copy.verify_pdfjs',return_value=[{'exact':True}]),\
+                 patch('browser_check.probe_browser',return_value={'ok':True}),\
                  patch('browser_check.check_browser',side_effect=ValueError('browser failed')):
                 with contextlib.redirect_stdout(io.StringIO()):optimize_viewing(source,out)
             report=json.loads(out.with_suffix('.json').read_text())

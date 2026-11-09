@@ -21,7 +21,7 @@ def acceptance_context(identity,optimizer='qpdf',budget=None):
     names=['quick_lossless.py','lossless_verify.py','pdf_runtime.py','navigation.py']
     if optimizer=='adaptive':
         names+=['viewing_copy.py','handwriting.py','annotation_ink.py','geometry.py',
-                'verification_worker.py','pdfjs_benchmark.mjs','package-lock.json']
+                'verification_worker.py','pdfjs_benchmark.mjs','tools/revision_pages.py','package-lock.json']
     for name in names:
         digest.update(name.encode())
         path=root/name
@@ -69,12 +69,27 @@ def direct_candidate(source,working,identity,budget,stage,report):
 
 
 def verify_direct(source,candidate,manifest,budget,working,stage,report):
-    from viewing_copy import (verify_candidate,verify_pdfjs,page_delta,detail_crop,
+    from viewing_copy import (verify_candidate,verify_pdfjs,detail_crop,
                               VerificationSession,default_verification_workers)
+    from verification_worker import page_comparisons
     workers=default_verification_workers()
     report['verification_workers']=workers
     def preserve():
-        session=VerificationSession(source,working/'source-evidence',workers,budget)
+        from tools.revision_pages import revision_evidence
+        try:
+            evidence,reused=revision_evidence(source,candidate,budget.checkpoint,report['acceptance_context'],
+                                             lambda:budget.check('revision page matching',(working,)))
+        except (TimeBudgetExceeded,DiskBudgetExceeded):
+            raise
+        except Exception as exc:
+            evidence,reused={},set()
+            report['revision_reuse_skipped']=str(exc)
+        session=VerificationSession(source,working/'source-evidence',workers,budget,
+                                    revision_evidence=(Path(candidate).absolute(),reused))
+        if evidence:
+            report['revision_evidence']=evidence
+        if reused:
+            print(f'Reused exact 144-DPI comparisons for {len(reused)} unchanged page(s).',flush=True)
         try:return verify_candidate(source,candidate,manifest,allow_edges=False,full=True,session=session)
         finally:session.close(force=True)
     proof=stage('verify preserved content on every page',preserve)
@@ -84,14 +99,15 @@ def verify_direct(source,candidate,manifest,budget,working,stage,report):
         lambda:verify_pdfjs(source,candidate,pages,allow_edges=False,budget=budget,workers=workers))
     samples=sorted({1,(pages+1)//2,pages})
     def details():
-        for page in samples:
-            budget.check('high-resolution and print verification',(working,))
-            page_delta(source,candidate,page-1,allow_edges=False,scale=4)
-            page_delta(source,candidate,page-1,allow_edges=False,print_mode=True)
         page,crop=detail_crop(source,samples)
-        budget.check('detail verification',(working,))
-        return {'sample_pages':samples,'detail_page':page,
-                'detail':page_delta(source,candidate,page-1,allow_edges=False,scale=8,crop=crop)}
+        with page_comparisons(source,candidate) as compare:
+            for sample in samples:
+                budget.check('high-resolution and print verification',(working,))
+                compare(sample-1,allow_edges=False,scale=4)
+                compare(sample-1,allow_edges=False,print_mode=True)
+            budget.check('detail verification',(working,))
+            return {'sample_pages':samples,'detail_page':page,
+                    'detail':compare(page-1,allow_edges=False,scale=8,crop=crop)}
     report['high_resolution_and_print']=stage('high-resolution and print verification',details)
     report['visual_checks']='passed: all-page PDFium/PDF.js and high-resolution/print/detail checks'
     proof.update(complete=True,policy='direct-viewing-2',rendering_performance='not measured',
@@ -114,6 +130,9 @@ def report_text(report):
             else 'Verification: strict document graph, reference identities and stream bytes.'),
            'Unsupported or unresolved preservation prevents publication.','']
     lines.extend(f"- {row['stage']}: {row['wall_seconds']:.3f}s ({row['outcome']})" for row in report['stages'])
+    if report.get('revision_evidence'):
+        pages=report['revision_evidence']['pdfium_pages_reused']
+        lines.append(f"Prior exact 144-DPI page comparisons reused: {len(pages)}.")
     return '\n'.join(lines)+'\n'
 
 
@@ -146,12 +165,13 @@ def optimize_quick(source,destination,expected_source_sha256=None,checkpoint=Non
     state_folder=checkpoint/'quick'
     if state_folder.is_symlink():raise ValueError('Quick checkpoint must not be a shortcut.')
     state_folder.mkdir(exist_ok=True)
-    def state(stage,status='running'):
+    def state(stage,status='running',report_sha256=None):
         target=state_folder/'state.json';temporary=state_folder/'.state.tmp'
         # Do not follow a planted checkpoint-file symlink.
         if target.is_symlink() or temporary.is_symlink():raise ValueError('Checkpoint file is a shortcut.')
         temporary.write_text(json.dumps({'schema':1,'status':status,'stage':stage,
-            'profile':'quick','source_sha256':source_hash,'stage_started':time.time()}),encoding='utf-8')
+            'profile':'quick','source_sha256':source_hash,'stage_started':time.time(),
+            'report_sha256':report_sha256}),encoding='utf-8')
         os.replace(temporary,target)
     def fresh_source():
         if filehash(source)!=source_hash:raise ValueError('Original changed during processing.')
@@ -213,7 +233,8 @@ def optimize_quick(source,destination,expected_source_sha256=None,checkpoint=Non
                 fresh_source();target=destination.with_suffix(suffix)
                 with target.open('x',encoding='utf-8') as output:
                     created.append(target);output.write(body)
-            fresh_source();check();state('complete',report['status'])
+            fresh_source();check()
+            state('complete',report['status'],filehash(destination.with_suffix('.json')))
         except BaseException:
             for target in created:target.unlink(missing_ok=True)
             raise

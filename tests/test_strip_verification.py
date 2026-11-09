@@ -63,6 +63,28 @@ class StripVerificationTests(unittest.TestCase):
                     worker.page_delta(source, changed, 0, True)
                 self.assertEqual(detail_crop(source, [1]), whole_crop)
 
+    def test_document_reuse_preserves_settings_and_closes_on_failure(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            source, same, changed = (Path(folder) / name for name in ('a.pdf', 'b.pdf', 'c.pdf'))
+            make_pdf(source);make_pdf(same);make_pdf(changed, color='0 1 0')
+            settings = [{'scale': 4}, {'print_mode': True},
+                        {'scale': 8, 'crop': (10, 20, 30, 40)}]
+            expected = [worker.page_delta(source, same, 0, **kw) for kw in settings]
+            constructor = worker.pdfium.PdfDocument
+            documents = []
+            def open_document(path):
+                doc = constructor(path);documents.append(doc)
+                return doc
+            with patch.object(worker.pdfium, 'PdfDocument', side_effect=open_document):
+                with worker.page_comparisons(source, same) as compare:
+                    self.assertEqual([compare(0, **kw) for kw in settings], expected)
+                    self.assertEqual(len(documents), 2)
+                self.assertTrue(all(doc.raw is None for doc in documents))
+                with self.assertRaisesRegex(ValueError, 'guard'):
+                    with worker.page_comparisons(source, changed) as compare:
+                        compare(0, scale=4)
+                self.assertTrue(all(doc.raw is None for doc in documents))
+
     def test_cached_source_strips_round_trip(self):
         try:
             with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:

@@ -414,7 +414,7 @@ class ViewingTests(unittest.TestCase):
             def browser(*args,**kwargs):calls['browser']+=1;return {}
             preflight={'version':'6.4.299','modules':[{'sha256':'1'*64}]}
             changed={'version':'6.4.299','modules':[{'sha256':'2'*64}]}
-            with patch('viewing_copy.benchmark_worker',side_effect=[preflight,preflight,changed]),\
+            with patch('viewing_copy.benchmark_worker',side_effect=[preflight,preflight,changed,changed]),\
                  patch('viewing_copy.node_identity',return_value={'path':'node','version':'fixture','sha256':'f'*64}),\
                  patch('viewing_copy.build_candidate',side_effect=build),\
                  patch('viewing_copy.verify_candidate',side_effect=verify),\
@@ -422,6 +422,7 @@ class ViewingTests(unittest.TestCase):
                  patch('viewing_copy.choose_candidate',side_effect=choose),\
                  patch('viewing_copy.verify_pdfjs',side_effect=pdfjs),\
                  patch('browser_check.check_browser',side_effect=browser),\
+                 patch('browser_check.probe_browser',return_value={'ok':True}) as probe,\
                  patch('viewing_copy.qpdf_identity',side_effect=ValueError('unavailable')),\
                  patch('pymupdf.open',side_effect=ValueError('packing unavailable')):
                 with contextlib.redirect_stdout(io.StringIO()):
@@ -434,6 +435,16 @@ class ViewingTests(unittest.TestCase):
                     self.assertEqual(failed_report['status'],'no improvement')
                     self.assertEqual(failed_report['classification'],'no publishable candidate: final acceptance failed')
                     self.assertFalse(failed.exists())
+                    probe.side_effect=ValueError('source bookmark cannot settle')
+                    blocked=Path(folder)/'blocked.pdf'
+                    optimize_viewing(source,blocked,checkpoint=checkpoint)
+                    blocked_report=json.loads(blocked.with_suffix('.json').read_text())
+                    self.assertEqual(blocked_report['status'],'no improvement')
+                    self.assertIn('source-browser incompatibility',blocked_report['classification'])
+                    self.assertFalse(blocked.exists())
+                    self.assertEqual(blocked_report['source_browser_viability']['ok'],False)
+                    self.assertFalse(any(row['stage']=='balanced performance timing' for row in blocked_report['stages']))
+            self.assertEqual(probe.call_count,4)
             self.assertEqual(calls,{'build':3,'verify':3,'timing':2,'pdfjs':2,'browser':2})
             report=json.loads(second.with_suffix('.json').read_text())
             self.assertTrue(report['checkpoint']['resumed'])

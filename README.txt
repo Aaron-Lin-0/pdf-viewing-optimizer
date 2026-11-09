@@ -62,8 +62,11 @@ The reviewed source hash is rechecked at child startup and before publication.
 Interrupted jobs reuse only exact completed generation, preservation and timing
 stages from the checkpoint inside that run folder. Final browser acceptance and publication
 always run again. The GUI shows stage age and applies a six-hour/10-GiB limit per file.
+When an updated export replaces the PDF at the same path, Direct can reuse the
+144-DPI PDFium comparison for unchanged pages from recent adjacent checkpoints.
+Each revision gets a separate output. Keep the prior run folder for reuse.
 It checks required components before selection. Keyboard shortcuts: Alt+S setup,
-Alt+O optimizer, Alt+P choose PDFs, Alt+G parallel generation, Alt+T stop after current, Ctrl+L activity log. Long paths remain
+Alt+O optimizer, Alt+P choose PDFs, Alt+I inspect drawing opportunities, Alt+G parallel generation, Alt+T stop after current, Ctrl+L activity log. Long paths remain
 available in a resizable, scrollable review window.
 The progress bar advances by completed reviewed files; the status line shows the
 active file and stage without inventing a percentage for variable-length checks.

@@ -155,7 +155,9 @@ def batch_segments(data):
     return HEADER + result, len(original), groups
 
 
-def duplicate_layer_match(page, writer):
+def duplicate_layer_match(page, writer, eligible_forms=None):
+    if '/Group' in page:
+        return False
     content = page.get_contents()
     if content is None:
         return False
@@ -165,6 +167,8 @@ def duplicate_layer_match(page, writer):
         return False
     match = matches[0]
     resources = page.get('/Resources', {})
+    if hasattr(resources, 'get_object'):
+        resources = resources.get_object()
     state = resources.get('/ExtGState', {}).get('/' + match[2].decode('ascii'))
     if state is None:
         return False
@@ -172,9 +176,14 @@ def duplicate_layer_match(page, writer):
     if dict(state) != {'/BM': '/Normal', '/CA': 1, '/ca': 1}:
         return False
     layer = resources.get('/XObject', {}).get('/FFT0')
-    if layer is None or layer.get_object().get('/Subtype') != '/Form':
+    if layer is None:
         return False
-    if not opaque_drawing(layer.get_object(), writer):
+    layer_form = layer.get_object() if hasattr(layer, 'get_object') else layer
+    if layer_form.get('/Subtype') != '/Form':
+        return False
+    if eligible_forms is not None and id(layer_form) not in eligible_forms:
+        return False
+    if not opaque_drawing(layer_form, writer):
         return False
     # Both invocations must start in the same default graphics state.
     prefix = StreamObject()
@@ -194,8 +203,8 @@ def duplicate_layer_match(page, writer):
     return match
 
 
-def remove_duplicate_layer(page, writer):
-    match = duplicate_layer_match(page, writer)
+def remove_duplicate_layer(page, writer, eligible_forms=None):
+    match = duplicate_layer_match(page, writer, eligible_forms=eligible_forms)
     if not match:
         return False
     data = page.get_contents().get_data()
@@ -239,10 +248,110 @@ def opaque_drawing(form, writer, active=None):
     active.remove(id(form)); return True
 
 
-def rewrite_handwriting(writer):
+def batching_contexts(writer):
+    """Intersect opacity proofs over every reachable page/Form invocation."""
+    reasons={};visits=0;protected=set()
+    def protect(value,reason):
+        value=value.get_object() if hasattr(value,'get_object') else value
+        key=(id(value),reason)
+        if key in protected:return
+        protected.add(key)
+        if len(protected)>100000:raise ValueError('Batching resource inventory exceeded its work bound.')
+        if isinstance(value,StreamObject) and value.get('/Subtype')=='/Form':
+            reasons.setdefault(id(value),set()).add(reason)
+        if isinstance(value,dict):
+            for item in value.values():protect(item,reason)
+        elif isinstance(value,list):
+            for item in value:protect(item,reason)
+    defaults={'/SMask':'/None','/BM':'/Normal','/CA':1,'/ca':1,'/OP':False,'/op':False}
+    def walk(stream,resources,state,blocked,active):
+        nonlocal visits
+        visits+=1
+        if visits>100000 or len(active)>128:
+            raise ValueError('Batching opacity inventory exceeded its work bound.')
+        identity=id(stream)
+        if identity in active:raise ValueError('Batching opacity inventory found a Form cycle.')
+        active=active|{identity}
+        for key in ('/Pattern','/Font','/ExtGState'):
+            if key in resources:protect(resources[key],'indirect paint resource '+key)
+        if '/Font' in resources:
+            for ref in resources['/Font'].values():
+                font=ref.get_object()
+                if font.get('/Subtype')=='/Type3' and ('/Resources' not in font or not font['/Resources']):
+                    # A glyph with no resources can draw Forms from its caller or page.
+                    for scope in (resources,page_resources):
+                        if '/XObject' in scope:protect(scope['/XObject'],'Type 3 glyph resource fallback')
+                    break
+        stack=[];state=dict(state)
+        for args,op in ContentStream(stream,writer).operations:
+            if op==b'q':stack.append(dict(state))
+            elif op==b'Q':
+                if not stack:raise ValueError('Batching opacity inventory found an unmatched Q.')
+                state=stack.pop()
+            elif op==b'gs':
+                states=resources.get('/ExtGState',{}).get_object() if hasattr(resources.get('/ExtGState',{}),'get_object') else resources.get('/ExtGState',{})
+                if len(args)!=1 or args[0] not in states:
+                    raise ValueError('Batching opacity inventory cannot resolve a graphics state.')
+                gs=states[args[0]].get_object()
+                for key in defaults:
+                    if key in gs:state[key]=gs[key]
+                # PDF overprint fill inherits OP when op is absent from this state.
+                if '/OP' in gs and '/op' not in gs:state['/op']=gs['/OP']
+            elif op==b'Do':
+                objects=resources.get('/XObject',{})
+                if hasattr(objects,'get_object'):objects=objects.get_object()
+                if len(args)!=1 or args[0] not in objects:
+                    raise ValueError('Batching opacity inventory cannot resolve an XObject.')
+                form=objects[args[0]].get_object()
+                if form.get('/Subtype')!='/Form':continue
+                child_blocked=set(blocked)
+                if '/Group' in form:child_blocked.add('transparency group')
+                unsafe=set(child_blocked)
+                for key,value in defaults.items():
+                    if state[key]!=value:unsafe.add('inherited '+key)
+                reasons.setdefault(id(form),set()).update(unsafe)
+                child=form.get('/Resources',resources)
+                if hasattr(child,'get_object'):child=child.get_object()
+                walk(form,child,state,child_blocked,active)
+        if stack:raise ValueError('Batching opacity inventory found an unmatched q.')
+    for page in writer.pages:
+        resources=page.get('/Resources',{})
+        if hasattr(resources,'get_object'):resources=resources.get_object()
+        page_resources=resources
+        content=page.get_contents()
+        if content is not None:
+            walk(content,resources,defaults,{'transparency group'} if '/Group' in page else set(),set())
+        # Annotation appearances can share Forms with page contents. Keep those Forms
+        # unchanged until annotation paint-context semantics have their own proof.
+        def appearance(value,seen):
+            value=value.get_object() if hasattr(value,'get_object') else value
+            if id(value) in seen:return
+            seen=seen|{id(value)}
+            if isinstance(value,StreamObject):
+                reasons.setdefault(id(value),set()).add('annotation appearance')
+                child=value.get('/Resources',resources)
+                if hasattr(child,'get_object'):child=child.get_object()
+                walk(value,child,defaults,{'annotation appearance'},set())
+            elif isinstance(value,dict):
+                for item in value.values():appearance(item,seen)
+        for ref in page.get('/Annots',[]):
+            annot=ref.get_object()
+            if '/AP' in annot:appearance(annot['/AP'],set())
+    return reasons
+
+
+def rewrite_handwriting(writer, eligible_forms=None):
+    if eligible_forms is None:
+        contexts = batching_contexts(writer)
+        eligible_forms = {identity for identity, reasons in contexts.items() if not reasons}
+        allow_duplicates = True
+    else:
+        allow_duplicates = False
     forms = segments = draws = 0
     for obj in list(writer._objects):
         if not isinstance(obj, StreamObject) or obj.get('/Subtype') != '/Form' or '/Group' in obj:
+            continue
+        if id(obj) not in eligible_forms:
             continue
         state = obj.get('/Resources', {}).get('/ExtGState', {}).get('/GS')
         if state is None:
@@ -258,7 +367,8 @@ def rewrite_handwriting(writer):
             forms += 1
             segments += count
             draws += groups
-    duplicates = sum(remove_duplicate_layer(page, writer) for page in writer.pages)
+    duplicates = (sum(remove_duplicate_layer(page, writer, eligible_forms=eligible_forms) for page in writer.pages)
+                  if allow_duplicates else 0)
     if not forms and not duplicates:
         raise ValueError('No supported BOOX handwriting patterns found; nothing changed.')
     print(f'Preserved {segments:,} segments in {forms:,} forms; '

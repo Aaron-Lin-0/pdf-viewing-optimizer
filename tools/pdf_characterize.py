@@ -57,6 +57,30 @@ def multiply(left, right):
     return (a*g+c*h, b*g+d*h, a*i+c*j, b*i+d*j, a*k+c*l+e, b*k+d*l+f)
 
 
+def check_transform_support(ctm):
+    """Verify that transform matrix can be bounded isotropically per P16-C step 3."""
+    if len(ctm) != 6:
+        return False, 'Invalid transform matrix dimension'
+    values = tuple(float(value) for value in ctm)
+    if not all(map(math.isfinite, values)):
+        return False, 'Non-finite transform'
+    a, b, c, d, _, _ = values
+    scale_x = math.hypot(a, b)
+    scale_y = math.hypot(c, d)
+    if not all(map(math.isfinite, (scale_x, scale_y))):
+        return False, 'Non-finite transform scale'
+    if scale_x == 0 or scale_y == 0:
+        return False, 'Degenerate zero-area transform'
+    # Orthogonality check: dot product of basis vectors should be ~0 (no shear)
+    dot = (a / scale_x) * (c / scale_y) + (b / scale_x) * (d / scale_y)
+    if abs(dot) > 1e-4:
+        return False, f'Shear transform detected (dot product {dot:.6f}); isotropic bound unsupported'
+    # Uniform scaling check: x and y scale should match within tolerance
+    if abs(scale_x - scale_y) / max(scale_x, scale_y) > 0.01:
+        return False, f'Non-uniform scaling detected ({scale_x:.3f} vs {scale_y:.3f}); unsupported'
+    return True, 'Transform is uniform orthogonal; isotropic tolerance applicable'
+
+
 def simple(value, depth=0):
     value = resolve(value)
     if depth > 4:
@@ -201,7 +225,10 @@ def characterize_page(reader, page, page_number):
                 graphics.get('/BM', '/Normal') != '/Normal' or
                 graphics.get('/SMask', '/None') != '/None')
 
-    def walk(stream, resources, scope, ctm=(1, 0, 0, 1, 0, 0), depth=0):
+    opacity_keys = ('/CA', '/ca', '/BM', '/SMask', '/OP', '/op')
+
+    def walk(stream, resources, scope, ctm=(1, 0, 0, 1, 0, 0), depth=0,
+             width='1', opacity=None, dashed=False, grouped=False):
         if depth > 64:
             issue('Form nesting exceeds 64 levels')
             return
@@ -220,20 +247,27 @@ def characterize_page(reader, page, page_number):
             except Exception as exc:
                 issue(f'{scope} {resource_type} unavailable: {type(exc).__name__}: {exc}')
         graphics_stack = []
-        width = '1'
+        opacity = {} if opacity is None else opacity
+        supported_transform = check_transform_support(ctm)[0]
         width_declared = False
         simple_width = None
         simple_run = 0
+        eligible_width = None
+        eligible_run = 0
         path = []
+        path_supported = True
         current = None
         for operands, operator in stream_operations:
             state['expanded'] += 1
             if state['expanded'] > MAX_EXPANDED_OPERATIONS:
                 issue(f'Expanded operation limit {MAX_EXPANDED_OPERATIONS} exceeded')
                 return
+            if operator not in PATH_OPERATORS and operator not in PAINTS and operator != b'w':
+                eligible_width = None
+                eligible_run = 0
             if operator == b'q':
                 simple_width = None; simple_run = 0
-                graphics_stack.append((ctm, width))
+                graphics_stack.append((ctm, width, width_declared, opacity, dashed, supported_transform))
                 counts['graphics_state_saves'] += 1
                 continue
             if operator == b'Q':
@@ -242,13 +276,16 @@ def characterize_page(reader, page, page_number):
                 if not graphics_stack:
                     issue('Unbalanced graphics-state restore')
                 else:
-                    ctm, width = graphics_stack.pop()
+                    ctm, width, width_declared, opacity, dashed, supported_transform = graphics_stack.pop()
                 continue
             if operator == b'cm':
                 simple_width = None; simple_run = 0
+                if path:
+                    path_supported = False
                 counts['transforms'] += 1
                 try:
                     ctm = multiply(matrix(operands), ctm)
+                    supported_transform = check_transform_support(ctm)[0]
                 except Exception as exc:
                     issue(f'Invalid transform: {type(exc).__name__}: {exc}')
                 continue
@@ -264,11 +301,22 @@ def characterize_page(reader, page, page_number):
                 try:
                     graphics = resolve(resolve(resources.get('/ExtGState', {}))[operands[0]])
                     counts['transparency_state_uses'] += transparent(graphics)
+                    opacity = opacity | {key: resolve(graphics.get(key)) for key in opacity_keys if key in graphics}
+                    if '/OP' in graphics and '/op' not in graphics:
+                        opacity['/op'] = opacity['/OP']
+                    if '/LW' in graphics:
+                        width = number(graphics['/LW'])
+                    if '/D' in graphics:
+                        dashed = bool(resolve(graphics['/D'][0]))
                 except Exception as exc:
                     issue(f'Graphics state unresolved: {type(exc).__name__}: {exc}')
                 continue
+            if operator == b'd':
+                dashed = bool(operands[0])
+                continue
             if operator in {b'W', b'W*'}:
                 simple_width = None; simple_run = 0
+                path_supported = False
                 counts['clips'] += 1
                 continue
             if operator in {b'BMC', b'BDC'}:
@@ -304,6 +352,35 @@ def characterize_page(reader, page, page_number):
                 counts['stroke_paints'] += is_stroke
                 counts['fill_paints'] += is_fill
                 counts['filled_outlines'] += is_fill and any(op in {'c', 'v', 'y', 'h'} for op, _ in path)
+                counts['multi_vertex_stroked_paths'] += is_stroke and len(path) > 2
+                counts['hairline_strokes'] += is_stroke and width in {'0', '-0'}
+                counts['path_vertices'] += len(path)
+                counts['decoded_path_bytes'] += sum(len(op) + sum(len(str(val)) for val in vals) + len(vals) + 1 for op, vals in path) + len(operator) + 1
+                eligible = (operator == b'S' and len(path) >= 2 and path_supported and
+                            not (grouped or dashed or transparent(opacity)) and
+                            not any(opacity.get(key, False) != False for key in ('/OP', '/op')) and
+                            path[0][0] == 'm' and len(path[0][1]) == 2 and
+                            all(op == 'l' and len(values) == 2 for op, values in path[1:]) and
+                            Decimal(width) > 0)
+                if eligible and not supported_transform:
+                    counts['unsupported_drawing_transforms'] += 1
+                    eligible = False
+                if eligible and len(path) > 2:
+                    counts['eligible_drawing_runs'] += 1
+                    counts['eligible_drawing_points'] += len(path)
+                    counts['eligible_drawing_paints'] += 1
+                if eligible and len(path) == 2:
+                    counts['eligible_minimal_segments'] += 1
+                    eligible_run = eligible_run + 1 if eligible_width == width else 1
+                    eligible_width = width
+                    if eligible_run >= 2:
+                        new_paints = 2 if eligible_run == 2 else 1
+                        counts['eligible_drawing_runs'] += eligible_run == 2
+                        counts['eligible_drawing_points'] += 2 * new_paints
+                        counts['eligible_drawing_paints'] += new_paints
+                else:
+                    eligible_width = None
+                    eligible_run = 0
                 simple_line = (width_declared and is_stroke and len(path) == 2 and
                                path[0][0] == 'm' and path[1][0] == 'l')
                 if simple_line:
@@ -321,6 +398,7 @@ def characterize_page(reader, page, page_number):
                 paint.update(category + b'\n')
                 counts['paint_operations'] += operator != b'n'
                 path = []
+                path_supported = True
                 current = None
                 width_declared = False
                 continue
@@ -368,7 +446,8 @@ def characterize_page(reader, page, page_number):
                 active.add(key)
                 counts['transparency_groups'] += '/Group' in child
                 form_matrix = matrix(child.get('/Matrix', [1, 0, 0, 1, 0, 0]))
-                walk(child, child.get('/Resources', {}), 'form', multiply(form_matrix, ctm), depth + 1)
+                walk(child, child.get('/Resources', resources), 'form', multiply(form_matrix, ctm), depth + 1,
+                     width, opacity, dashed, grouped or '/Group' in child)
                 active.remove(key)
             else:
                 issue(f'Unsupported XObject subtype: {subtype}')
@@ -382,7 +461,7 @@ def characterize_page(reader, page, page_number):
     if '/Group' in page:
         counts['transparency_groups'] += 1
     if content is not None:
-        walk(content, resources, 'page')
+        walk(content, resources, 'page', grouped='/Group' in page)
     counts['unique_forms'] = len(forms)
     counts['unique_images'] = len(images)
     counts['expanded_operations'] = state['expanded']

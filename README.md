@@ -78,6 +78,12 @@ Thorough interrupted jobs resume only exact completed candidate-generation, pres
 timing stages from the run folder's `.checkpoint` directory. Final browser acceptance
 and publication always run again. Quick interrupted jobs restart their single pass;
 completed results are recovered only after report, context and hash validation.
+When you replace an export with a revised PDF at the same path, Direct starts a
+new output and looks for recent checkpoints beside the source. It can reuse the
+144-DPI PDFium comparison for an unchanged, self-contained page, even if the
+page moved. The report counts the comparisons reused. Keep the prior run folder
+to enable this on the next revision. Earlier runs without page evidence start
+with a fresh verification pass.
 Profiles never reuse each other's results. The window shows the current stage and its age;
 each file has a six-hour and 10-GiB working-data limit in the GUI.
 The app checks the selected profile's local components before selection; quick mode
@@ -85,7 +91,7 @@ requires pypdf 6.10.0, pypdfium2 5.14.0, Pillow 12.3.0, Node/PDF.js 6.4.299
 and bundled qpdf 12.4.2. It does not require PyMuPDF or a browser.
 For a quick-only installation, run `Setup Dependencies.cmd --quick` in a terminal;
 running setup without that argument installs the full thorough dependencies.
-**Check setup** repeats that check. Keyboard shortcuts are Alt+M for mode, Alt+S for setup, Alt+O for the optimizer, Alt+P to choose PDFs, Alt+G to
+**Check setup** repeats that check. Keyboard shortcuts are Alt+M for mode, Alt+S for setup, Alt+O for the optimizer, Alt+P to choose PDFs, Alt+I to inspect drawing opportunities, Alt+G to
 toggle parallel generation, Alt+T to stop after the current file, and Ctrl+L to focus the activity log. Long mappings are
 shown in a resizable, scrollable review window before anything starts.
 In thorough mode, choose **Verification workers** before review (default: two, or one on a one-CPU

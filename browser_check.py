@@ -27,7 +27,7 @@ def profile_directory(parent):
                 time.sleep(.25)
 
 
-def check_browser(source,candidate,pages=(1,7,29),timeout=1200):
+def _browser_results(source,candidate,pages,timeout,whiches):
     browser=os.environ.get('PDF_BROWSER') or r'C:\Program Files\Mozilla Firefox\firefox.exe'
     if not Path(browser).is_file():raise ValueError('Set PDF_BROWSER to Firefox or Zen for browser acceptance checks.')
     local=Path(__file__).resolve().parent/'node_modules'
@@ -75,8 +75,9 @@ def check_browser(source,candidate,pages=(1,7,29),timeout=1200):
     thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     try:
         deadline=time.monotonic()+timeout
-        for which in ['source','candidate']:
-            with profile_directory(Path(candidate).parent) as profile:
+        profile_parent=Path(candidate).parent if 'candidate' in whiches else Path(tempfile.gettempdir())
+        for which in whiches:
+            with profile_directory(profile_parent) as profile:
                 Path(profile,'user.js').write_text('user_pref("browser.shell.checkDefaultBrowser", false);\nuser_pref("browser.startup.page", 0);\nuser_pref("browser.aboutwelcome.enabled", false);\nuser_pref("toolkit.telemetry.enabled", false);\n')
                 url=f'http://127.0.0.1:{server.server_port}/?which={which}&pages='+','.join(map(str,pages))
                 log_path=Path(profile,'browser.log')
@@ -104,13 +105,30 @@ def check_browser(source,candidate,pages=(1,7,29),timeout=1200):
                         try:
                             probe=Path(profile,'browser.log');probe.unlink(missing_ok=True);break
                         except PermissionError:time.sleep(.1)
-        before,after=result['source'],result['candidate']
-        for key in ['pages','labels','destinationNames','links','layers','bookmarkTrace','interactive','resourceCleanups']:
-            if before[key]!=after[key]:
-                detail=''
-                if isinstance(before[key],list) and isinstance(after[key],list):
-                    detail=next((f' at item {i+1}: {a!r} != {b!r}' for i,(a,b) in enumerate(zip(before[key],after[key])) if a!=b),
-                                f' (counts {len(before[key])} != {len(after[key])})')
-                raise ValueError(f'Browser navigation/layer check failed: {key}'+detail[:800])
-        return {'engine':'isolated headless Firefox; installed pdfjs-dist browser build','results':result}
+        return result
     finally:server.shutdown();server.server_close()
+
+
+_TRACE_KEYS = ['pages','labels','destinationNames','links','layers','bookmarkTrace','interactive','resourceCleanups']
+
+
+def probe_browser(source,pages=(1,7,29),timeout=1200):
+    """Fresh source-only viability evidence; callers must keep it invocation-local."""
+    return _browser_results(source,source,pages,timeout,('source',))['source']
+
+
+def check_browser(source,candidate,pages=(1,7,29),timeout=1200,source_result=None):
+    whiches=('source','candidate') if source_result is None else ('candidate',)
+    result=_browser_results(source,candidate,pages,timeout,whiches)
+    if source_result is not None:result['source']=source_result
+    before,after=result['source'],result['candidate']
+    if not before.get('ok') or not after.get('ok'):
+        raise ValueError('Browser viability evidence is incomplete or failed.')
+    for key in _TRACE_KEYS:
+        if before[key]!=after[key]:
+            detail=''
+            if isinstance(before[key],list) and isinstance(after[key],list):
+                detail=next((f' at item {i+1}: {a!r} != {b!r}' for i,(a,b) in enumerate(zip(before[key],after[key])) if a!=b),
+                            f' (counts {len(before[key])} != {len(after[key])})')
+            raise ValueError(f'Browser navigation/layer check failed: {key}'+detail[:800])
+    return {'engine':'isolated headless Firefox; installed pdfjs-dist browser build','results':result}

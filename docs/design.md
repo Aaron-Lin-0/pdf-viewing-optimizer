@@ -32,7 +32,10 @@ A smaller selected copy must pass qpdf syntax validation, ordered geometry/resou
 and navigation checks, exact all-page PDFium at 144 DPI and PDF.js at width 1404,
 plus PDFium high-resolution (288 DPI), print (144 DPI) and detail (576 DPI) checks.
 High-resolution/print sampling uses first/middle/last pages; the detail check uses a
-crop selected from those pages. Verification uses at most two workers and releases
+crop selected from those pages. The direct high-resolution, print and detail
+comparisons share one owned source/candidate PDFium document pair; pages and
+bitmaps are released after each check and both documents close on failure.
+Verification uses at most two workers and releases
 PDFium workers before PDF.js verification. Publication also requires unchanged
 source/candidate hashes and exclusive output/report creation with rollback.
 
@@ -48,6 +51,16 @@ Direct setup requires pypdf 6.10.0, pypdfium2 5.14.0, Pillow 12.3.0, Node/PDF.js
 profile, recipe, code/tool/renderer identities and source/output hashes. Interrupted
 jobs restart; completed recovery requires matching context and hashes. Direct batch
 records use schema 2, isolating them from older thorough-only recovery.
+
+For a new revision at the same source path, Direct checks up to eight recent
+adjacent checkpoints. Reuse requires a completed successful run, a matching
+report hash, the same code and tool context, the same PDFium binary, and exact
+raw render-input identities on both the source and candidate sides. These
+identities cover page boxes, inherited resources, reference topology and encoded
+stream bytes. Pages with annotations, fonts or unresolved render dependencies
+receive fresh comparisons. The pipeline rebuilds the candidate from the revised
+source and repeats geometry, navigation, all-page PDF.js, high-resolution,
+print and detail checks. The report identifies each reused 144-DPI comparison.
 
 ### Explicit compression-only engine
 
@@ -107,6 +120,14 @@ output path. Timing identity includes the PDF.js version and hashes of the loade
 PDF.js/canvas native modules, so changing `PDF_NODE_MODULES` cannot reuse another
 renderer installation's measurements. Final PDF.js/browser acceptance and publication
 are never cached.
+After at least one candidate passes preservation, a fresh source-only browser probe
+runs before balanced timing. Failure produces reports only with an explicit source
+browser blocker; no timing or candidate browser retry runs. Source-only probes create
+their disposable profiles in system temporary storage, without requiring write
+access beside the original PDF. A successful source
+trace is reused solely for candidate comparisons in that invocation. Candidate
+traces remain fresh and exact trace comparison is unchanged; no browser evidence
+is checkpointed. Direct mode does not run this thorough-only probe.
 Independent built-in base candidates may be generated in separate processes when the
 reviewed parallel-generation toggle is enabled, capped by the verification-worker
 count. Dependent packed candidates, preservation, timing, documents and publication
@@ -145,9 +166,12 @@ Pages are recognized by their drawing structure, not their filename or producer 
 
 Annotation conversion preserves placement, appearance matrices, bounding-box clipping, colors, layer membership and paint order. Only a leading sequence of eligible painted annotations is converted. Links, comments, forms, attachments, action-bearing objects, replies and protected references remain. Missing/state-dependent appearances, special zoom/rotation flags, transparency groups and unsupported layer expressions are skipped. Unfamiliar or transformed appearances retain ordinary Form calls.
 
-Inlining retains literal path commands. Batching keeps separate subpaths and round caps. Viewing-copy batching skips documents containing transparency because inherited masks can make separate painting operations significant. Duplicate handwriting is removed only when the complete referenced drawing graph passes the compatible opaque-content proof. OCR removal is a separate explicit legacy option.
+Inlining retains literal path commands. Batching keeps separate subpaths and round caps. Viewing-copy batching inventories reachable page/Form invocations and batches a recognized pen Form only when every invocation is proven opaque. Graphics-state stacks, groups, masks, blend modes, stroke/fill alpha and overprint participate. Shared safe/unsafe Forms stay unchanged; Forms referenced through annotation appearances, fonts, patterns or graphics-state resources are conservatively protected. Unresolved or bounded-out inventories reject batching before candidate rendering. The scoped pass retains duplicate layer draws; ordinary deduplication remains separate. Resettable graphics-state values are evaluated at each child invocation; enclosing transparency groups remain blocking. A successful batching pass may retain its Forms when no exact inlining container is supported; unexpected inlining errors still reject the candidate. Duplicate handwriting is removed only when the complete referenced drawing graph passes the compatible opaque-content proof. OCR removal is a separate explicit legacy option.
 
 ## Preservation
+
+When Type 3 glyphs fall back to their caller's resources, the batching pass
+protects the Forms in those resource scopes.
 
 Navigation comparisons include bookmark hierarchy, titles, styles, expansion, destinations and zoom; named destinations and page labels; link rectangles and chained actions; opening actions and viewer preferences; attachments; retained annotations; optional-content layers, private catalog/page metadata and application-defined trailer entries from classic or cross-reference-stream trailers. File-layout trailer keys and permitted document-ID updates remain storage exceptions. References compare semantic relationships, not object numbers. Merging distinct interactive identities is rejected and retried without duplicate merging.
 
