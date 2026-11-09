@@ -57,8 +57,10 @@ Keep the complete `pdfjs-dist` package, including its font, CMap, ICC and WASM r
 
 On Windows, open **Create Viewing Copies.cmd** and select one or more PDFs. After each
 picker, choose whether to add PDFs from another folder; canceling a later picker keeps
-the files already selected. Leave the window open while they are processed sequentially. Review each exact source-to-output
-mapping in the confirmation dialog before starting. Duplicate selections collapse
+the files already selected. Adjust the mode, optimizer, or applicable worker settings
+with the PDFs selected, then choose **Review batch**. Review each source-to-output
+mapping before starting, or choose **Back to settings** to make changes without
+selecting the PDFs again. Leave the window open while they are processed sequentially. Duplicate selections collapse
 to one job. The **Mode** selector defaults to **Direct optimization (no benchmarks)**:
 exact supported handwriting inlining, safe deduplication, current-document cleanup
 and one lossless packing step. It retains useful transformations without a candidate
@@ -96,19 +98,24 @@ requires pypdf 6.10.0, pypdfium2 5.14.0, Pillow 12.3.0, Node/PDF.js 6.4.299
 and bundled qpdf 12.4.2. It does not require PyMuPDF or a browser.
 For a quick-only installation, run `Setup Dependencies.cmd --quick` in a terminal;
 running setup without that argument installs the full thorough dependencies.
-**Check setup** repeats that check. Keyboard shortcuts are Alt+M for mode, Alt+S for setup, Alt+O for the optimizer, Alt+P to choose PDFs, Alt+I to inspect drawing opportunities, Alt+G to
+**Check setup** repeats that check. Keyboard shortcuts are Alt+M for mode, Alt+S for setup, Alt+O for the optimizer, Alt+P to choose PDFs, Alt+R to review the batch, Alt+I to inspect drawing opportunities, Alt+G to
 toggle parallel generation, Alt+T to stop after the current file, and Ctrl+L to focus the activity log. Long mappings are
-shown in a resizable, scrollable review window before anything starts.
+shown in a resizable, scrollable review window offset from the main window's current position.
 In thorough mode, choose **Verification workers** before review (default: two, or one on a one-CPU
-system). Startup and review show logical CPUs, total/available RAM, and the
-conservative planning estimate of 4 GiB plus 0.5 GiB per worker. This is not a
+system). The main window shows available RAM and an estimate. Review shows logical
+CPUs, total and available RAM, and the estimate of 4 GiB plus 0.5 GiB per worker. This is not a
 measured peak or limit, and renderer workers may use multiple CPU threads.
 Enable **Parallel candidate generation** to build independent built-in candidates
 concurrently, capped by the reviewed worker count. It can reduce generation time on
 large files but raises simultaneous RAM and disk traffic; dependent packing,
 verification, timing, documents and publication remain ordered.
-The determinate progress bar reports completed reviewed files—such as “1 of 2 files
-complete”—while the status line separately identifies the active file and stage.
+The progress bar shows the whole batch and advances through stages and reported
+page checks. The percentage is approximate and reaches 100% when the batch finishes.
+The completed-file count is exact. The status line shows the active filename and
+stage. The activity log follows new entries when you are at the bottom and
+stays put while you read or select earlier text.
+The final summary lists the saved PDF paths. **Open folder** opens the containing
+folder in Windows File Explorer.
 
 For the command line:
 

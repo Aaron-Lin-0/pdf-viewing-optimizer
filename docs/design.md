@@ -97,8 +97,10 @@ mapping for confirmation. When Windows path limits require it, planning uses a
 compact adjacent output name with matching reports and checkpoint, or rejects the
 path in review if the optimizer's working files still would not fit. An explicit
 CLI/API destination remains caller-owned.
-The picker can
-be reopened to accumulate files from multiple folders before that single review. The controller
+The picker can be reopened to accumulate files from multiple folders. The main
+window retains the selection while the user adjusts settings. Opening batch review
+snapshots those settings and plans the batch. Returning to settings keeps the
+selection and a new review plans it with the new settings. The controller
 rechecks sources and targets before each sequential launch, validates terminal reports
 and hashes, isolates per-file failures and supports stop-after-current. Window close
 is blocked while a child or its terminal result is being handled; closing between
@@ -160,9 +162,9 @@ and PDF planning run on background workers while all pickers, review dialogs and
 widget updates remain on the Tk thread. Settings are snapshotted before planning;
 stale or post-close results are ignored. The native
 review dialog is resizable and scrollable for long paths, and all primary controls
-have keyboard access. Dynamic status is mirrored in the window title. Batch progress
-is determinate and counts terminal reviewed files; per-file stage age remains separate
-because candidate and browser work varies by document.
+have keyboard access. Dynamic status is mirrored in the window title. The progress
+bar uses an approximate share for the active file based on reported stages and
+page checks. The completed-file count and per-file stage age are shown separately.
 
 Pages are recognized by their drawing structure, not their filename or producer label. Candidate passes include duplicate-object removal, static annotation conversion, consolidation of eligible appearances, exact inlining and same-width segment batching. Optional structure packing is compared separately. The Windows package includes qpdf 12.4.2 and compares its lossless Flate/object-stream rewrite under the same preservation, rendering and publication gates; `PDF_QPDF` can select another executable. Already deduplicated candidates do not receive another all-stream duplicate scan during packing.
 

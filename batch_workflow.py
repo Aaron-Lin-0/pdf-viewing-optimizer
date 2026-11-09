@@ -60,7 +60,7 @@ def system_resources():
     return {'logical_cpu_count':logical,'total_ram_bytes':total,'available_ram_bytes':available}
 
 
-def resource_summary(workers, resources=None):
+def resource_summary(workers, resources=None, *, compact=False):
     from viewing_copy import estimated_verification_ram
     resources=resources or system_resources();estimate=estimated_verification_ram(workers)
     gib=lambda value:'unavailable' if value is None else f'{value/1024**3:.1f} GiB'
@@ -71,6 +71,8 @@ def resource_summary(workers, resources=None):
            f'Estimated PDFium verification RAM: {gib(estimate)} (planning estimate, not a measured peak or limit).',
            'PDF.js uses a separate heap allowance, raised when available RAM permits, up to 8 GiB per worker.',
            'Workers may use multiple CPU threads internally; this selection does not reserve or cap CPU cores.']
+    if compact:
+        lines=[f"Available RAM: {gib(resources['available_ram_bytes'])}  ·  Estimated PDFium RAM: {gib(estimate)}"]
     if resources['available_ram_bytes'] is not None and estimate>resources['available_ram_bytes']:
         lines.append('Warning: the estimate exceeds available RAM; fewer workers are recommended.')
     return '\n'.join(lines)
@@ -349,28 +351,38 @@ def confirmation_text(jobs, verification_workers=None, resources=None, parallel_
     if not quick:
         from viewing_copy import default_verification_workers
         verification_workers=default_verification_workers() if verification_workers is None else verification_workers
-    ready=sum(job.status == 'ready' for job in jobs);recovered=sum(job.status in {'optimized','no improvement','failed'} for job in jobs)
-    lines = [f"Optimize {ready} PDF(s) and recover {recovered} completed result(s)?", ""]
-    if jobs:lines.extend((f"Profile: {PROFILE_LABELS[jobs[0].profile]}",f"Optimizer: {OPTIMIZER_LABELS[jobs[0].optimizer]}",""))
-    for job in jobs:
-        if job.status == "ready":
-            lines.extend((str(job.source), f"  → {job.output}", ""))
-        elif job.status in {'optimized','no improvement','failed'}:
-            detail = f" — {job.error}" if job.error else ""
-            lines.extend((str(job.source),f"  Recovered: {job.status}{detail}",""))
-        else:
-            lines.extend((str(job.source), f"  Rejected: {job.error}", ""))
-    if any(job.status == 'rejected' for job in jobs):
-        lines.extend(("PDFs rejected during review do not receive output reports.", ""))
+    ready=sum(job.status == 'ready' for job in jobs)
+    recovered=sum(job.status in {'optimized','no improvement','failed'} for job in jobs)
+    rejected=sum(job.status == 'rejected' for job in jobs)
+    counts = [f'{ready} ready to start']
+    if recovered:counts.append(f'{recovered} recovered')
+    if rejected:counts.append(f'{rejected} rejected')
+    lines = ['  ·  '.join(counts), '', 'Run settings']
+    if jobs:lines.extend((f"Mode: {PROFILE_LABELS[jobs[0].profile]}",f"Optimizer: {OPTIMIZER_LABELS[jobs[0].optimizer]}"))
     if quick:
         lines.extend((('Exact inlining, safe deduplication, cleanup and compression.' if jobs[0].optimizer=='adaptive' else 'Compression only; unreferenced objects retained.'),
-                      'No optimizer tournament or rendering-speed benchmarks. Preservation checks remain.',
-                      'Thirty seconds is an aspiration, not an acceptance requirement.',
-                      'Live annotations are retained; unreachable editor/recovery data may be omitted by the adaptive chain.',''))
+                      'Direct checks preservation without measuring viewing speed.',
+                      'Live annotations stay editable. The adaptive optimizer may remove unused editor or recovery data.'))
     else:
-        lines.extend((resource_summary(verification_workers,resources),
-                      'Candidate generation: '+('parallel (higher RAM and disk use)' if parallel_candidates else 'sequential'),''))
-    lines.append('Originals are never changed. Existing outputs are never overwritten.')
+        worker_line, _, resource_details = resource_summary(verification_workers,resources).partition('\n')
+        lines.extend((worker_line,'Candidate generation: '+(
+            'parallel (higher RAM and disk use)' if parallel_candidates else 'sequential')))
+    lines.extend(('', 'Files and outputs'))
+    for job in jobs:
+        lines.extend((job.source.name, f'  Source: {job.source}'))
+        if job.status == "ready":
+            lines.append(f"  Save copy to: {job.output}")
+        elif job.status in {'optimized','no improvement','failed'}:
+            detail = f" — {job.error}" if job.error else ""
+            lines.append(f"  Recovered: {job.status}{detail}")
+        else:
+            lines.append(f"  Rejected: {job.error}")
+        lines.append('')
+    if rejected:
+        lines.extend(("PDFs rejected during review do not receive output reports.", ""))
+    if not quick:
+        lines.extend(('Verification resources',resource_details,''))
+    lines.append('Originals and existing outputs are protected from overwrites.')
     return "\n".join(lines)
 
 

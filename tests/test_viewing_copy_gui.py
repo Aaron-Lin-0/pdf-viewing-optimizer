@@ -126,11 +126,11 @@ class ViewingCopyGuiTests(unittest.TestCase):
             main()
         self.assertEqual([call.args[0] for call in setup.call_args_list],['quick','thorough','quick'])
 
-    def test_slow_planning_does_not_block_tk_events_and_close_is_safe(self):
+    def test_settings_remain_editable_after_selection_and_back_from_review(self):
         import tkinter as tk
         from tkinter import ttk
         from unittest.mock import patch
-        from viewing_copy_gui import main
+        from viewing_copy_gui import PROFILE_LABELS, main
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
             source=Path(folder)/'source.pdf';make_pdf(source);gate=threading.Event();ticks=[]
             def blocked(*args,**kwargs):
@@ -140,35 +140,142 @@ class ViewingCopyGuiTests(unittest.TestCase):
                 def descendants(widget):
                     for child in widget.winfo_children():
                         yield child;yield from descendants(child)
-                deadline=time.monotonic()+2
-                choose=setup_button=None
-                while time.monotonic()<deadline:
-                    root.update();time.sleep(.01)
-                    choose=next((child for child in descendants(root)
-                                 if isinstance(child,ttk.Button) and 'Choose PDFs' in str(child['text'])),None)
-                    setup_button=next((child for child in descendants(root)
-                                 if isinstance(child,ttk.Button) and 'Check setup' in str(child['text'])),None)
-                    if choose and choose.instate(['!disabled']):break
-                self.assertIsNotNone(choose);self.assertIsNotNone(setup_button)
-                choose.invoke();root.after(10,lambda:ticks.append(True))
-                deadline=time.monotonic()+.3
-                while time.monotonic()<deadline and not ticks:root.update();time.sleep(.01)
-                self.assertTrue(ticks);self.assertTrue(choose.instate(['disabled']))
-                self.assertTrue(setup_button.instate(['disabled']))
-                root.event_generate('<Alt-s>');root.update()
-                self.assertEqual(setup.call_count,1)
-                gate.set();deadline=time.monotonic()+2
-                while time.monotonic()<deadline and not review.called:root.update();time.sleep(.01)
-                self.assertEqual(review.call_count,1);runner.assert_not_called()
-                root.tk.call(root.protocol('WM_DELETE_WINDOW'))
+                def wait_for(predicate):
+                    deadline=time.monotonic()+2
+                    while not predicate() and time.monotonic()<deadline:
+                        root.update();time.sleep(.01)
+                    self.assertTrue(predicate())
+                widgets=list(descendants(root))
+                buttons={str(child['text']).rstrip('…'):child for child in widgets if isinstance(child,ttk.Button)}
+                choose, review_button, setup_button = (buttons[label] for label in ('Choose PDFs','Review batch','Check setup'))
+                profile,optimizer=[child for child in widgets if isinstance(child,ttk.Combobox)]
+                worker=next(child for child in widgets if isinstance(child,ttk.Spinbox))
+                parallel=next(child for child in widgets if isinstance(child,ttk.Checkbutton))
+                try:
+                    wait_for(lambda:choose.instate(['!disabled']))
+                    choose.invoke()
+                    planner.assert_not_called()
+                    self.assertTrue(review_button.instate(['!disabled']))
+                    profile.set(PROFILE_LABELS['thorough'])
+                    wait_for(lambda:review_button.instate(['!disabled']))
+                    root.setvar(worker['textvariable'], 3)
+                    parallel.invoke()
+                    review_button.invoke()
+                    root.after(10,lambda:ticks.append(True))
+                    wait_for(lambda:bool(ticks))
+                    self.assertTrue(choose.instate(['disabled']))
+                    self.assertTrue(setup_button.instate(['disabled']))
+                    self.assertTrue(optimizer.instate(['disabled']))
+                    root.event_generate('<Alt-s>');root.update()
+                    self.assertEqual(setup.call_count,2)
+                    gate.set()
+                    wait_for(lambda:review.call_count==1)
+                    self.assertIn('Verification workers: 3',review.call_args.args[1])
+                    self.assertIn('Candidate generation: parallel',review.call_args.args[1])
+                    self.assertTrue(review_button.instate(['!disabled']))
+                    root.setvar(worker['textvariable'], 1)
+                    optimizer.set(OPTIMIZER_LABELS['qpdf'])
+                    review_button.invoke()
+                    wait_for(lambda:review.call_count==2)
+                    self.assertIn('Verification workers: 1',review.call_args.args[1])
+                    self.assertIn('Candidate generation: sequential',review.call_args.args[1])
+                    self.assertIn(OPTIMIZER_LABELS['qpdf'],review.call_args.args[1])
+                    self.assertEqual([call.args[0] for call in planner.call_args_list],[(str(source),)]*2)
+                    picker.assert_called_once()
+                    runner.assert_not_called()
+                finally:
+                    gate.set()
+                    root.tk.call(root.protocol('WM_DELETE_WINDOW'))
             with patch.object(tk.Tk,'mainloop',smoke),\
                  patch('viewing_copy_gui.dependency_diagnostics',return_value=()) as setup,\
-                 patch('viewing_copy_gui.plan_batch',side_effect=blocked),\
+                 patch('viewing_copy_gui.system_resources',return_value={'logical_cpu_count':4,'total_ram_bytes':None,'available_ram_bytes':None}),\
+                 patch('viewing_copy_gui.plan_batch',side_effect=blocked) as planner,\
                  patch('viewing_copy_gui.review_jobs',return_value=False) as review,\
                  patch('batch_workflow.BatchController.run') as runner,\
-                 patch('tkinter.filedialog.askopenfilenames',return_value=(str(source),)),\
+                 patch('tkinter.filedialog.askopenfilenames',return_value=(str(source),)) as picker,\
                  patch('tkinter.messagebox.askyesno',return_value=False):
                 main()
+
+    def test_review_opens_offset_from_current_main_window_position(self):
+        import tkinter as tk
+        from viewing_copy_gui import review_jobs
+
+        root=tk.Tk()
+        try:
+            for x,y in ((80,90),(180,120)):
+                root.geometry(f'680x460+{x}+{y}')
+                root.update()
+                positions=[]
+                def close_review():
+                    dialog=root.winfo_children()[0]
+                    positions.append((dialog.winfo_x(),dialog.winfo_y()))
+                    dialog.tk.call(dialog.protocol('WM_DELETE_WINDOW'))
+                root.after(50,close_review)
+                self.assertFalse(review_jobs(root,'Review sample.pdf'))
+                self.assertEqual(positions,[(root.winfo_x()+28,root.winfo_y()+28)])
+        finally:
+            root.destroy()
+
+    @unittest.skipUnless(os.name=='nt','Windows File Explorer')
+    def test_batch_summary_shows_saved_paths_and_opens_their_folders(self):
+        import tkinter as tk
+        from tkinter import ttk
+        from unittest.mock import call, patch
+        from viewing_copy_gui import batch_dialog
+
+        root=tk.Tk()
+        outputs=(Path(r'C:\Example\First folder\copy.pdf'),Path(r'C:\Example\Second folder\copy.pdf'))
+        shown=[]
+        def inspect_summary():
+            dialog=root.winfo_children()[0]
+            try:
+                text=next(child for frame in dialog.winfo_children() for child in frame.winfo_children()
+                          if isinstance(child,tk.Text))
+                shown.append(text.get('1.0','end'))
+                for button in text.winfo_children():
+                    if isinstance(button,ttk.Button) and button['text']=='Open folder':
+                        button.invoke()
+            finally:
+                dialog.destroy()
+        try:
+            with patch('viewing_copy_gui.os.startfile') as open_folder:
+                root.after(100,inspect_summary)
+                batch_dialog(root,'Copies saved: 2',saved_paths=outputs)
+                self.assertEqual(open_folder.call_args_list,[call(str(output.parent)) for output in outputs])
+            self.assertIn('Copies saved: 2',shown[0])
+            self.assertIn('Saved locations',shown[0])
+            for output in outputs:self.assertIn(str(output),shown[0])
+        finally:
+            root.destroy()
+
+    def test_activity_log_only_follows_when_viewing_latest_lines(self):
+        import tkinter as tk
+        from viewing_copy_gui import append_activity
+
+        root=tk.Tk()
+        try:
+            log=tk.Text(root,height=5,state='disabled')
+            log.pack()
+            root.update()
+            append_activity(log,'\n'.join(f'Activity {number}' for number in range(40)))
+            root.update()
+            self.assertEqual(log.yview()[1],1.0)
+            log.yview('10.0')
+            log.tag_add('sel','10.0','10.end')
+            root.update()
+            top=log.index('@0,0')
+            append_activity(log,'New activity')
+            root.update()
+            self.assertEqual(log.index('@0,0'),top)
+            self.assertEqual(log.get('sel.first','sel.last'),'Activity 9')
+            log.tag_remove('sel','1.0','end')
+            log.see('end')
+            append_activity(log,'Latest activity')
+            root.update()
+            self.assertEqual(log.yview()[1],1.0)
+            self.assertIn('Latest activity',log.get('end-2l','end'))
+        finally:
+            root.destroy()
 
     def test_slow_setup_does_not_block_tk_events(self):
         import tkinter as tk
@@ -189,7 +296,8 @@ class ViewingCopyGuiTests(unittest.TestCase):
             quick=plan_batch([source],profile='quick')[0]
             self.assertEqual(quick.profile,'quick');self.assertEqual(quick.optimizer,'adaptive')
             text=confirmation_text((quick,))
-            self.assertIn('Direct optimization',text);self.assertIn('not an acceptance requirement',text)
+            self.assertIn('Direct optimization',text)
+            self.assertIn('Direct checks preservation without measuring viewing speed.',text)
             self.assertNotIn('PDFium verification RAM',text)
             _save_job(replace(quick,status='running'))
             self.assertEqual(json.loads(quick.output.with_suffix('.checkpoint').joinpath('job.json').read_text())['schema'],2)
@@ -316,6 +424,100 @@ class ViewingCopyGuiTests(unittest.TestCase):
         self.assertEqual(progress_text(1,2),'1 of 2 files complete')
         self.assertEqual(progress_text(2,2),'2 of 2 files complete')
 
+    def test_progress_bar_advances_on_stages_and_verified_pages(self):
+        import tkinter as tk
+        from tkinter import ttk
+        from unittest.mock import patch
+        from viewing_copy_gui import main
+
+        page_ready, publication_ready, result_ready, second_ready, finish = (
+            threading.Event() for _ in range(5))
+        saved=[]
+        def run(controller):
+            job,second=controller.jobs
+            controller.emit('current',job)
+            controller.emit('stage',('verify preserved content on every page',time.monotonic()))
+            page_ready.wait(4)
+            controller.emit('output','Verified vector content/navigation/appearance: 1/2')
+            publication_ready.wait(4)
+            controller.emit('stage',('publication',time.monotonic()))
+            result_ready.wait(4)
+            result=replace(job,status='optimized')
+            saved.append(result.output)
+            controller.emit('result',result)
+            second_ready.wait(4)
+            controller.emit('current',second)
+            controller.emit('stage',('quick input checks',time.monotonic()))
+            finish.wait(4)
+            second_result=replace(second,status='no improvement')
+            controller.emit('result',second_result)
+            return (result,second_result)
+
+        def smoke(root):
+            root.withdraw()
+            def descendants(widget):
+                for child in widget.winfo_children():
+                    yield child;yield from descendants(child)
+            def wait_for(predicate):
+                deadline=time.monotonic()+3
+                while not predicate() and time.monotonic()<deadline:
+                    root.update();time.sleep(.01)
+                self.assertTrue(predicate())
+            widgets=list(descendants(root))
+            buttons={str(child['text']).rstrip('…'):child for child in widgets if isinstance(child,ttk.Button)}
+            progress=next(child for child in widgets if isinstance(child,ttk.Progressbar))
+            try:
+                wait_for(lambda:buttons['Choose PDFs'].instate(['!disabled']))
+                buttons['Choose PDFs'].invoke()
+                buttons['Review batch'].invoke()
+                wait_for(lambda:0<progress['value']<1)
+                self.assertEqual(progress['maximum'],2)
+                stage=progress['value']
+                page_ready.set()
+                wait_for(lambda:stage<progress['value']<1)
+                page=progress['value']
+                publication_ready.set()
+                wait_for(lambda:page<progress['value']<1)
+                result_ready.set()
+                wait_for(lambda:progress['value']==1)
+                second_ready.set()
+                wait_for(lambda:1<progress['value']<2)
+                finish.set()
+                wait_for(lambda:progress['value']==2)
+                wait_for(lambda:summary.called)
+                self.assertIn('Copies saved: 1',summary.call_args.args[1])
+                self.assertEqual(summary.call_args.kwargs['saved_paths'],tuple(saved))
+            finally:
+                for gate in (page_ready,publication_ready,result_ready,second_ready,finish):gate.set()
+                root.tk.call(root.protocol('WM_DELETE_WINDOW'))
+
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            sources=(Path(folder)/'first.pdf',Path(folder)/'second.pdf')
+            for source in sources:make_pdf(source)
+            with patch.object(tk.Tk,'mainloop',smoke),\
+                 patch('viewing_copy_gui.dependency_diagnostics',return_value=()),\
+                 patch('viewing_copy_gui.review_jobs',return_value=True),\
+                 patch.object(BatchController,'run',run),\
+                 patch('tkinter.filedialog.askopenfilenames',return_value=tuple(map(str,sources))),\
+                 patch('tkinter.messagebox.askyesno',return_value=False),\
+                 patch('viewing_copy_gui.batch_dialog') as summary:
+                main()
+
+    def test_repeated_thorough_stages_leave_room_for_timing_and_publication(self):
+        from viewing_copy_gui import stage_progress
+
+        progress=0
+        for index in range(12):
+            for stage in (f'candidate generation: {index}',f'preservation verification: {index}'):
+                start,end=stage_progress(stage,progress)
+                self.assertTrue(progress<start<end<58)
+                progress=end
+        timing,_=stage_progress('balanced performance timing',progress)
+        start,end=stage_progress('final acceptance: first',timing)
+        retry,_=stage_progress('final acceptance: retry',end)
+        publication,_=stage_progress('publication',retry)
+        self.assertTrue(progress<timing<start<end<retry<publication<100)
+
     def test_dependency_preflight_requires_bundled_qpdf(self):
         from unittest.mock import patch
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
@@ -372,8 +574,10 @@ class ViewingCopyGuiTests(unittest.TestCase):
             self.assertTrue(all(target.parent==job.output.parent for job in jobs for target in job.targets))
             self.assertTrue(all(job.status == "ready" for job in jobs))
             text = confirmation_text(jobs,parallel_candidates=True)
+            self.assertLess(text.index('Candidate generation: parallel'),text.index('Files and outputs'))
             self.assertLess(text.index(str(first)), text.index(str(second)))
-            self.assertIn(str(jobs[0].output), text)
+            self.assertIn(f'Source: {first}',text)
+            self.assertIn(f'Save copy to: {jobs[0].output}',text)
             self.assertIn('Candidate generation: parallel',text)
             self.assertEqual([job.source for job in plan_batch([second, first])],
                              [second.absolute(), first.absolute()])

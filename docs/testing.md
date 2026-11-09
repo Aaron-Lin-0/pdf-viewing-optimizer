@@ -33,19 +33,24 @@ old Python/Node versions stop with an actionable message. Browser installation s
 explicit; setup must not download or change a browser profile.
 
 The P12 native smoke uses keyboard shortcuts to open the setup report and system
-picker, selects the fresh matrix and interaction fixtures together, reviews every
-long source/output mapping in the scrollable dialog, and starts them sequentially.
+picker, selects the fresh matrix and interaction fixtures together, uses Alt+R to
+review every long source/output mapping in the scrollable dialog, and starts them
+sequentially.
 Repeat the picker from a second folder and confirm both folders remain in the single
 review; canceling a later picker must retain the earlier selection.
-Use Alt+G to toggle parallel candidate generation and confirm the review names the
-selected generation mode before starting.
+With files selected, change to Thorough, change the worker count, and use Alt+G to
+toggle parallel candidate generation. Confirm the review shows both settings.
+Use Back to settings, change them again, and confirm the same files and updated
+settings appear in the next review. Move the main window and confirm the review
+opens offset from its new position.
 Verify one terminal result before the next launch, report/output hashes, an honest
 reports-only result when appropriate, and isolated-browser acceptance for any
 published copy. Resize the main and review windows to their minimum sizes and confirm
 that paths wrap or scroll without hiding controls.
-For progress, assert that a reviewed two-file batch begins at 0/2, advances to 1/2
-after the first terminal result (including failure/skip), and reaches 2/2 only after
-the second terminal result. Do not derive a fake within-file percentage from log text.
+For progress, assert that a reviewed two-file batch begins at 0/2, advances the bar
+on stage and verification events, and advances the exact count to 1/2 after the
+first terminal result (including failure or skip). The approximate bar reaches
+100% and the count reaches 2/2 after the second terminal result.
 
 Checkpoint tests run the same generated source twice through one explicit checkpoint
 and assert that completed generation, preservation and timing do not execute again.
