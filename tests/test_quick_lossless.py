@@ -336,6 +336,27 @@ class DirectOptimizationTests(unittest.TestCase):
         self.assertTrue(all(page['exact'] for page in report['pdfjs_all_pages']))
         self.assertEqual(report['rendering_performance'],'not measured')
 
+    def test_ascii85_parent_does_not_block_other_inlining_or_cleanup(self):
+        from base64 import a85encode
+        from pypdf.generic import EncodedStreamObject
+        from test_inline_handwriting import IDENTITY, fixture
+
+        writer, parents, _ = fixture()
+        encoded = EncodedStreamObject()
+        encoded.update(parents[1])
+        encoded[NameObject('/Filter')] = NameObject('/ASCII85Decode')
+        encoded._data = a85encode(IDENTITY) + b'~>'
+        writer.pages[1]['/Resources']['/XObject'][NameObject('/Layer')] = writer._add_object(encoded)
+        writer._add_object(TextStringObject('obsolete editor recovery data '*3000))
+        writer.write(self.source)
+
+        optimize_direct(self.source, self.output)
+        report = json.loads(self.output.with_suffix('.json').read_text())
+        self.assertEqual(report['status'], 'optimized')
+        self.assertEqual(report['transformations']['inlined_form_calls'], 2)
+        self.assertTrue(report['verification']['exact'])
+        self.assertLess(self.output.stat().st_size, self.source.stat().st_size*.5)
+
     def test_no_inline_opportunity_keeps_deduplication_and_cleanup(self):
         rich_fixture(self.source)
         optimize_direct(self.source,self.output)

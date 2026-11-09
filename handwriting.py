@@ -3,7 +3,7 @@ import re
 
 from PIL import ImageChops, ImageStat
 import pypdfium2 as pdfium
-from pypdf.generic import ContentStream, DecodedStreamObject, DictionaryObject, NameObject, StreamObject
+from pypdf.generic import ContentStream, DecodedStreamObject, DictionaryObject, EncodedStreamObject, NameObject, StreamObject
 
 NUMBER = rb"[-+]?(?:\d+(?:\.\d*)?|\.\d+)"
 POINT = NUMBER + rb" " + NUMBER
@@ -60,6 +60,9 @@ def inline_handwriting(writer):
     cache = {}
     for parent in list(writer._objects):
         if not isinstance(parent, StreamObject) or parent.get('/Subtype') != '/Form' or '/Group' in parent:
+            continue
+        # pypdf can rewrite encoded streams in place only with a single Flate filter.
+        if isinstance(parent, EncodedStreamObject) and parent.get('/Filter') not in ('/FlateDecode', ['/FlateDecode']):
             continue
         data = parent.get_data()
         calls = list(FORM_CALL.finditer(data))

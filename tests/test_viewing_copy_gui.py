@@ -29,6 +29,36 @@ def make_pdf(path, encrypted=False):
     writer.write(path)
 
 
+class WindowsPathTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'nt', 'Windows path limit')
+    def test_long_source_name_has_collision_safe_resumable_output(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            root = Path(folder)
+            source = root / ('x' * (235 - len(str(root)) - len('.pdf')) + '.pdf')
+            self.assertEqual(len(str(source)), 236)
+            make_pdf(source)
+            first = plan_batch([source], profile='quick')[0]
+            self.assertEqual(first.status, 'ready', first.error)
+            self.assertEqual(first.output.parent, root)
+            first.output.touch()
+            second = plan_batch([source], profile='quick')[0]
+            self.assertEqual(second.status, 'ready', second.error)
+            self.assertNotEqual(first.output, second.output)
+            _save_job(replace(second, status='timeout'))
+            self.assertEqual(plan_batch([source], profile='quick')[0].output, second.output)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows path limit')
+    def test_deep_folder_is_rejected_in_review(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            root = Path(folder) / ('x' * 150)
+            root.mkdir()
+            source = root / 'notes.pdf'
+            make_pdf(source)
+            job = plan_batch([source], profile='quick')[0]
+            self.assertEqual(job.status, 'rejected')
+            self.assertIn('shorter folder path', job.error)
+
+
 def complete(job, status="no improvement", **changes):
     report = {"status": status, "source": str(job.source),
               "source_sha256": job.source_sha256}

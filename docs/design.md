@@ -93,8 +93,10 @@ The Windows batch GUI is a thin adapter over the headless controller in
 each selected file. Planning collapses duplicate selections, rejects unsafe inputs,
 snapshots the source SHA256 and reserves an unused adjacent
 `NAME.optimized-YYYY-MM-DD[-N]` run folder before displaying every source-to-output
-mapping for confirmation. The selected PDF, JSON/Markdown reports and checkpoint
-all stay inside that folder; an explicit CLI/API destination remains caller-owned.
+mapping for confirmation. When Windows path limits require it, planning uses a
+compact adjacent output name with matching reports and checkpoint, or rejects the
+path in review if the optimizer's working files still would not fit. An explicit
+CLI/API destination remains caller-owned.
 The picker can
 be reopened to accumulate files from multiple folders before that single review. The controller
 rechecks sources and targets before each sequential launch, validates terminal reports

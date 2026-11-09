@@ -71,9 +71,11 @@ Choose **Thorough optimization** for the existing candidate comparison, renderin
 benchmarks and visual/browser acceptance. Its **Optimizer** selector supports the
 adaptive pipeline, qpdf or PyMuPDF, all under the original thorough gates. Use **Stop
 after current** to keep the active result and skip the queue.
-Each run keeps its copy, reports and checkpoint together in an adjacent
-`NAME.optimized-YYYY-MM-DD[-N]` folder; the original's folder receives only that one
-run folder. A failed or unchanged file does not stop the remaining files.
+Each run normally keeps its copy, reports and checkpoint together in an adjacent
+`NAME.optimized-YYYY-MM-DD[-N]` folder. If Windows path limits require shorter
+names, the copy, reports and checkpoint share a compact name beside the source.
+Review flags paths that still need a shorter source folder. A failed or unchanged
+file does not stop the remaining files.
 Thorough interrupted jobs resume only exact completed candidate-generation, preservation and
 timing stages from the run folder's `.checkpoint` directory. Final browser acceptance
 and publication always run again. Quick interrupted jobs restart their single pass;

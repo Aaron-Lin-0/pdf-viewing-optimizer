@@ -147,14 +147,44 @@ def _targets_available(output, reserved=()):
                for path in _targets(output))
 
 
-def adjacent_output(source, reserved=()):
+def _compact_stem(source):
+    return 'pdf-' + hashlib.sha256(_path_key(source).encode('utf-8')).hexdigest()[:12]
+
+
+def _paths_fit(output, profile):
+    if os.name != 'nt':
+        return True
+    checkpoint = output.with_suffix('.checkpoint')
+    # Allow for the renderer's strip cache, temporary suffixes and checkpoint entries.
+    working = output.parent / ('pdf-quick-XXXXXXXX' if profile == 'quick' else 'pdf-viewing-XXXXXXXX')
+    paths = (*_targets(output), checkpoint/'quick'/'state.json',
+             working/'source-evidence'/('x'*64 + '.png.4294967295.tmp')/'0000000-0000000.png')
+    if profile == 'thorough':
+        paths += (checkpoint/('x'*16)/'operations'/('x'*32)/'.complete.4294967295.tmp',)
+    return all(len(str(path).encode('utf-16-le')) // 2 <= 259 for path in paths)
+
+
+def adjacent_output(source, reserved=(), profile='thorough'):
     source = Path(source).absolute()
     number = 1
+    compact = False
     while True:
-        label = source.stem + ".optimized-" + date.today().isoformat() + (f"-{number}" if number > 1 else "")
-        folder = source.with_name(label)
-        output = folder / (source.stem + ".optimized.pdf")
-        if not folder.exists() and not folder.is_symlink() and _targets_available(output, reserved):
+        suffix = f"-{number}" if number > 1 else ""
+        if compact:
+            output = source.with_name(f"{_compact_stem(source)}.optimized{suffix}.pdf")
+        else:
+            folder = source.with_name(source.stem + ".optimized-" + date.today().isoformat() + suffix)
+            output = folder / (source.stem + ".optimized.pdf")
+        if not _paths_fit(output, profile):
+            if compact:
+                raise ValueError("The PDF folder path is too long for optimization. Move the PDF to a shorter folder path and try again.")
+            compact = True
+            number = 1
+            continue
+        checkpoint = output.with_suffix('.checkpoint')
+        folder_available = compact or (not folder.exists() and not folder.is_symlink())
+        if (folder_available and not checkpoint.exists() and not checkpoint.is_symlink()
+                and _targets_available(output, reserved)):
             return output
         number += 1
 
@@ -240,7 +270,8 @@ def _recover_job(source,source_hash,optimizer,profile='thorough'):
     # Keep interrupted pre-folder runs resumable.
     roots.extend(path for path in source.parent.iterdir()
                  if path.is_dir() and not path.is_symlink() and path.parent.resolve()==source.parent.resolve()
-                 and path.name.startswith(source.stem+'.optimized') and path.name.endswith('.checkpoint'))
+                 and path.name.startswith((source.stem+'.optimized',_compact_stem(source)+'.optimized'))
+                 and path.name.endswith('.checkpoint'))
     for folder in sorted((path for path in roots if path.is_dir() and not path.is_symlink()),
                          key=lambda path:path.stat().st_mtime,reverse=True):
         try:
@@ -256,7 +287,8 @@ def _recover_job(source,source_hash,optimizer,profile='thorough'):
                 continue
             try:return replace(job,status=validate_result(job,recovering=True))
             except Exception:
-                if _targets_available(output):return replace(job,status='ready',error=None)
+                if _paths_fit(output, profile) and _targets_available(output):
+                    return replace(job,status='ready',error=None)
         except (KeyError,OSError,ValueError):
             continue
     return None
@@ -290,9 +322,7 @@ def plan_batch(sources,optimizer='adaptive',profile='thorough',progress=None):
         if key in seen:
             continue
         seen.add(key)
-        output = adjacent_output(source, reserved)
-        reserved.update(map(_path_key, _targets(output)))
-        job = Job(source, output, None, "planned",optimizer=optimizer,profile=profile)
+        job = Job(source, None, None, "planned",optimizer=optimizer,profile=profile)
         try:
             if not source.is_file():
                 raise ValueError("Input must be a PDF file.")
@@ -301,7 +331,12 @@ def plan_batch(sources,optimizer='adaptive',profile='thorough',progress=None):
                 from lossless_verify import validate_quick_input
                 validate_quick_input(source)
             else:validate_input(reader_for(source))
-            jobs.append(_recover_job(source,source_hash,optimizer,profile) or replace(job, source_sha256=source_hash, status="ready"))
+            recovered = _recover_job(source,source_hash,optimizer,profile)
+            if recovered is None:
+                output = adjacent_output(source, reserved, profile)
+                recovered = replace(job, output=output, source_sha256=source_hash, status="ready")
+            reserved.update(map(_path_key, recovered.targets))
+            jobs.append(recovered)
         except Exception as exc:
             jobs.append(replace(job, status="rejected", error=str(exc)))
     return tuple(jobs)
