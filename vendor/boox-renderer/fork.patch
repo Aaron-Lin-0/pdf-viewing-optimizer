@@ -1,0 +1,3457 @@
+diff --git a/crates/boox-notes-renderer/src/container.rs b/crates/boox-notes-renderer/src/container.rs
+index 43fb2f6..1946a0d 100644
+--- a/crates/boox-notes-renderer/src/container.rs
++++ b/crates/boox-notes-renderer/src/container.rs
+@@ -9,34 +9,257 @@
+ //! are infallible map accesses rather than seek-and-decompress dances.
+ 
+ use std::collections::BTreeMap;
+-use std::io::{self, Read, Seek};
++use std::io::{self, Read, Seek, SeekFrom};
+ 
+ use zip::ZipArchive;
+ 
+ use crate::error::{Error, Result};
+ 
++pub const MAX_ARCHIVE_ENTRIES: usize = 10_000;
++pub const MAX_ENTRY_SIZE: usize = 64 * 1024 * 1024; // 64 MiB
++pub const MAX_TOTAL_DECOMPRESSED_SIZE: usize = 256 * 1024 * 1024; // 256 MiB
++pub const MAX_NESTED_ZIP_SIZE: usize = 16 * 1024 * 1024; // 16 MiB
++
++/// Validate that an archive entry name does not contain path traversal,
++/// absolute prefixes, drive letters, control characters, or NUL bytes.
++pub fn validate_entry_name(name: &str) -> Result<()> {
++    if name.is_empty() {
++        return Err(Error::UnsafeEntry {
++            path: name.to_string(),
++            detail: "entry name is empty".to_string(),
++        });
++    }
++    if name.starts_with('/') || name.starts_with('\\') {
++        return Err(Error::UnsafeEntry {
++            path: name.to_string(),
++            detail: "entry name starts with leading slash".to_string(),
++        });
++    }
++    let bytes = name.as_bytes();
++    if bytes.len() >= 2 && bytes[1] == b':' && (bytes[0].is_ascii_alphabetic()) {
++        return Err(Error::UnsafeEntry {
++            path: name.to_string(),
++            detail: "entry name contains drive letter".to_string(),
++        });
++    }
++    if name.chars().any(|c| c.is_control() || c == '\0') {
++        return Err(Error::UnsafeEntry {
++            path: name.to_string(),
++            detail: "entry name contains control or NUL characters".to_string(),
++        });
++    }
++    for comp in name.split(['/', '\\']) {
++        if comp == ".." {
++            return Err(Error::UnsafeEntry {
++                path: name.to_string(),
++                detail: "entry name contains path traversal '..'".to_string(),
++            });
++        }
++    }
++    Ok(())
++}
++
+ /// All entries of a `.note` archive, indexed by their full path inside the ZIP.
++#[derive(Debug)]
+ pub struct Container {
+-    entries: BTreeMap<String, Vec<u8>>,
++    pub(crate) entries: BTreeMap<String, Vec<u8>>,
++}
++
++fn check_duplicate_names<R: Read + Seek>(reader: &mut R) -> Result<()> {
++    let file_len = reader.seek(SeekFrom::End(0)).map_err(Error::Archive)?;
++    if file_len < 22 {
++        return Ok(());
++    }
++    let search_len = (file_len as usize).min(65536 + 22);
++    reader
++        .seek(SeekFrom::End(-(search_len as i64)))
++        .map_err(Error::Archive)?;
++    let mut buf = vec![0u8; search_len];
++    reader.read_exact(&mut buf).map_err(Error::Archive)?;
++    let Some(eocd_pos) = buf.windows(4).rposition(|w| w == [0x50, 0x4b, 0x05, 0x06]) else {
++        return Ok(());
++    };
++    if eocd_pos + 22 > buf.len() {
++        return Ok(());
++    }
++    let eocd = &buf[eocd_pos..];
++    let mut total_entries = u16::from_le_bytes([eocd[10], eocd[11]]) as usize;
++    let mut cd_offset = u32::from_le_bytes([eocd[16], eocd[17], eocd[18], eocd[19]]) as u64;
++
++    // Check for ZIP64 format (sentinel values 0xFFFF/0xFFFFFFFF or ZIP64 locator)
++    let is_zip64 = total_entries == 0xffff
++        || cd_offset == 0xffffffff
++        || (eocd_pos >= 20 && buf[eocd_pos - 20..eocd_pos - 16] == [0x50, 0x4b, 0x06, 0x07]);
++
++    if is_zip64 {
++        let locator_start = eocd_pos.saturating_sub(32);
++        let Some(loc_rel) = buf[locator_start..eocd_pos]
++            .windows(4)
++            .rposition(|w| w == [0x50, 0x4b, 0x06, 0x07])
++        else {
++            return Err(Error::Archive(io::Error::new(
++                io::ErrorKind::InvalidData,
++                "missing ZIP64 locator in ZIP64 archive",
++            )));
++        };
++        let loc_pos = locator_start + loc_rel;
++        if loc_pos + 20 > buf.len() {
++            return Err(Error::Archive(io::Error::new(
++                io::ErrorKind::InvalidData,
++                "truncated ZIP64 locator",
++            )));
++        }
++        let loc = &buf[loc_pos..];
++        let zip64_eocd_offset = u64::from_le_bytes([
++            loc[8], loc[9], loc[10], loc[11], loc[12], loc[13], loc[14], loc[15],
++        ]);
++
++        reader
++            .seek(SeekFrom::Start(zip64_eocd_offset))
++            .map_err(Error::Archive)?;
++        let mut zip64_eocd = [0u8; 56];
++        reader.read_exact(&mut zip64_eocd).map_err(Error::Archive)?;
++        if zip64_eocd[0..4] != [0x50, 0x4b, 0x06, 0x06] {
++            return Err(Error::Archive(io::Error::new(
++                io::ErrorKind::InvalidData,
++                "invalid ZIP64 end of central directory signature",
++            )));
++        }
++        let entries_u64 = u64::from_le_bytes([
++            zip64_eocd[32],
++            zip64_eocd[33],
++            zip64_eocd[34],
++            zip64_eocd[35],
++            zip64_eocd[36],
++            zip64_eocd[37],
++            zip64_eocd[38],
++            zip64_eocd[39],
++        ]);
++        total_entries = usize::try_from(entries_u64).map_err(|_| Error::ResourceLimit {
++            detail: format!("ZIP64 entry count {entries_u64} overflows address space"),
++        })?;
++        cd_offset = u64::from_le_bytes([
++            zip64_eocd[48],
++            zip64_eocd[49],
++            zip64_eocd[50],
++            zip64_eocd[51],
++            zip64_eocd[52],
++            zip64_eocd[53],
++            zip64_eocd[54],
++            zip64_eocd[55],
++        ]);
++    }
++
++    if total_entries > MAX_ARCHIVE_ENTRIES {
++        return Err(Error::ResourceLimit {
++            detail: format!(
++                "archive entry count {} exceeds maximum {}",
++                total_entries, MAX_ARCHIVE_ENTRIES
++            ),
++        });
++    }
++
++    reader
++        .seek(SeekFrom::Start(cd_offset))
++        .map_err(Error::Archive)?;
++    let mut seen =
++        std::collections::HashSet::with_capacity(total_entries.min(MAX_ARCHIVE_ENTRIES + 1));
++    for _ in 0..total_entries {
++        let mut header = [0u8; 46];
++        reader.read_exact(&mut header).map_err(Error::Archive)?;
++        if header[0..4] != [0x50, 0x4b, 0x01, 0x02] {
++            return Err(Error::Archive(io::Error::new(
++                io::ErrorKind::InvalidData,
++                "corrupt or incomplete central directory header",
++            )));
++        }
++        let name_len = u16::from_le_bytes([header[28], header[29]]) as usize;
++        let extra_len = u16::from_le_bytes([header[30], header[31]]) as i64;
++        let comment_len = u16::from_le_bytes([header[32], header[33]]) as i64;
++        let mut name_bytes = vec![0u8; name_len];
++        reader.read_exact(&mut name_bytes).map_err(Error::Archive)?;
++        let name = String::from_utf8_lossy(&name_bytes).to_string();
++        if !seen.insert(name.clone()) {
++            return Err(Error::UnsafeEntry {
++                path: name,
++                detail: "duplicate entry name in archive".to_string(),
++            });
++        }
++        reader
++            .seek(SeekFrom::Current(extra_len + comment_len))
++            .map_err(Error::Archive)?;
++    }
++    Ok(())
+ }
+ 
+ impl Container {
+-    /// Read every entry of the archive into memory.
+-    pub fn open<R: Read + Seek>(reader: R) -> Result<Self> {
+-        // ZIP errors fold into `io::Error` (the `zip` crate provides the
+-        // conversion) so `zip` stays out of the public error type.
++    /// Read every entry of the archive into memory with explicit bounds and path validation.
++    pub fn open<R: Read + Seek>(mut reader: R) -> Result<Self> {
++        check_duplicate_names(&mut reader)?;
++        reader.seek(SeekFrom::Start(0)).map_err(Error::Archive)?;
+         let mut archive = ZipArchive::new(reader).map_err(|e| Error::Archive(e.into()))?;
++        if archive.len() > MAX_ARCHIVE_ENTRIES {
++            return Err(Error::ResourceLimit {
++                detail: format!(
++                    "archive entry count {} exceeds maximum {}",
++                    archive.len(),
++                    MAX_ARCHIVE_ENTRIES
++                ),
++            });
++        }
+         let mut entries = BTreeMap::new();
++        let mut total_bytes: usize = 0;
+         for i in 0..archive.len() {
+             let mut file = archive.by_index(i).map_err(|e| Error::Archive(e.into()))?;
+             if !file.is_file() {
+                 continue;
+             }
+             let name = file.name().to_string();
+-            let mut buf = Vec::with_capacity(file.size() as usize);
+-            file.read_to_end(&mut buf).map_err(|e| {
+-                Error::Archive(io::Error::new(e.kind(), format!("ZIP entry {name}: {e}")))
+-            })?;
++            validate_entry_name(&name)?;
++            if entries.contains_key(&name) {
++                return Err(Error::UnsafeEntry {
++                    path: name,
++                    detail: "duplicate entry name in archive".to_string(),
++                });
++            }
++            let declared_size = file.size() as usize;
++            if declared_size > MAX_ENTRY_SIZE {
++                return Err(Error::ResourceLimit {
++                    detail: format!(
++                        "entry '{name}' declared size {declared_size} exceeds limit {MAX_ENTRY_SIZE}"
++                    ),
++                });
++            }
++            if total_bytes.saturating_add(declared_size) > MAX_TOTAL_DECOMPRESSED_SIZE {
++                return Err(Error::ResourceLimit {
++                    detail: format!(
++                        "total decompressed archive size exceeds limit {MAX_TOTAL_DECOMPRESSED_SIZE}"
++                    ),
++                });
++            }
++            let mut buf = Vec::with_capacity(declared_size.min(1024 * 1024));
++            let limit = (MAX_ENTRY_SIZE + 1) as u64;
++            file.by_ref()
++                .take(limit)
++                .read_to_end(&mut buf)
++                .map_err(|e| {
++                    Error::Archive(io::Error::new(e.kind(), format!("ZIP entry {name}: {e}")))
++                })?;
++            if buf.len() > MAX_ENTRY_SIZE {
++                return Err(Error::ResourceLimit {
++                    detail: format!(
++                        "entry '{name}' uncompressed size exceeds limit {MAX_ENTRY_SIZE}"
++                    ),
++                });
++            }
++            total_bytes = total_bytes.saturating_add(buf.len());
++            if total_bytes > MAX_TOTAL_DECOMPRESSED_SIZE {
++                return Err(Error::ResourceLimit {
++                    detail: format!(
++                        "total decompressed archive size exceeds limit {MAX_TOTAL_DECOMPRESSED_SIZE}"
++                    ),
++                });
++            }
+             entries.insert(name, buf);
+         }
+         Ok(Self { entries })
+@@ -68,9 +291,157 @@ impl Container {
+ pub fn read_nested_zip_single(bytes: &[u8]) -> io::Result<Vec<u8>> {
+     let cursor = io::Cursor::new(bytes);
+     let mut archive = ZipArchive::new(cursor).map_err(io::Error::from)?;
+-    // `by_index(0)` reports an empty nested ZIP as FileNotFound.
++    if archive.is_empty() {
++        return Err(io::Error::new(
++            io::ErrorKind::NotFound,
++            "nested archive has no entries",
++        ));
++    }
++    if archive.len() > 1 {
++        return Err(io::Error::new(
++            io::ErrorKind::InvalidData,
++            format!("nested archive has {} entries, expected 1", archive.len()),
++        ));
++    }
+     let mut file = archive.by_index(0).map_err(io::Error::from)?;
+-    let mut buf = Vec::with_capacity(file.size() as usize);
+-    file.read_to_end(&mut buf)?;
++    let name = file.name().to_string();
++    if let Err(e) = validate_entry_name(&name) {
++        return Err(io::Error::new(io::ErrorKind::InvalidData, e.to_string()));
++    }
++    let declared_size = file.size() as usize;
++    if declared_size > MAX_NESTED_ZIP_SIZE {
++        return Err(io::Error::new(
++            io::ErrorKind::InvalidData,
++            format!("nested entry '{name}' exceeds size limit {MAX_NESTED_ZIP_SIZE}"),
++        ));
++    }
++    let mut buf = Vec::with_capacity(declared_size.min(1024 * 1024));
++    let limit = (MAX_NESTED_ZIP_SIZE + 1) as u64;
++    file.by_ref().take(limit).read_to_end(&mut buf)?;
++    if buf.len() > MAX_NESTED_ZIP_SIZE {
++        return Err(io::Error::new(
++            io::ErrorKind::InvalidData,
++            format!("nested entry '{name}' decompressed size exceeds limit {MAX_NESTED_ZIP_SIZE}"),
++        ));
++    }
+     Ok(buf)
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use std::io::Write;
++    use zip::write::SimpleFileOptions;
++
++    fn build_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
++        let mut cur = io::Cursor::new(Vec::new());
++        {
++            let mut writer = zip::ZipWriter::new(&mut cur);
++            let opts =
++                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
++            for &(name, data) in entries {
++                writer.start_file(name, opts).unwrap();
++                writer.write_all(data).unwrap();
++            }
++            writer.finish().unwrap();
++        }
++        cur.into_inner()
++    }
++
++    #[test]
++    fn validates_entry_names_rejects_unsafe_paths() {
++        assert!(validate_entry_name("safe/path/file.txt").is_ok());
++        assert!(matches!(
++            validate_entry_name(""),
++            Err(Error::UnsafeEntry { .. })
++        ));
++        assert!(matches!(
++            validate_entry_name("/root/file"),
++            Err(Error::UnsafeEntry { .. })
++        ));
++        assert!(matches!(
++            validate_entry_name("\\root\\file"),
++            Err(Error::UnsafeEntry { .. })
++        ));
++        assert!(matches!(
++            validate_entry_name("C:\\windows\\system32"),
++            Err(Error::UnsafeEntry { .. })
++        ));
++        assert!(matches!(
++            validate_entry_name("path/../traversal"),
++            Err(Error::UnsafeEntry { .. })
++        ));
++        assert!(matches!(
++            validate_entry_name("has\0null"),
++            Err(Error::UnsafeEntry { .. })
++        ));
++    }
++
++    #[test]
++    fn open_rejects_duplicate_entry_names() {
++        let mut zip_bytes = build_zip(&[("file1", b"1"), ("file2", b"2")]);
++        // Mutate the second entry name to match the first, creating duplicate names in a valid ZIP.
++        for i in 0..zip_bytes.len().saturating_sub(4) {
++            if &zip_bytes[i..i + 5] == b"file2" {
++                zip_bytes[i..i + 5].copy_from_slice(b"file1");
++            }
++        }
++        let res = Container::open(io::Cursor::new(zip_bytes));
++        assert!(
++            matches!(res, Err(Error::UnsafeEntry { detail, .. }) if detail.contains("duplicate"))
++        );
++    }
++
++    #[test]
++    fn open_rejects_duplicate_entry_names_zip64() {
++        let mut cur = io::Cursor::new(Vec::new());
++        {
++            let mut writer = zip::ZipWriter::new(&mut cur);
++            let opts = SimpleFileOptions::default()
++                .compression_method(zip::CompressionMethod::Stored)
++                .large_file(true);
++            for &(name, data) in &[("file1", b"1"), ("file2", b"2")] {
++                writer.start_file(name, opts).unwrap();
++                writer.write_all(data).unwrap();
++            }
++            writer.finish().unwrap();
++        }
++        let mut zip_bytes = cur.into_inner();
++        for i in 0..zip_bytes.len().saturating_sub(4) {
++            if &zip_bytes[i..i + 5] == b"file2" {
++                zip_bytes[i..i + 5].copy_from_slice(b"file1");
++            }
++        }
++        let res = Container::open(io::Cursor::new(zip_bytes));
++        assert!(
++            matches!(res, Err(Error::UnsafeEntry { detail, .. }) if detail.contains("duplicate"))
++        );
++    }
++
++    #[test]
++    fn open_reads_valid_entries() {
++        let zip_bytes = build_zip(&[
++            ("note/pb/note_info", b"metadata"),
++            ("point/p1#points", b"points"),
++        ]);
++        let container = Container::open(io::Cursor::new(zip_bytes)).expect("open succeeds");
++        assert_eq!(
++            container.get("note/pb/note_info"),
++            Some(b"metadata".as_slice())
++        );
++        assert_eq!(container.get("point/p1#points"), Some(b"points".as_slice()));
++    }
++
++    #[test]
++    fn nested_zip_single_requires_exactly_one_file() {
++        let empty_zip = build_zip(&[]);
++        assert!(read_nested_zip_single(&empty_zip).is_err());
++
++        let multi_zip = build_zip(&[("file1", b"data1"), ("file2", b"data2")]);
++        assert!(read_nested_zip_single(&multi_zip).is_err());
++
++        let single_zip = build_zip(&[("shape_data", b"protobuf")]);
++        let bytes = read_nested_zip_single(&single_zip).expect("single entry succeeds");
++        assert_eq!(bytes, b"protobuf");
++    }
++}
+diff --git a/crates/boox-notes-renderer/src/error.rs b/crates/boox-notes-renderer/src/error.rs
+index 62a3cb9..3454b92 100644
+--- a/crates/boox-notes-renderer/src/error.rs
++++ b/crates/boox-notes-renderer/src/error.rs
+@@ -72,6 +72,24 @@ pub enum Error {
+         /// The underlying encode failure, as text.
+         detail: String,
+     },
++    /// A stroke uses an unsupported or textured pen in strict mode.
++    #[error("unsupported pen type {pen_type} in strict mode")]
++    UnsupportedPen {
++        /// The pen_type id from proto field 12.
++        pen_type: i64,
++    },
++    /// An archive exceeded safety bounds (e.g. entry count or decompressed bytes).
++    #[error("resource limit exceeded: {detail}")]
++    ResourceLimit { detail: String },
++    /// An archive entry has an unsafe path or duplicate name.
++    #[error("unsafe archive entry '{path}': {detail}")]
++    UnsafeEntry { path: String, detail: String },
++    /// Strict conversion rejected an unsupported feature (e.g. hidden layers, templates).
++    #[error("unsupported feature in strict mode: {feature}")]
++    UnsupportedFeature { feature: String },
++    /// Strict conversion encountered missing content (e.g. missing points, tiles, or images).
++    #[error("missing content in strict mode: {what}")]
++    MissingContent { what: String },
+ }
+ 
+ /// Crate-wide result alias.
+diff --git a/crates/boox-notes-renderer/src/lib.rs b/crates/boox-notes-renderer/src/lib.rs
+index 3657233..513a0f2 100644
+--- a/crates/boox-notes-renderer/src/lib.rs
++++ b/crates/boox-notes-renderer/src/lib.rs
+@@ -43,3 +43,4 @@ pub(crate) mod proto;
+ pub mod render;
+ 
+ pub use error::{Error, Result};
++pub use model::{StrokeWidthConfig, parse_stroke_width};
+diff --git a/crates/boox-notes-renderer/src/main.rs b/crates/boox-notes-renderer/src/main.rs
+index f07a325..bdbb1c9 100644
+--- a/crates/boox-notes-renderer/src/main.rs
++++ b/crates/boox-notes-renderer/src/main.rs
+@@ -7,9 +7,36 @@ use std::path::{Path, PathBuf};
+ use anyhow::{Context, Result};
+ use clap::{Parser, ValueEnum};
+ 
+-use boox_notes_renderer::model::{Document, Layout};
++use boox_notes_renderer::model::{Document, Layout, StrokeWidthConfig};
+ use boox_notes_renderer::render::{self, FontOptions, PageSel};
+ 
++fn parse_fixed_stroke_width(s: &str) -> std::result::Result<String, String> {
++    boox_notes_renderer::model::parse_stroke_width(s)?;
++    Ok(s.to_string())
++}
++
++fn parse_stroke_scale(s: &str) -> std::result::Result<f32, String> {
++    let scale: f32 = s
++        .trim()
++        .parse()
++        .map_err(|e| format!("invalid number in '{s}': {e}"))?;
++    if !scale.is_finite() || scale <= 0.0 || scale < 0.001 || scale > 100.0 {
++        return Err(format!(
++            "Invalid --stroke-scale '{s}': value must be strictly positive, finite, and between 0.001 and 100.0"
++        ));
++    }
++    Ok(scale)
++}
++
++#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
++enum StrokeModeArg {
++    Upstream,
++    #[value(name = "density-scaled", alias = "device-native")]
++    DeviceNative,
++    Fixed,
++    Scale,
++}
++
+ #[derive(Parser)]
+ #[command(
+     name = "boox-notes-renderer",
+@@ -60,6 +87,19 @@ struct Args {
+     /// PNG scale in pixels per point (default 1.0).
+     #[arg(long, default_value_t = 1.0)]
+     scale: f32,
++    /// Strict conversion mode: preserve all recorded vector points, enforce complete
++    /// content accounting, disable automatic font downloads, and use exclusive output creation.
++    #[arg(long)]
++    strict: bool,
++    /// Stroke width calculation mode: "upstream" (default), "device-native", "fixed", "scale".
++    #[arg(long = "stroke-mode", value_enum, default_value = "upstream")]
++    stroke_mode: StrokeModeArg,
++    /// Fixed stroke width (e.g. '0.10mm', '0.5pt', '2px', or raw float in pt).
++    #[arg(long = "fixed-stroke-width", value_parser = parse_fixed_stroke_width)]
++    fixed_stroke_width: Option<String>,
++    /// Linear stroke width scaling multiplier.
++    #[arg(long = "stroke-scale", value_parser = parse_stroke_scale)]
++    stroke_scale: Option<f32>,
+ }
+ 
+ #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+@@ -104,6 +144,34 @@ impl log::Log for StderrLogger {
+     fn flush(&self) {}
+ }
+ 
++fn resolve_stroke_config(args: &Args) -> Result<StrokeWidthConfig> {
++    if let Some(fixed_str) = &args.fixed_stroke_width {
++        if args.stroke_scale.is_some() {
++            log::warn!(
++                "Both --fixed-stroke-width and --stroke-scale provided; using --fixed-stroke-width"
++            );
++        }
++        let w = boox_notes_renderer::model::parse_stroke_width(fixed_str)
++            .map_err(|e| anyhow::anyhow!("{e}"))?;
++        Ok(StrokeWidthConfig::Fixed(w))
++    } else if let Some(scale) = args.stroke_scale {
++        Ok(StrokeWidthConfig::Scale(scale))
++    } else {
++        match args.stroke_mode {
++            StrokeModeArg::Upstream => Ok(StrokeWidthConfig::Upstream),
++            StrokeModeArg::DeviceNative => Ok(StrokeWidthConfig::DeviceNative),
++            StrokeModeArg::Fixed => {
++                anyhow::bail!(
++                    "--fixed-stroke-width must be specified when --stroke-mode is 'fixed'"
++                )
++            }
++            StrokeModeArg::Scale => {
++                anyhow::bail!("--stroke-scale must be specified when --stroke-mode is 'scale'")
++            }
++        }
++    }
++}
++
+ fn main() -> Result<()> {
+     let _ = log::set_logger(&StderrLogger).map(|()| log::set_max_level(log::LevelFilter::Info));
+     let args = Args::parse();
+@@ -129,12 +197,19 @@ fn main() -> Result<()> {
+             .unwrap_or(Format::Pdf)
+     });
+ 
++    let stroke_config = resolve_stroke_config(&args)?;
++
+     let file =
+         fs::File::open(&args.input).with_context(|| format!("opening {}", args.input.display()))?;
+-    let mut doc = Document::load(file, layout).context("parsing .note")?;
++    let mut doc = if args.strict {
++        Document::load_strict(file, layout).context("strict parsing .note")?
++    } else {
++        Document::load(file, layout).context("parsing .note")?
++    };
+     if args.flat_marker {
+         doc.flatten_markers();
+     }
++    doc.apply_stroke_width_config(stroke_config, layout);
+ 
+     // Page-range validation happens in the render functions (typed
+     // Error::PageOutOfRange), before any font setup/download.
+@@ -166,9 +241,20 @@ fn main() -> Result<()> {
+         .with_download(args.download_fonts)
+         .with_cache_dir(args.fonts_cache_dir);
+ 
++    if args.strict && format != Format::Pdf {
++        anyhow::bail!("--strict is currently only supported for PDF output");
++    }
++
+     let files: Vec<(String, Vec<u8>)> = match format {
+         // PDF is one (multi-page) file; --page selects a single page inside it.
+-        Format::Pdf => vec![(String::new(), render::render_pdf(&doc, &font_opts, sel)?)],
++        Format::Pdf => {
++            let bytes = if args.strict {
++                render::render_pdf_strict(&doc, &font_opts, sel)?
++            } else {
++                render::render_pdf(&doc, &font_opts, sel)?
++            };
++            vec![(String::new(), bytes)]
++        }
+         Format::Svg => render::render_svg(&doc, &font_opts, sel)?
+             .into_iter()
+             .map(|(s, svg)| (s, svg.into_bytes()))
+@@ -177,9 +263,22 @@ fn main() -> Result<()> {
+     };
+ 
+     let ext = format.ext();
+-    for (suffix, bytes) in &files {
+-        let path = PathBuf::from(format!("{}{}.{}", stem.display(), suffix, ext));
+-        fs::write(&path, bytes).with_context(|| format!("writing {}", path.display()))?;
++    if args.strict {
++        let targets: Vec<(PathBuf, Vec<u8>)> = files
++            .iter()
++            .map(|(suffix, bytes)| {
++                (
++                    PathBuf::from(format!("{}{}.{}", stem.display(), suffix, ext)),
++                    bytes.clone(),
++                )
++            })
++            .collect();
++        write_outputs_exclusive(&targets)?;
++    } else {
++        for (suffix, bytes) in &files {
++            let path = PathBuf::from(format!("{}{}.{}", stem.display(), suffix, ext));
++            fs::write(&path, bytes).with_context(|| format!("writing {}", path.display()))?;
++        }
+     }
+     eprintln!(
+         "wrote {} file(s) ({}), {} total bytes",
+@@ -189,3 +288,192 @@ fn main() -> Result<()> {
+     );
+     Ok(())
+ }
++
++fn write_outputs_exclusive(files: &[(PathBuf, Vec<u8>)]) -> Result<()> {
++    write_outputs_exclusive_with(files, std::io::Write::write_all)
++}
++
++fn write_outputs_exclusive_with<F>(files: &[(PathBuf, Vec<u8>)], mut write_fn: F) -> Result<()>
++where
++    F: FnMut(&mut fs::File, &[u8]) -> std::io::Result<()>,
++{
++    let mut written: Vec<PathBuf> = Vec::new();
++    let write_res: Result<()> = (|| {
++        for (path, bytes) in files {
++            let mut f = fs::OpenOptions::new()
++                .write(true)
++                .create_new(true)
++                .open(path)
++                .with_context(|| {
++                    format!(
++                        "exclusive creation of {} failed (file already exists or cannot be created)",
++                        path.display()
++                    )
++                })?;
++            written.push(path.clone());
++            write_fn(&mut f, bytes).with_context(|| format!("writing {}", path.display()))?;
++        }
++        Ok(())
++    })();
++
++    if let Err(e) = write_res {
++        for path in &written {
++            let _ = fs::remove_file(path);
++        }
++        return Err(e);
++    }
++    Ok(())
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn strict_exclusive_creation_rejects_existing_file() {
++        let dir = std::env::temp_dir().join("boox_exclusive_test_collision");
++        let _ = fs::create_dir_all(&dir);
++        let path = dir.join("collision.pdf");
++        fs::write(&path, b"initial content").unwrap();
++
++        let files = vec![(path.clone(), b"overwrite attempt".to_vec())];
++        let res = write_outputs_exclusive(&files);
++        assert!(res.is_err(), "exclusive creation must reject existing file");
++
++        // Verify existing file content remains untouched
++        let content = fs::read(&path).unwrap();
++        assert_eq!(content, b"initial content");
++
++        let _ = fs::remove_file(&path);
++        let _ = fs::remove_dir(&dir);
++    }
++
++    #[test]
++    fn strict_exclusive_creation_cleans_partial_files_on_failure() {
++        let dir = std::env::temp_dir().join("boox_exclusive_test_rollback");
++        let _ = fs::create_dir_all(&dir);
++        let path1 = dir.join("part1.pdf");
++        let path2 = dir.join("part2.pdf");
++        let _ = fs::remove_file(&path1);
++        fs::write(&path2, b"blocking").unwrap();
++
++        let files = vec![
++            (path1.clone(), b"data1".to_vec()),
++            (path2.clone(), b"data2".to_vec()),
++        ];
++        let res = write_outputs_exclusive(&files);
++        assert!(res.is_err());
++
++        // path1 was created then rolled back when path2 failed
++        assert!(
++            !path1.exists(),
++            "partial file path1 must be cleaned up on failure"
++        );
++
++        let _ = fs::remove_file(&path2);
++        let _ = fs::remove_dir(&dir);
++    }
++
++    #[test]
++    fn strict_exclusive_creation_cleans_up_on_write_error() {
++        let dir = std::env::temp_dir().join("boox_exclusive_test_write_err");
++        let _ = fs::create_dir_all(&dir);
++        let path = dir.join("write_fail.pdf");
++        let _ = fs::remove_file(&path);
++
++        let files = vec![(path.clone(), b"data".to_vec())];
++        let res = write_outputs_exclusive_with(&files, |_f, _bytes| {
++            Err(std::io::Error::other("simulated write failure"))
++        });
++        assert!(res.is_err());
++        assert!(
++            !path.exists(),
++            "partially created file must be cleaned up when write fails"
++        );
++
++        let _ = fs::remove_dir(&dir);
++    }
++
++    #[test]
++    fn test_cli_stroke_mode_precedence() {
++        // 1. Default -> Upstream
++        let args = Args::try_parse_from(["app", "note.note"]).unwrap();
++        assert_eq!(
++            resolve_stroke_config(&args).unwrap(),
++            StrokeWidthConfig::Upstream
++        );
++
++        // 2. --stroke-mode device-native
++        let args =
++            Args::try_parse_from(["app", "note.note", "--stroke-mode", "device-native"]).unwrap();
++        assert_eq!(
++            resolve_stroke_config(&args).unwrap(),
++            StrokeWidthConfig::DeviceNative
++        );
++
++        // 3. --stroke-mode density-scaled (alias)
++        let args =
++            Args::try_parse_from(["app", "note.note", "--stroke-mode", "density-scaled"]).unwrap();
++        assert_eq!(
++            resolve_stroke_config(&args).unwrap(),
++            StrokeWidthConfig::DeviceNative
++        );
++
++        // 4. --stroke-scale beats --stroke-mode
++        let args = Args::try_parse_from([
++            "app",
++            "note.note",
++            "--stroke-scale",
++            "1.5",
++            "--stroke-mode",
++            "device-native",
++        ])
++        .unwrap();
++        assert_eq!(
++            resolve_stroke_config(&args).unwrap(),
++            StrokeWidthConfig::Scale(1.5)
++        );
++
++        // 5. --fixed-stroke-width beats both --stroke-scale and --stroke-mode
++        let args = Args::try_parse_from([
++            "app",
++            "note.note",
++            "--fixed-stroke-width",
++            "0.5pt",
++            "--stroke-scale",
++            "1.5",
++            "--stroke-mode",
++            "device-native",
++        ])
++        .unwrap();
++        assert_eq!(
++            resolve_stroke_config(&args).unwrap(),
++            StrokeWidthConfig::Fixed(0.5)
++        );
++
++        // 6. --fixed-stroke-width with units: "0.10mm"
++        let args =
++            Args::try_parse_from(["app", "note.note", "--fixed-stroke-width", "0.10mm"]).unwrap();
++        if let StrokeWidthConfig::Fixed(w) = resolve_stroke_config(&args).unwrap() {
++            assert!((w - 0.28346457).abs() < 1e-4);
++        } else {
++            panic!("expected Fixed config");
++        }
++
++        // 7. --fixed-stroke-width with "2px"
++        let args =
++            Args::try_parse_from(["app", "note.note", "--fixed-stroke-width", "2px"]).unwrap();
++        assert_eq!(
++            resolve_stroke_config(&args).unwrap(),
++            StrokeWidthConfig::Fixed(0.48)
++        );
++
++        // 8. --stroke-mode fixed without --fixed-stroke-width errors
++        let args = Args::try_parse_from(["app", "note.note", "--stroke-mode", "fixed"]).unwrap();
++        assert!(resolve_stroke_config(&args).is_err());
++
++        // 9. --stroke-mode scale without --stroke-scale errors
++        let args = Args::try_parse_from(["app", "note.note", "--stroke-mode", "scale"]).unwrap();
++        assert!(resolve_stroke_config(&args).is_err());
++    }
++}
+diff --git a/crates/boox-notes-renderer/src/model/bounds.rs b/crates/boox-notes-renderer/src/model/bounds.rs
+index a29712c..740af4b 100644
+--- a/crates/boox-notes-renderer/src/model/bounds.rs
++++ b/crates/boox-notes-renderer/src/model/bounds.rs
+@@ -44,7 +44,12 @@ impl BBox {
+ pub(super) fn expand_bounds(bbox: &mut BBox, item: &RenderItem) {
+     match item {
+         RenderItem::Stroke(s) => {
+-            let pad = crate::pen::stroke_visual_pad(s.pen_type, s.width, &s.points);
++            let pad = crate::pen::configured_visual_pad(
++                s.pen_type,
++                s.width,
++                &s.points,
++                s.stroke_width_config,
++            );
+             for p in &s.points {
+                 bbox.expand_padded(p.x, p.y, pad);
+             }
+@@ -170,6 +175,7 @@ mod tests {
+                 pen_type: 2,
+                 charcoal_texture: 1,
+                 flat_marker: false,
++                stroke_width_config: StrokeWidthConfig::Upstream,
+             })
+         };
+         let mut thin = BBox::default();
+diff --git a/crates/boox-notes-renderer/src/model/mod.rs b/crates/boox-notes-renderer/src/model/mod.rs
+index 411a602..bb5e0a4 100644
+--- a/crates/boox-notes-renderer/src/model/mod.rs
++++ b/crates/boox-notes-renderer/src/model/mod.rs
+@@ -51,6 +51,85 @@ pub struct RenderStroke {
+     /// polyline so it composites once in every viewer. Per-stroke 127/255 alpha
+     /// + Multiply are kept. See `render/stroke.rs::draw_marker`.
+     pub flat_marker: bool,
++    /// Configured stroke width mode (default `Upstream`).
++    pub stroke_width_config: StrokeWidthConfig,
++}
++
++/// Stroke width configuration mode.
++///
++/// Controls how nominal stroke widths in note shapes are mapped to rendered widths:
++/// - `Upstream`: Baseline empirical curve for fountain/nBrush, exact drawing helper floors.
++/// - `DeviceNative`: 0.24 density conversion ratio (72/300 pt/px) with natural pressure modulation.
++/// - `Fixed(w)`: Fixed stroke width `w` in points across ink strokes, ignoring pressure.
++/// - `Scale(s)`: Linear multiplier `s` applied across baseline rendered stroke widths.
++#[derive(Debug, Clone, Copy, PartialEq, Default)]
++#[non_exhaustive]
++pub enum StrokeWidthConfig {
++    /// Baseline rendering (the default).
++    #[default]
++    Upstream,
++    /// Physical density-converted width (`nominal * 0.24 pt/px`) with natural pressure modulation.
++    DeviceNative,
++    /// Constant stroke thickness in points across ink strokes.
++    Fixed(f32),
++    /// Uniform linear scaling factor applied across rendered stroke widths.
++    Scale(f32),
++}
++
++impl StrokeWidthConfig {
++    /// Whether this configuration differs from the upstream baseline.
++    pub fn is_custom(&self) -> bool {
++        !matches!(self, StrokeWidthConfig::Upstream)
++    }
++
++    /// Resolve a constant or base stroke width from nominal width.
++    pub fn resolve_width(&self, nominal: f32) -> f32 {
++        match self {
++            StrokeWidthConfig::Upstream => nominal,
++            StrokeWidthConfig::DeviceNative => nominal * 0.24,
++            StrokeWidthConfig::Fixed(w) => *w,
++            StrokeWidthConfig::Scale(s) => nominal * s,
++        }
++    }
++}
++
++/// Parse a stroke width string with optional unit suffix (`mm`, `pt`, `px`, or unitless float).
++///
++/// Supported units:
++/// - `mm`: Millimeters, converted as `val * 72.0 / 25.4` pt.
++/// - `pt`: PDF typographic points (1.0 pt/unit).
++/// - `px`: Device pixels at 300 DPI, converted as `val * 0.24` pt (72.0 / 300.0).
++/// - Unitless float: Interpreted as points.
++///
++/// Validates that the resulting value is strictly positive, finite, and within `0.001` to `100.0` pt.
++pub fn parse_stroke_width(s: &str) -> std::result::Result<f32, String> {
++    let s_trimmed = s.trim();
++    if s_trimmed.is_empty() {
++        return Err("empty stroke width string".to_string());
++    }
++    let lower = s_trimmed.to_ascii_lowercase();
++    let (num_str, factor) = if lower.ends_with("mm") {
++        (&s_trimmed[..s_trimmed.len() - 2], 72.0 / 25.4)
++    } else if lower.ends_with("pt") {
++        (&s_trimmed[..s_trimmed.len() - 2], 1.0)
++    } else if lower.ends_with("px") {
++        (&s_trimmed[..s_trimmed.len() - 2], 0.24)
++    } else {
++        (s_trimmed, 1.0)
++    };
++
++    let val: f32 = num_str
++        .trim()
++        .parse()
++        .map_err(|e| format!("invalid stroke width value '{s}': {e}"))?;
++
++    let pt = val * factor;
++    if !pt.is_finite() || pt <= 0.0 || pt < 0.001 || pt > 100.0 {
++        return Err(format!(
++            "Invalid stroke width '{s}': value must be strictly positive, finite, and between 0.001 pt and 100 pt (got {pt:.4} pt)"
++        ));
++    }
++    Ok(pt)
+ }
+ 
+ /// A run of text sharing one style (from the rich-text HTML spans).
+@@ -153,6 +232,17 @@ pub enum Layout {
+     SingleCanvas,
+ }
+ 
++/// Conversion mode for document loading.
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
++#[non_exhaustive]
++pub enum LoadMode {
++    /// Default mode: warns and skips missing assets or unhandled layers.
++    #[default]
++    Default,
++    /// Strict mode: rejects missing assets, missing points, hidden layers, or unhandled templates.
++    Strict,
++}
++
+ const MARGIN: f32 = 24.0;
+ const PEN_TYPE_HIGHLIGHTER: i64 = 15;
+ // NOTE: BOOX's PDF export draws markers at alpha 127/255 (the exported
+@@ -161,6 +251,23 @@ const HIGHLIGHTER_ALPHA: f32 = 127.0 / 255.0;
+ 
+ impl Document {
+     pub fn load<R: std::io::Read + std::io::Seek>(reader: R, layout: Layout) -> Result<Self> {
++        Self::load_with_mode(reader, layout, LoadMode::Default)
++    }
++
++    /// Load a `.note` archive in strict mode. Fails if active items have missing points,
++    /// missing tiles or assets, or if hidden layers or templates are present.
++    pub fn load_strict<R: std::io::Read + std::io::Seek>(
++        reader: R,
++        layout: Layout,
++    ) -> Result<Self> {
++        Self::load_with_mode(reader, layout, LoadMode::Strict)
++    }
++
++    fn load_with_mode<R: std::io::Read + std::io::Seek>(
++        reader: R,
++        layout: Layout,
++        mode: LoadMode,
++    ) -> Result<Self> {
+         let container = Container::open(reader)?;
+         let prefixes = find_note_prefixes(&container);
+         if prefixes.is_empty() {
+@@ -168,7 +275,7 @@ impl Document {
+         }
+         let mut canvases = Vec::new();
+         for prefix in prefixes {
+-            canvases.extend(assemble_note(&container, &prefix, layout)?);
++            canvases.extend(assemble_note_with_mode(&container, &prefix, layout, mode)?);
+         }
+         Ok(Self { canvases })
+     }
+@@ -193,6 +300,30 @@ impl Document {
+             }
+         }
+     }
++
++    /// Apply a configurable stroke width mode across all strokes in this document.
++    pub fn apply_stroke_width_config(&mut self, config: StrokeWidthConfig, layout: Layout) {
++        for canvas in &mut self.canvases {
++            for item in &mut canvas.items {
++                if let RenderItem::Stroke(s) = item {
++                    s.stroke_width_config = config;
++                }
++            }
++            if config.is_custom()
++                && matches!(layout, Layout::SingleCanvas)
++                && !canvas.items.is_empty()
++            {
++                let mut bbox = bounds::BBox::default();
++                for item in &canvas.items {
++                    bounds::expand_bounds(&mut bbox, item);
++                }
++                canvas.width = bbox.max_x - bbox.min_x + 2.0 * MARGIN;
++                canvas.height = bbox.max_y - bbox.min_y + 2.0 * MARGIN;
++                canvas.origin_x = bbox.min_x - MARGIN;
++                canvas.origin_y = bbox.min_y - MARGIN;
++            }
++        }
++    }
+ }
+ 
+ /// Locate each note's path prefix by finding every `.../note/pb/note_info`.
+@@ -208,6 +339,7 @@ fn find_note_prefixes(container: &Container) -> Vec<String> {
+ }
+ 
+ /// A shape plus the page (tile) it belongs to and its file ordering.
++#[derive(Debug)]
+ struct ShapeEntry {
+     shape: proto::Shape,
+     page_id: String,
+@@ -230,7 +362,12 @@ struct NoteData<'a> {
+     canvas_h: f32,
+ }
+ 
+-fn assemble_note(container: &Container, prefix: &str, layout: Layout) -> Result<Vec<Canvas>> {
++fn assemble_note_with_mode(
++    container: &Container,
++    prefix: &str,
++    layout: Layout,
++    mode: LoadMode,
++) -> Result<Vec<Canvas>> {
+     let note_info: NoteInfo = proto::decode(
+         container
+             .get(&format!("{prefix}note/pb/note_info"))
+@@ -244,8 +381,10 @@ fn assemble_note(container: &Container, prefix: &str, layout: Layout) -> Result<
+     let pen: PenSettings = meta
+         .and_then(|m| json_meta::parse_opt(&m.pen_settings_json))
+         .unwrap_or_default();
+-    let page_order: Vec<String> = meta
+-        .and_then(|m| json_meta::parse_opt::<json_meta::PageNameList>(&m.active_pages_json))
++    let page_order: Vec<String> = note_info
++        .notes
++        .iter()
++        .find_map(|m| json_meta::parse_opt::<json_meta::PageNameList>(&m.active_pages_json))
+         .map(|p| p.page_name_list.iter().map(|u| ids::normalize(u)).collect())
+         .unwrap_or_default();
+     let canvas_w = meta
+@@ -259,10 +398,19 @@ fn assemble_note(container: &Container, prefix: &str, layout: Layout) -> Result<
+ 
+     require_geo_layout(container, prefix)?;
+ 
+-    let tiles = read_tiles(container, prefix);
++    if mode == LoadMode::Strict {
++        check_templates(container, prefix)?;
++    }
++
++    let tiles = read_tiles_with_mode(container, prefix, mode)?;
+     let layers_by_page = read_layers(container, prefix);
+-    let strokes = read_all_strokes(container, prefix);
+-    let mut shape_entries = read_shapes(container, prefix);
++
++    if mode == LoadMode::Strict {
++        check_hidden_layers(&layers_by_page)?;
++    }
++
++    let strokes = read_all_strokes_with_mode(container, prefix, mode)?;
++    let mut shape_entries = read_shapes_with_mode(container, prefix, mode)?;
+     shape_entries.sort_by_key(|e| (e.timestamp, e.order));
+     let last_index = latest_shape_index(&shape_entries);
+ 
+@@ -281,16 +429,191 @@ fn assemble_note(container: &Container, prefix: &str, layout: Layout) -> Result<
+     };
+ 
+     match layout {
+-        Layout::SingleCanvas => Ok(vec![assemble_single_canvas(&data)]),
+-        Layout::PerPage => Ok(assemble_per_page(&data)),
++        Layout::SingleCanvas => Ok(vec![assemble_single_canvas_with_mode(&data, mode)?]),
++        Layout::PerPage => assemble_per_page_with_mode(&data, mode),
+     }
+ }
+ 
+-/// Composite every tile onto one canvas (tile origins applied), trimmed to content.
+-fn assemble_single_canvas(data: &NoteData) -> Canvas {
+-    let items = build_items(data, None, true);
++fn check_templates(container: &Container, prefix: &str) -> Result<()> {
++    let dir = format!("{prefix}virtual/page/pb/");
++    for path in container.entries_with_prefix(&dir) {
++        let Some(bytes) = container.get(path) else {
++            continue;
++        };
++        if let Ok(vpc) = proto::decode::<VirtualPageContainer>(bytes) {
++            for vp in vpc.virtual_page {
++                let tmpl = vp.template_path.trim();
++                let tmpl_lower = tmpl.to_lowercase();
++                if tmpl.is_empty()
++                    || tmpl_lower == "empty"
++                    || tmpl_lower == "blank"
++                    || tmpl_lower == "none"
++                {
++                    continue;
++                }
++                let mut is_blank = false;
++                if tmpl.ends_with(".template_json") {
++                    let filename = tmpl.split(['/', '\\']).next_back().unwrap_or(tmpl);
++                    let candidates = [
++                        format!("{prefix}{tmpl}"),
++                        format!("{prefix}template/json/{filename}"),
++                        tmpl.to_string(),
++                    ];
++                    for cand in candidates {
++                        if let Some(t_bytes) = container.get(&cand)
++                            && !is_active_template_json(t_bytes)
++                        {
++                            is_blank = true;
++                            break;
++                        }
++                    }
++                }
++                if !is_blank {
++                    return Err(Error::UnsupportedFeature {
++                        feature: format!(
++                            "template/background '{tmpl}' on page {}",
++                            ids::normalize(&vp.page_uuid)
++                        ),
++                    });
++                }
++            }
++        }
++    }
++
++    let template_prefix = format!("{prefix}template/");
++    for path in container.entries_with_prefix(&template_prefix) {
++        if path.ends_with(".template_json") {
++            if let Some(bytes) = container.get(path)
++                && is_active_template_json(bytes)
++            {
++                return Err(Error::UnsupportedFeature {
++                    feature: format!("template/background metadata in '{path}'"),
++                });
++            }
++        } else if !path.ends_with('/') {
++            return Err(Error::UnsupportedFeature {
++                feature: format!("template/background asset in '{path}'"),
++            });
++        }
++    }
++
++    for p in container.entries_with_prefix(&format!("{prefix}resource/template/")) {
++        if !p.ends_with('/') {
++            return Err(Error::UnsupportedFeature {
++                feature: format!("template asset in '{p}'"),
++            });
++        }
++    }
++
++    for p in container.entries_with_prefix(&format!("{prefix}resource/background/")) {
++        if !p.ends_with('/') {
++            return Err(Error::UnsupportedFeature {
++                feature: format!("background asset in '{p}'"),
++            });
++        }
++    }
++
++    Ok(())
++}
++
++fn is_active_template_json(bytes: &[u8]) -> bool {
++    let trimmed = bytes.trim_ascii();
++    if trimmed.is_empty() {
++        return false;
++    }
++    let Ok(val) = serde_json::from_slice::<serde_json::Value>(trimmed) else {
++        return true;
++    };
++    let Some(obj) = val.as_object() else {
++        return true;
++    };
++    if obj.get("empty").and_then(|v| v.as_bool()) == Some(true) {
++        return false;
++    }
++    let is_blank_name = |s: &str| {
++        let lower = s.trim().to_lowercase();
++        lower.is_empty()
++            || lower == "empty"
++            || lower == "blank"
++            || lower == "none"
++            || lower == "white"
++    };
++
++    for key in [
++        "templateName",
++        "template_name",
++        "templatePath",
++        "template_path",
++        "resName",
++        "assetsResName",
++    ] {
++        if let Some(s) = obj.get(key).and_then(|v| v.as_str())
++            && !is_blank_name(s)
++        {
++            return true;
++        }
++    }
++
++    for key in ["templateType", "template_type", "lineType", "gridType"] {
++        if let Some(n) = obj.get(key).and_then(|v| v.as_i64())
++            && n != 0
++        {
++            return true;
++        }
++    }
++
++    if let Some(color) = obj.get("displayFillColor").and_then(|v| v.as_i64())
++        && color != 0
++    {
++        return true;
++    }
++
++    if let Some(fill_path) = obj.get("fillPath").and_then(|v| v.as_object())
++        && let Some(empty) = fill_path.get("empty").and_then(|v| v.as_bool())
++        && !empty
++    {
++        return true;
++    }
++
++    if let Some(props) = obj.get("properties").and_then(|v| v.as_object()) {
++        if let Some(res_attr) = props.get("resourceAttr").and_then(|v| v.as_object()) {
++            for key in ["resName", "assetsResName"] {
++                if let Some(s) = res_attr.get(key).and_then(|v| v.as_str())
++                    && !is_blank_name(s)
++                {
++                    return true;
++                }
++            }
++        }
++        for key in ["templateName", "templatePath", "resName"] {
++            if let Some(s) = props.get(key).and_then(|v| v.as_str())
++                && !is_blank_name(s)
++            {
++                return true;
++            }
++        }
++    }
++
++    false
++}
++
++fn check_hidden_layers(layers_by_page: &HashMap<String, Vec<Layer>>) -> Result<()> {
++    for (page_id, layers) in layers_by_page {
++        for layer in layers {
++            if !layer.show {
++                return Err(Error::UnsupportedFeature {
++                    feature: format!("hidden layer {} on page {page_id}", layer.id),
++                });
++            }
++        }
++    }
++    Ok(())
++}
++
++fn assemble_single_canvas_with_mode(data: &NoteData, mode: LoadMode) -> Result<Canvas> {
++    let items = build_items_with_mode(data, None, true, mode)?;
+     if items.is_empty() {
+-        return blank_canvas();
++        return Ok(blank_canvas());
+     }
+     // Trim the canvas to the content's visual bounds (only this composite
+     // layout needs them; per-page canvases are fixed at the tile size).
+@@ -298,24 +621,21 @@ fn assemble_single_canvas(data: &NoteData) -> Canvas {
+     for item in &items {
+         bounds::expand_bounds(&mut bbox, item);
+     }
+-    Canvas {
++    Ok(Canvas {
+         width: (bbox.max_x - bbox.min_x) + 2.0 * MARGIN,
+         height: (bbox.max_y - bbox.min_y) + 2.0 * MARGIN,
+         origin_x: bbox.min_x - MARGIN,
+         origin_y: bbox.min_y - MARGIN,
+         items,
+-    }
++    })
+ }
+ 
+-/// One canvas per note-page (page-local coords), in `pageNameList` order — with
+-/// any page that has content but is missing from that list appended after
+-/// (see `per_page_order`) — at the native page size, matching BOOX's export.
+-fn assemble_per_page(data: &NoteData) -> Vec<Canvas> {
++fn assemble_per_page_with_mode(data: &NoteData, mode: LoadMode) -> Result<Vec<Canvas>> {
+     let order = bounds::per_page_order(&data.page_order, &data.shape_entries);
+ 
+     let mut canvases = Vec::new();
+     for page_id in &order {
+-        let items = build_items(data, Some(page_id), false);
++        let items = build_items_with_mode(data, Some(page_id), false, mode)?;
+         // Page size = the page's own tile dimensions (the drawing area, always
+         // ~1860x2480). Note that note_info's canvas size can differ (e.g. report
+         // the BOOX device's landscape orientation), so don't use it here.
+@@ -336,7 +656,7 @@ fn assemble_per_page(data: &NoteData) -> Vec<Canvas> {
+     if canvases.is_empty() {
+         canvases.push(blank_canvas());
+     }
+-    canvases
++    Ok(canvases)
+ }
+ 
+ fn blank_canvas() -> Canvas {
+@@ -364,26 +684,18 @@ fn latest_shape_index(entries: &[ShapeEntry]) -> HashMap<String, usize> {
+     last_index
+ }
+ 
+-/// Build one canvas's render items, already in draw order (layer, then
+-/// translucent-before-opaque, then creation time). `filter_page` limits to one
+-/// tile; `use_tile_origin` adds the tile's global placement (composite) vs.
+-/// page-local.
+-///
+-/// This stays thin: it does the common per-shape filtering (superseded
+-/// revisions, page filter, missing tile, hidden layers), dispatches to a
+-/// per-kind `build_*` helper, then applies the sort key uniformly. Per-kind
+-/// geometry lives in the helpers; per-kind bounds live in `expand_bounds`.
+-fn build_items(
++fn build_items_with_mode(
+     data: &NoteData,
+     filter_page: Option<&str>,
+     use_tile_origin: bool,
+-) -> Vec<RenderItem> {
++    mode: LoadMode,
++) -> Result<Vec<RenderItem>> {
+     let mut staged: Vec<(SortKey, RenderItem)> = Vec::new();
+     for (i, entry) in data.shape_entries.iter().enumerate() {
+         let shape = &entry.shape;
+         let sid = ids::normalize(&shape.stroke_uuid);
+         if !sid.is_empty() && data.last_index.get(&sid) != Some(&i) {
+-            continue; // superseded revision
++            continue; // superseded revision: proven obsolete history
+         }
+         if let Some(fp) = filter_page
+             && entry.page_id != fp
+@@ -391,9 +703,19 @@ fn build_items(
+             continue;
+         }
+         let Some(tile) = data.tiles.get(&entry.page_id) else {
++            if mode == LoadMode::Strict {
++                return Err(Error::MissingContent {
++                    what: format!("missing tile for active shape on page {}", entry.page_id),
++                });
++            }
+             continue;
+         };
+         if !layer_visible(&data.layers_by_page, &entry.page_id, shape.layer_id) {
++            if mode == LoadMode::Strict {
++                return Err(Error::UnsupportedFeature {
++                    feature: format!("shape belongs to hidden layer {}", shape.layer_id),
++                });
++            }
+             continue;
+         }
+         let (ox, oy) = if use_tile_origin {
+@@ -403,16 +725,74 @@ fn build_items(
+         };
+ 
+         let item = match shape.pen_type {
+-            19 => build_image(data.container, data.prefix, shape, ox, oy),
+-            40 => geo::build_geo(shape, ox, oy),
++            19 => {
++                let img = build_image(data.container, data.prefix, shape, ox, oy);
++                if img.is_none() && mode == LoadMode::Strict {
++                    return Err(Error::MissingContent {
++                        what: format!("missing image asset for shape on page {}", entry.page_id),
++                    });
++                }
++                img
++            }
++            40 => {
++                let geo_item = geo::build_geo(shape, ox, oy);
++                if geo_item.is_none() && mode == LoadMode::Strict {
++                    return Err(Error::MissingContent {
++                        what: format!("malformed geometry shape on page {}", entry.page_id),
++                    });
++                }
++                geo_item
++            }
+             // Scanline fill: stroke points come in pairs, each the opposite
+             // corners of a horizontal fill rectangle. (No bundled example.)
+-            37 => data
+-                .strokes
+-                .get(&sid)
+-                .and_then(|stroke| geo::build_scanline_fill(shape, stroke, ox, oy)),
+-            6 | 16 => text::build_text(shape, ox, oy),
+-            _ => stroke::build_stroke(data, shape, &sid, tile, ox, oy),
++            37 => {
++                let sc = data
++                    .strokes
++                    .get(&sid)
++                    .and_then(|stroke| geo::build_scanline_fill(shape, stroke, ox, oy));
++                if sc.is_none() && mode == LoadMode::Strict {
++                    return Err(Error::MissingContent {
++                        what: format!("missing scanline fill stroke {sid}"),
++                    });
++                }
++                sc
++            }
++            6 | 16 => {
++                let txt = text::build_text(shape, ox, oy);
++                if txt.is_none() && mode == LoadMode::Strict {
++                    if text::has_visible_text(shape) {
++                        return Err(Error::MissingContent {
++                            what: format!(
++                                "malformed or unplaced text box for shape on page {}",
++                                entry.page_id
++                            ),
++                        });
++                    }
++                    if !shape.bbox_json.trim().is_empty()
++                        && json_meta::parse_opt::<Rect>(&shape.bbox_json).is_none()
++                    {
++                        return Err(Error::Malformed {
++                            what: format!("text bbox for shape on page {}", entry.page_id),
++                            detail: "malformed bbox_json".into(),
++                        });
++                    }
++                }
++                txt
++            }
++            _ => {
++                let s = stroke::build_stroke(data, shape, &sid, tile, ox, oy);
++                if s.is_none() && mode == LoadMode::Strict {
++                    if stroke::bbox_outside_tile(shape, tile) {
++                        None
++                    } else {
++                        return Err(Error::MissingContent {
++                            what: format!("missing stroke points for shape {sid}"),
++                        });
++                    }
++                } else {
++                    s
++                }
++            }
+         };
+         let Some(item) = item else {
+             continue;
+@@ -435,7 +815,7 @@ fn build_items(
+         ));
+     }
+     staged.sort_by(|a, b| a.0.cmp(&b.0));
+-    staged.into_iter().map(|(_, item)| item).collect()
++    Ok(staged.into_iter().map(|(_, item)| item).collect())
+ }
+ 
+ /// Paint order key. The derived `Ord` compares fields top-to-bottom, so the
+@@ -470,18 +850,38 @@ fn require_geo_layout(container: &Container, prefix: &str) -> Result<()> {
+     Err(Error::UnknownFormat)
+ }
+ 
++#[allow(dead_code)]
+ fn read_tiles(container: &Container, prefix: &str) -> HashMap<String, Rect> {
++    read_tiles_with_mode(container, prefix, LoadMode::Default).unwrap_or_default()
++}
++
++fn read_tiles_with_mode(
++    container: &Container,
++    prefix: &str,
++    mode: LoadMode,
++) -> Result<HashMap<String, Rect>> {
+     let dir = format!("{prefix}virtual/page/pb/");
+     let mut tiles = HashMap::new();
+     for path in container.entries_with_prefix(&dir) {
+         let Some(bytes) = container.get(path) else {
++            if mode == LoadMode::Strict {
++                return Err(Error::MissingContent {
++                    what: format!("virtual page entry {path} missing in container"),
++                });
++            }
+             continue;
+         };
+         // A malformed tile container loses its tiles (shapes on them are
+-        // skipped via the missing-tile guard), but never aborts the note.
++        // skipped via the missing-tile guard), but never aborts the note in default mode.
+         let vpc: VirtualPageContainer = match proto::decode(bytes) {
+             Ok(vpc) => vpc,
+             Err(e) => {
++                if mode == LoadMode::Strict {
++                    return Err(Error::Malformed {
++                        what: path.to_string(),
++                        detail: format!("virtual page decode failed: {e}"),
++                    });
++                }
+                 log::warn!("{path}: virtual page decode failed: {e}");
+                 continue;
+             }
+@@ -489,10 +889,15 @@ fn read_tiles(container: &Container, prefix: &str) -> HashMap<String, Rect> {
+         for vp in vpc.virtual_page {
+             if let Some(rect) = json_meta::parse_opt::<Rect>(&vp.dimensions_json) {
+                 tiles.insert(ids::normalize(&vp.page_uuid), rect);
++            } else if mode == LoadMode::Strict {
++                return Err(Error::Malformed {
++                    what: format!("{path}: page {}", vp.page_uuid),
++                    detail: "malformed dimensions_json".into(),
++                });
+             }
+         }
+     }
+-    tiles
++    Ok(tiles)
+ }
+ 
+ fn read_layers(container: &Container, prefix: &str) -> HashMap<String, Vec<Layer>> {
+@@ -516,7 +921,16 @@ fn read_layers(container: &Container, prefix: &str) -> HashMap<String, Vec<Layer
+     out
+ }
+ 
++#[allow(dead_code)]
+ fn read_all_strokes(container: &Container, prefix: &str) -> HashMap<String, crate::points::Stroke> {
++    read_all_strokes_with_mode(container, prefix, LoadMode::Default).unwrap_or_default()
++}
++
++fn read_all_strokes_with_mode(
++    container: &Container,
++    prefix: &str,
++    mode: LoadMode,
++) -> Result<HashMap<String, crate::points::Stroke>> {
+     let point_root = format!("{prefix}point/");
+     let mut strokes = HashMap::new();
+     for path in container
+@@ -524,6 +938,11 @@ fn read_all_strokes(container: &Container, prefix: &str) -> HashMap<String, crat
+         .filter(|p| p.ends_with("#points"))
+     {
+         let Some(bytes) = container.get(path) else {
++            if mode == LoadMode::Strict {
++                return Err(Error::MissingContent {
++                    what: format!("points entry {path} missing in container"),
++                });
++            }
+             continue;
+         };
+         match PointsFile::parse(bytes) {
+@@ -532,13 +951,30 @@ fn read_all_strokes(container: &Container, prefix: &str) -> HashMap<String, crat
+                     strokes.insert(id, stroke);
+                 }
+             }
+-            Err(e) => log::warn!("failed to parse {path}: {e}"),
++            Err(e) => {
++                if mode == LoadMode::Strict {
++                    return Err(Error::Malformed {
++                        what: path.to_string(),
++                        detail: format!("failed to parse points file: {e}"),
++                    });
++                }
++                log::warn!("failed to parse {path}: {e}");
++            }
+         }
+     }
+-    strokes
++    Ok(strokes)
+ }
+ 
++#[allow(dead_code)]
+ fn read_shapes(container: &Container, prefix: &str) -> Vec<ShapeEntry> {
++    read_shapes_with_mode(container, prefix, LoadMode::Default).unwrap_or_default()
++}
++
++fn read_shapes_with_mode(
++    container: &Container,
++    prefix: &str,
++    mode: LoadMode,
++) -> Result<Vec<ShapeEntry>> {
+     let dir = format!("{prefix}shape/");
+     let mut entries = Vec::new();
+     let mut order = 0usize;
+@@ -549,14 +985,33 @@ fn read_shapes(container: &Container, prefix: &str) -> Vec<ShapeEntry> {
+         let file_name = path.rsplit('/').next().unwrap_or(path);
+         let (page_id, timestamp) = match parse_shape_file_name(file_name) {
+             Some(v) => v,
+-            None => continue,
++            None => {
++                if mode == LoadMode::Strict {
++                    return Err(Error::Malformed {
++                        what: path.to_string(),
++                        detail: "invalid shape filename".into(),
++                    });
++                }
++                continue;
++            }
+         };
+         let Some(bytes) = container.get(path) else {
++            if mode == LoadMode::Strict {
++                return Err(Error::MissingContent {
++                    what: format!("shape entry {path} missing in container"),
++                });
++            }
+             continue;
+         };
+         let inner = match container::read_nested_zip_single(bytes) {
+             Ok(b) => b,
+             Err(e) => {
++                if mode == LoadMode::Strict {
++                    return Err(Error::Malformed {
++                        what: path.to_string(),
++                        detail: format!("nested zip extraction failed: {e}"),
++                    });
++                }
+                 log::warn!("{path}: {e}");
+                 continue;
+             }
+@@ -564,6 +1019,12 @@ fn read_shapes(container: &Container, prefix: &str) -> Vec<ShapeEntry> {
+         let sc: ShapeContainer = match proto::decode(&inner) {
+             Ok(sc) => sc,
+             Err(e) => {
++                if mode == LoadMode::Strict {
++                    return Err(Error::Malformed {
++                        what: path.to_string(),
++                        detail: format!("shape protobuf decode failed: {e}"),
++                    });
++                }
+                 log::warn!("{path}: shape decode failed: {e}");
+                 continue;
+             }
+@@ -578,7 +1039,7 @@ fn read_shapes(container: &Container, prefix: &str) -> Vec<ShapeEntry> {
+             order += 1;
+         }
+     }
+-    entries
++    Ok(entries)
+ }
+ 
+ /// `<page_id>#<group_id>#<timestamp>.zip` -> (normalized page_id, timestamp).
+@@ -633,7 +1094,10 @@ fn build_image(
+     } else {
+         &info.local_path
+     };
+-    let file = raw.rsplit('/').next().filter(|s| !s.is_empty())?;
++    let file = raw.rsplit(['/', '\\']).next().filter(|s| !s.is_empty())?;
++    if file.contains("..") || file.contains('\0') {
++        return None;
++    }
+     let bytes = container.get(&format!("{prefix}resource/data/{file}"))?;
+     let rect: Rect = json_meta::parse_opt(&shape.bbox_json)?;
+     Some(RenderItem::Image(RenderImage {
+@@ -749,4 +1213,216 @@ mod tests {
+         };
+         assert_eq!(stroke_matrix(&s), [1.5, 0.0, 30.0, 0.0, 1.5, 40.0]);
+     }
++
++    #[test]
++    fn strict_mode_rejects_missing_stroke_points() {
++        let dummy_container = Container {
++            entries: std::collections::BTreeMap::new(),
++        };
++        let mut tiles = HashMap::new();
++        tiles.insert(
++            "p1".to_string(),
++            Rect {
++                left: 0.0,
++                top: 0.0,
++                right: 1860.0,
++                bottom: 2480.0,
++            },
++        );
++        let entries = vec![shape_entry_uuid("missing_pts")];
++        let mut last_index = HashMap::new();
++        last_index.insert(ids::normalize("missing_pts"), 0);
++
++        let data = NoteData {
++            container: &dummy_container,
++            prefix: "",
++            pen: PenSettings::default(),
++            tiles,
++            layers_by_page: HashMap::new(),
++            strokes: HashMap::new(), // no points!
++            shape_entries: entries,
++            last_index,
++            page_order: vec!["p1".to_string()],
++            canvas_w: 1860.0,
++            canvas_h: 2480.0,
++        };
++
++        // Default mode skips missing points gracefully
++        let items_default = build_items_with_mode(&data, None, false, LoadMode::Default).unwrap();
++        assert!(items_default.is_empty());
++
++        // Strict mode fails on missing active content
++        let err = build_items_with_mode(&data, None, false, LoadMode::Strict).unwrap_err();
++        assert!(matches!(err, Error::MissingContent { .. }));
++    }
++
++    #[test]
++    fn strict_mode_rejects_hidden_layers() {
++        let mut layers = HashMap::new();
++        layers.insert(
++            "p1".to_string(),
++            vec![Layer {
++                id: 2,
++                show: false,
++                lock: false,
++            }],
++        );
++        let err = check_hidden_layers(&layers).unwrap_err();
++        assert!(matches!(err, Error::UnsupportedFeature { .. }));
++    }
++
++    #[test]
++    fn strict_mode_rejects_template_backgrounds() {
++        use prost::Message;
++        let vpc = proto::VirtualPageContainer {
++            virtual_page: vec![proto::VirtualPage {
++                page_uuid: "p1".to_string(),
++                dimensions_json: r#"{"left":0,"top":0,"right":1860,"bottom":2480}"#.to_string(),
++                geo_layout: String::new(),
++                template_path: "/system/templates/lines.png".to_string(),
++            }],
++        };
++        let mut bytes = Vec::new();
++        vpc.encode(&mut bytes).unwrap();
++
++        let mut entries = std::collections::BTreeMap::new();
++        entries.insert("virtual/page/pb/p1".to_string(), bytes);
++        let container = Container { entries };
++
++        let err = check_templates(&container, "").unwrap_err();
++        assert!(matches!(err, Error::UnsupportedFeature { .. }));
++    }
++
++    #[test]
++    fn strict_mode_rejects_template_json_ruled_lines() {
++        let mut entries = std::collections::BTreeMap::new();
++        entries.insert(
++            "template/json/p1.template_json".to_string(),
++            br#"{"templateName":"ruled_lines","templateType":1}"#.to_vec(),
++        );
++        let container = Container { entries };
++
++        let err = check_templates(&container, "").unwrap_err();
++        assert!(matches!(err, Error::UnsupportedFeature { .. }));
++    }
++
++    #[test]
++    fn strict_mode_rejects_unreadable_shape_zip() {
++        let mut entries = std::collections::BTreeMap::new();
++        entries.insert("shape/p1#g1#1000.zip".to_string(), b"not a zip".to_vec());
++        let container = Container { entries };
++
++        let res = read_shapes_with_mode(&container, "", LoadMode::Strict);
++        assert!(res.is_err());
++        assert!(matches!(res.unwrap_err(), Error::Malformed { .. }));
++
++        // Default mode skips it gracefully
++        let res_default = read_shapes_with_mode(&container, "", LoadMode::Default).unwrap();
++        assert!(res_default.is_empty());
++    }
++
++    #[test]
++    fn strict_mode_rejects_nonempty_text_box_with_malformed_bbox() {
++        let dummy_container = Container {
++            entries: std::collections::BTreeMap::new(),
++        };
++        let mut tiles = HashMap::new();
++        tiles.insert(
++            "p1".to_string(),
++            Rect {
++                left: 0.0,
++                top: 0.0,
++                right: 1860.0,
++                bottom: 2480.0,
++            },
++        );
++        let shape = proto::Shape {
++            pen_type: 6,
++            text_plain: "Hello world".to_string(),
++            bbox_json: "not valid json".to_string(),
++            ..Default::default()
++        };
++        let entries = vec![ShapeEntry {
++            shape,
++            page_id: "p1".to_string(),
++            timestamp: 100,
++            order: 0,
++        }];
++        let data = NoteData {
++            container: &dummy_container,
++            prefix: "",
++            pen: PenSettings::default(),
++            tiles,
++            layers_by_page: HashMap::new(),
++            strokes: HashMap::new(),
++            shape_entries: entries,
++            last_index: HashMap::new(),
++            page_order: vec!["p1".to_string()],
++            canvas_w: 1860.0,
++            canvas_h: 2480.0,
++        };
++
++        let err = build_items_with_mode(&data, None, false, LoadMode::Strict).unwrap_err();
++        assert!(matches!(err, Error::MissingContent { .. }));
++
++        // Default mode skips it
++        let items_default = build_items_with_mode(&data, None, false, LoadMode::Default).unwrap();
++        assert!(items_default.is_empty());
++    }
++
++    #[test]
++    fn test_parse_stroke_width_valid_units() {
++        // "0.10mm" -> 0.10 * 72.0 / 25.4 = ~0.28346457 pt
++        let mm = parse_stroke_width("0.10mm").unwrap();
++        assert!((mm - 0.28346457).abs() < 1e-4);
++
++        // "0.5pt" -> 0.5 pt
++        let pt = parse_stroke_width("0.5pt").unwrap();
++        assert!((pt - 0.5).abs() < 1e-6);
++
++        // "2px" -> 2 * 0.24 = 0.48 pt at 300 DPI
++        let px = parse_stroke_width("2px").unwrap();
++        assert!((px - 0.48).abs() < 1e-6);
++
++        // Unitless "0.28" -> 0.28 pt
++        let raw = parse_stroke_width("0.28").unwrap();
++        assert!((raw - 0.28).abs() < 1e-6);
++
++        // Max boundary "100.0pt"
++        let max_pt = parse_stroke_width("100.0pt").unwrap();
++        assert!((max_pt - 100.0).abs() < 1e-6);
++
++        // Min boundary "0.001pt"
++        let min_pt = parse_stroke_width("0.001pt").unwrap();
++        assert!((min_pt - 0.001).abs() < 1e-6);
++    }
++
++    #[test]
++    fn test_parse_stroke_width_invalid() {
++        assert!(parse_stroke_width("").is_err());
++        assert!(parse_stroke_width("   ").is_err());
++        assert!(parse_stroke_width("abc").is_err());
++        assert!(parse_stroke_width("10foo").is_err());
++        assert!(parse_stroke_width("-5pt").is_err());
++        assert!(parse_stroke_width("0.00001pt").is_err()); // below 0.001 pt
++        assert!(parse_stroke_width("150pt").is_err()); // above 100 pt
++        assert!(parse_stroke_width("NaN").is_err());
++        assert!(parse_stroke_width("inf").is_err());
++    }
++
++    #[test]
++    fn test_stroke_width_config_resolve() {
++        let nominal = 5.0;
++        assert_eq!(StrokeWidthConfig::Upstream.resolve_width(nominal), 5.0);
++        assert!(!StrokeWidthConfig::Upstream.is_custom());
++
++        assert!((StrokeWidthConfig::DeviceNative.resolve_width(nominal) - 1.2).abs() < 1e-6);
++        assert!(StrokeWidthConfig::DeviceNative.is_custom());
++
++        assert_eq!(StrokeWidthConfig::Fixed(0.5).resolve_width(nominal), 0.5);
++        assert!(StrokeWidthConfig::Fixed(0.5).is_custom());
++
++        assert_eq!(StrokeWidthConfig::Scale(2.0).resolve_width(nominal), 10.0);
++        assert!(StrokeWidthConfig::Scale(2.0).is_custom());
++    }
+ }
+diff --git a/crates/boox-notes-renderer/src/model/stroke.rs b/crates/boox-notes-renderer/src/model/stroke.rs
+index db5c431..f7e5762 100644
+--- a/crates/boox-notes-renderer/src/model/stroke.rs
++++ b/crates/boox-notes-renderer/src/model/stroke.rs
+@@ -63,6 +63,7 @@ pub(super) fn build_stroke(
+         pen_type: shape.pen_type,
+         charcoal_texture: charcoal_texture(shape),
+         flat_marker: false,
++        stroke_width_config: StrokeWidthConfig::Upstream,
+     }))
+ }
+ 
+@@ -116,7 +117,7 @@ fn resolve_color(shape: &proto::Shape, pen: &PenSettings) -> Rgba {
+ /// stray boundary-crossing duplicate that belongs to another tile. A stroke
+ /// that merely overflows its tile still has its bbox intersect the tile, so it
+ /// is not culled. Shapes without a bbox are kept.
+-fn bbox_outside_tile(shape: &proto::Shape, tile: &Rect) -> bool {
++pub(super) fn bbox_outside_tile(shape: &proto::Shape, tile: &Rect) -> bool {
+     let Some(bb) = json_meta::parse_opt::<Rect>(&shape.bbox_json) else {
+         return false;
+     };
+diff --git a/crates/boox-notes-renderer/src/model/text.rs b/crates/boox-notes-renderer/src/model/text.rs
+index 12fbe90..445cc65 100644
+--- a/crates/boox-notes-renderer/src/model/text.rs
++++ b/crates/boox-notes-renderer/src/model/text.rs
+@@ -3,6 +3,24 @@
+ 
+ use super::*;
+ 
++pub(super) fn has_visible_text(shape: &proto::Shape) -> bool {
++    let mut runs = if !shape.rich_text.is_empty() {
++        parse_rich_text(&shape.rich_text)
++    } else {
++        vec![StyledRun {
++            text: shape.text_plain.clone(),
++            bold: false,
++            italic: false,
++            underline: false,
++        }]
++    };
++    for r in &mut runs {
++        r.text
++            .retain(|c| !matches!(c, '\u{200b}' | '\u{feff}' | '\u{200c}' | '\u{200d}'));
++    }
++    runs.iter().any(|r| !r.text.trim().is_empty())
++}
++
+ pub(super) fn build_text(shape: &proto::Shape, ox: f32, oy: f32) -> Option<RenderItem> {
+     let style: json_meta::TextStyle =
+         json_meta::parse_opt(&shape.text_style_json).unwrap_or_default();
+diff --git a/crates/boox-notes-renderer/src/pen.rs b/crates/boox-notes-renderer/src/pen.rs
+index 0d17fd4..607c00b 100644
+--- a/crates/boox-notes-renderer/src/pen.rs
++++ b/crates/boox-notes-renderer/src/pen.rs
+@@ -42,6 +42,39 @@ pub(crate) fn stroke_visual_pad(pen_type: i64, width: f32, points: &[Point]) ->
+     }
+ }
+ 
++/// Conservative envelope of the same configured width and nib models used for drawing.
++pub(crate) fn configured_visual_pad(
++    pen: i64,
++    nominal: f32,
++    points: &[Point],
++    config: crate::model::StrokeWidthConfig,
++) -> f32 {
++    use crate::model::StrokeWidthConfig;
++    if matches!(config, StrokeWidthConfig::Upstream) {
++        return stroke_visual_pad(pen, nominal, points);
++    }
++    let width = config.resolve_width(nominal).max(0.001);
++    match pen {
++        60 | 61 => {
++            let half_l = width / 2.0;
++            half_l.hypot((half_l / nominal.clamp(1.0, 10.0)).max(0.0005))
++        }
++        5 | 21 => {
++            let full_width = match config {
++                StrokeWidthConfig::Fixed(w) => w,
++                StrokeWidthConfig::Scale(scale) => {
++                    2.0 * stroke_visual_pad(pen, nominal, points) * scale
++                }
++                StrokeWidthConfig::DeviceNative if pen == 21 => 2.0 * nominal * 0.24 + 3.0,
++                _ => width,
++            };
++            full_width.max(0.001) / 2.0
++        }
++        22 => stroke_visual_pad(pen, width, points),
++        _ => width / 2.0,
++    }
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+diff --git a/crates/boox-notes-renderer/src/points.rs b/crates/boox-notes-renderer/src/points.rs
+index 48f1493..321cf24 100644
+--- a/crates/boox-notes-renderer/src/points.rs
++++ b/crates/boox-notes-renderer/src/points.rs
+@@ -104,6 +104,8 @@ impl PointsFile {
+             entries.push((stroke_id, start_addr as u64, count));
+         }
+ 
++        validate_stroke_table(&entries)?;
++
+         // Read each stroke's points.
+         let mut strokes = HashMap::new();
+         for (stroke_id, start_addr, count) in entries {
+@@ -120,6 +122,11 @@ impl PointsFile {
+                 let tilt_x = cur.read_i8()?;
+                 let tilt_y = cur.read_i8()?;
+                 let pressure = cur.read_u16::<BE>()?;
++                if !x.is_finite() || !y.is_finite() {
++                    return Err(bad(format!(
++                        "stroke {stroke_id} contains non-finite coordinate ({x}, {y})"
++                    )));
++                }
+                 points.push(Point {
+                     x,
+                     y,
+@@ -129,6 +136,11 @@ impl PointsFile {
+                     t,
+                 });
+             }
++            if strokes.contains_key(&stroke_id) {
++                return Err(bad(format!(
++                    "duplicate stroke_id '{stroke_id}' in points table"
++                )));
++            }
+             strokes.insert(stroke_id, Stroke { points });
+         }
+ 
+@@ -136,12 +148,60 @@ impl PointsFile {
+     }
+ }
+ 
++const MAX_STROKE_POINTS: u32 = 1_000_000;
++const MAX_TOTAL_POINTS_PER_FILE: usize = 2_000_000;
++
++fn validate_stroke_table(entries: &[(String, u64, u32)]) -> io::Result<()> {
++    let mut total_points: usize = 0;
++    let mut ranges: Vec<(u64, u64, &str)> = Vec::with_capacity(entries.len());
++    let mut seen_ids = std::collections::HashSet::with_capacity(entries.len());
++
++    for (stroke_id, start_addr, count) in entries {
++        if !seen_ids.insert(stroke_id.as_str()) {
++            return Err(bad(format!(
++                "duplicate stroke_id '{stroke_id}' in points table"
++            )));
++        }
++        total_points = total_points
++            .checked_add(*count as usize)
++            .ok_or_else(|| bad("total point count overflow".to_string()))?;
++        if total_points > MAX_TOTAL_POINTS_PER_FILE {
++            return Err(bad(format!(
++                "total point count in file exceeds limit ({MAX_TOTAL_POINTS_PER_FILE})"
++            )));
++        }
++        if *count > 0 {
++            let byte_len = (*count as u64) * POINT_LEN;
++            let end = start_addr + byte_len;
++            ranges.push((*start_addr, end, stroke_id.as_str()));
++        }
++    }
++
++    ranges.sort_unstable_by_key(|&(start, _, _)| start);
++    for window in ranges.windows(2) {
++        let (prev_start, prev_end, prev_id) = window[0];
++        let (next_start, _, next_id) = window[1];
++        if prev_end > next_start {
++            return Err(bad(format!(
++                "overlapping point ranges between stroke '{prev_id}' ({prev_start}..{prev_end}) and stroke '{next_id}' ({next_start}..)"
++            )));
++        }
++    }
++
++    Ok(())
++}
++
+ fn validate_point_range(
+     stroke_id: &str,
+     start_addr: u64,
+     count: u32,
+     table_start: u64,
+ ) -> io::Result<()> {
++    if count > MAX_STROKE_POINTS {
++        return Err(bad(format!(
++            "stroke {stroke_id} exceeds point limit {MAX_STROKE_POINTS}"
++        )));
++    }
+     if count == 0 {
+         if start_addr > table_start {
+             return Err(bad(format!(
+@@ -325,4 +385,75 @@ mod tests {
+         assert_eq!(b.points[1].x, 5.0);
+         assert_eq!(b.points[1].pressure, 30);
+     }
++
++    #[test]
++    fn rejects_non_finite_coordinates() {
++        let mut buf = Vec::new();
++        buf.write_u32::<BE>(1).unwrap();
++        buf.extend_from_slice(&[b' '; 72]);
++        let a_start = buf.len() as u32;
++        write_point(&mut buf, f32::NAN, 2.0, 10);
++        let table_start = buf.len() as u32;
++        write_entry(
++            &mut buf,
++            b"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
++            a_start,
++            1,
++        );
++        buf.write_u32::<BE>(table_start).unwrap();
++        assert!(PointsFile::parse(&buf).is_err());
++    }
++
++    #[test]
++    fn rejects_duplicate_stroke_ids_in_points_table() {
++        let mut buf = Vec::new();
++        buf.write_u32::<BE>(1).unwrap();
++        buf.extend_from_slice(&[b' '; 72]);
++        let start = buf.len() as u32;
++        write_point(&mut buf, 1.0, 2.0, 10);
++        let table_start = buf.len() as u32;
++        write_entry(&mut buf, b"dddddddddddddddddddddddddddddddddddd", start, 1);
++        write_entry(&mut buf, b"dddddddddddddddddddddddddddddddddddd", start, 1);
++        buf.write_u32::<BE>(table_start).unwrap();
++
++        let err = PointsFile::parse(&buf).unwrap_err();
++        assert!(err.to_string().contains("duplicate stroke_id"));
++    }
++
++    #[test]
++    fn rejects_overlapping_point_ranges() {
++        let mut buf = Vec::new();
++        buf.write_u32::<BE>(1).unwrap();
++        buf.extend_from_slice(&[b' '; 72]);
++        let start = buf.len() as u32;
++        write_point(&mut buf, 1.0, 2.0, 10);
++        write_point(&mut buf, 3.0, 4.0, 20);
++        let table_start = buf.len() as u32;
++        // Stroke 1 references 2 points starting at `start`
++        write_entry(&mut buf, b"111111111111111111111111111111111111", start, 2);
++        // Stroke 2 overlaps: references 1 point starting at `start + 16`
++        write_entry(
++            &mut buf,
++            b"222222222222222222222222222222222222",
++            start + 16,
++            1,
++        );
++        buf.write_u32::<BE>(table_start).unwrap();
++
++        let err = PointsFile::parse(&buf).unwrap_err();
++        assert!(
++            err.to_string().contains("overlapping point ranges"),
++            "unexpected error: {err}"
++        );
++    }
++
++    #[test]
++    fn rejects_exceeded_total_point_count() {
++        let entries = vec![
++            ("s1".to_string(), 100u64, 1_500_000u32),
++            ("s2".to_string(), 100_000_000u64, 600_000u32),
++        ];
++        let err = validate_stroke_table(&entries).unwrap_err();
++        assert!(err.to_string().contains("total point count"));
++    }
+ }
+diff --git a/crates/boox-notes-renderer/src/render/mod.rs b/crates/boox-notes-renderer/src/render/mod.rs
+index 038107e..6d11fd2 100644
+--- a/crates/boox-notes-renderer/src/render/mod.rs
++++ b/crates/boox-notes-renderer/src/render/mod.rs
+@@ -20,8 +20,9 @@ mod svg;
+ pub(crate) mod system_fonts;
+ mod text;
+ 
+-pub use pdf::render_pdf;
++pub use pdf::{render_pdf, render_pdf_strict};
+ pub use png::render_png;
++pub use stroke::{StrokeMode, is_supported_strict_vector_pen};
+ pub use svg::render_svg;
+ 
+ use crate::error::{Error, Result};
+@@ -234,6 +235,24 @@ pub(crate) fn paint_canvas(
+     }
+ }
+ 
++pub(crate) fn paint_canvas_strict(
++    backend: &mut impl Backend,
++    canvas: &Canvas,
++    ci: usize,
++    fonts: &fonts::FontDb,
++) -> Result<()> {
++    backend.fill_background(canvas, WHITE);
++    for (ii, item) in canvas.items.iter().enumerate() {
++        match item {
++            RenderItem::Stroke(s) => stroke::draw_strict(backend, canvas, s)?,
++            RenderItem::Geometry(g) => shape::draw(backend, canvas, g),
++            RenderItem::Text(t) => text::draw_strict(backend, canvas, t, fonts)?,
++            RenderItem::Image(img) => backend.draw_image(canvas, img, (ci, ii)),
++        }
++    }
++    Ok(())
++}
++
+ /// Resolve a [`PageSel`] to `(filename suffix, canvas index)` pairs. A single
+ /// page (selected or because the doc has one canvas) gets an empty suffix; a
+ /// multi-page `All` gets `-1`, `-2`, … so callers can name `stem-N.ext`.
+diff --git a/crates/boox-notes-renderer/src/render/pdf.rs b/crates/boox-notes-renderer/src/render/pdf.rs
+index 1d0a7f3..9489c1c 100644
+--- a/crates/boox-notes-renderer/src/render/pdf.rs
++++ b/crates/boox-notes-renderer/src/render/pdf.rs
+@@ -44,6 +44,33 @@ pub fn render_pdf(
+     Ok(be.finish(pages))
+ }
+ 
++/// Render the selected note pages to a single (multi-page) PDF in strict mode.
++/// Disables automatic font downloads, enforces complete font and content accounting,
++/// and preserves raw points without decimation for supported vector strokes.
++pub fn render_pdf_strict(
++    doc: &Document,
++    font_opts: &FontOptions,
++    sel: PageSel,
++) -> crate::error::Result<Vec<u8>> {
++    if font_opts.download {
++        return Err(crate::error::Error::UnsupportedFeature {
++            feature: "automatic font downloads are disabled in strict mode".to_string(),
++        });
++    }
++    let selected = selected_pages(doc.canvases.len(), sel)?;
++    let db = font_opts.build_db();
++    let subsets = fonts::used_chars(&db, selected.iter().map(|(_, ci)| &doc.canvases[*ci]));
++    let mut be = PdfBackend::new_with_mode(doc, &selected, subsets, true)?;
++    let mut pages = Vec::new();
++    for (_suffix, ci) in &selected {
++        let canvas = &doc.canvases[*ci];
++        be.begin_page();
++        super::paint_canvas_strict(&mut be, canvas, *ci, &db)?;
++        pages.push(be.end_page(canvas));
++    }
++    Ok(be.finish(pages))
++}
++
+ struct ImageRef {
+     id: XObjectId,
+     w: usize,
+@@ -85,6 +112,15 @@ impl PdfBackend {
+         selected: &[(String, usize)],
+         subsets: BTreeMap<ResolvedFont, BTreeSet<char>>,
+     ) -> Self {
++        Self::new_with_mode(doc_model, selected, subsets, false).unwrap()
++    }
++
++    fn new_with_mode(
++        doc_model: &Document,
++        selected: &[(String, usize)],
++        subsets: BTreeMap<ResolvedFont, BTreeSet<char>>,
++        strict: bool,
++    ) -> crate::error::Result<Self> {
+         let mut doc = PdfDocument::new("boox-notes-renderer");
+ 
+         // Pre-decode and register the selected pages' embedded images, keyed
+@@ -101,13 +137,20 @@ impl PdfBackend {
+                             let id = doc.add_image(&raw);
+                             images.insert((*ci, ii), ImageRef { id, w, h });
+                         }
+-                        Err(e) => log::warn!("could not decode embedded image: {e}"),
++                        Err(e) => {
++                            if strict {
++                                return Err(crate::error::Error::MissingContent {
++                                    what: format!("corrupt embedded image on page {ci}: {e}"),
++                                });
++                            }
++                            log::warn!("could not decode embedded image: {e}");
++                        }
+                     }
+                 }
+             }
+         }
+ 
+-        Self {
++        let mut be = Self {
+             doc,
+             alpha_states: HashMap::new(),
+             images,
+@@ -120,7 +163,21 @@ impl PdfBackend {
+             caps_set: false,
+             cur_dash: None,
+             cur_fill: None,
++        };
++
++        if strict {
++            // Validate that every font needed for subsets can be embedded
++            let font_keys: Vec<_> = be.subsets.keys().cloned().collect();
++            for font in font_keys {
++                if be.font_id(&font).is_none() {
++                    return Err(crate::error::Error::MissingContent {
++                        what: format!("failed to embed required font {:?}", font.0),
++                    });
++                }
++            }
+         }
++
++        Ok(be)
+     }
+ 
+     /// The graphics state for a translucent alpha (+ blend mode), registered on
+@@ -545,4 +602,31 @@ mod tests {
+         b.set_dash(None); // already solid: coalesced, no new op
+         assert_eq!(b.ops.len(), n, "redundant solid dash not re-emitted");
+     }
++
++    #[test]
++    fn strict_mode_rejects_corrupt_embedded_image() {
++        let corrupt_image = crate::model::RenderItem::Image(crate::model::RenderImage {
++            bytes: b"not a valid png or jpeg image".to_vec(),
++            left: 0.0,
++            top: 0.0,
++            right: 100.0,
++            bottom: 100.0,
++        });
++        let canvas = Canvas {
++            width: 100.0,
++            height: 100.0,
++            origin_x: 0.0,
++            origin_y: 0.0,
++            items: vec![corrupt_image],
++        };
++        let doc = Document {
++            canvases: vec![canvas],
++        };
++        let selected = vec![(String::new(), 0)];
++        let res = PdfBackend::new_with_mode(&doc, &selected, BTreeMap::new(), true);
++        assert!(matches!(
++            res.err(),
++            Some(crate::error::Error::MissingContent { .. })
++        ));
++    }
+ }
+diff --git a/crates/boox-notes-renderer/src/render/stroke.rs b/crates/boox-notes-renderer/src/render/stroke.rs
+index 26d15e3..eb31bd2 100644
+--- a/crates/boox-notes-renderer/src/render/stroke.rs
++++ b/crates/boox-notes-renderer/src/render/stroke.rs
+@@ -6,7 +6,8 @@
+ //! strokes are wrapped in a backend group so overlapping segments composite once.
+ 
+ use super::{Backend, GroupBlend, charcoal};
+-use crate::model::{Canvas, RenderStroke, Rgba};
++use crate::error::{Error, Result};
++use crate::model::{Canvas, RenderStroke, Rgba, StrokeWidthConfig};
+ use crate::points;
+ 
+ /// nBrush (pen 21) per-point width — a two-phase width model (dwell + move),
+@@ -38,7 +39,12 @@ use crate::points;
+ /// first corrupts it), and it is **timestamp-independent** — the model steps
+ /// with a fixed dt, which cancels in `r`. The recorded timestamps are jittery
+ /// (many `dt == 0`) and must not be used.
++#[allow(dead_code)]
+ fn neo_brush_widths(nominal: f32, pts: &[points::Point]) -> Vec<f32> {
++    neo_brush_widths_with_custom(nominal, pts, false)
++}
++
++fn neo_brush_widths_with_custom(nominal: f32, pts: &[points::Point], is_custom: bool) -> Vec<f32> {
+     let n = pts.len();
+     if n == 0 {
+         return Vec::new();
+@@ -53,6 +59,7 @@ fn neo_brush_widths(nominal: f32, pts: &[points::Point]) -> Vec<f32> {
+     const DWELL_DIST: f32 = 3.0; // pen stays within this (px) of the start => dwelling
+     const DWELL_GROW: f32 = 0.01 * 3.0 / 16.0; // size growth per dwell point (·D)
+     const MIN_W: f32 = 0.001; // minWidth floor for the size/velAccum maths
++    let floor = if is_custom { 0.001 } else { 0.5 };
+ 
+     let d = 2.0 * nominal; // brush diameter (full-pressure width)
+     let cap = d + 3.0; // size clamp D+3
+@@ -77,7 +84,7 @@ fn neo_brush_widths(nominal: f32, pts: &[points::Point]) -> Vec<f32> {
+     // negative and bottoms the shaft out at the floor.
+     let mut vel_accum = 0.0f32;
+     let mut size = (d * pressure(0).powf(E_PRESS)).clamp(MIN_W, cap);
+-    widths[0] = size.clamp(0.5, cap);
++    widths[0] = size.clamp(floor, cap);
+ 
+     // Dwell phase: points within DWELL_DIST of the start (after pen-down). The size
+     // keeps growing and `vel_accum = size − D·√p` carries the (now near-zero, or
+@@ -86,7 +93,7 @@ fn neo_brush_widths(nominal: f32, pts: &[points::Point]) -> Vec<f32> {
+     while i < n && dist_from_start(i) <= DWELL_DIST {
+         size = (size + d * DWELL_GROW).clamp(MIN_W, cap);
+         vel_accum = (size - d * pressure(i).powf(E_PRESS)).clamp(vel_lo, 3.0);
+-        widths[i] = size.clamp(0.5, cap);
++        widths[i] = size.clamp(floor, cap);
+         i += 1;
+     }
+ 
+@@ -115,7 +122,7 @@ fn neo_brush_widths(nominal: f32, pts: &[points::Point]) -> Vec<f32> {
+         let p_cur = pressure(j);
+         let p_next = if j + 1 < n { pressure(j + 1) } else { p_cur };
+         let p = (W * p_cur + p_next) / (W + 1.0);
+-        widths[j] = (vel_accum + d * p.powf(E_PRESS)).clamp(0.5, cap);
++        widths[j] = (vel_accum + d * p.powf(E_PRESS)).clamp(floor, cap);
+     }
+     // Pen-up: when the last step is NOT accelerating (the usual decel-to-stop
+     // of a pen lift), the terminal width resets to `D·√p` with no velAccum —
+@@ -126,16 +133,20 @@ fn neo_brush_widths(nominal: f32, pts: &[points::Point]) -> Vec<f32> {
+         let accelerating = d_prev > 0.0 && (d_last / d_prev) > T_ACCEL;
+         if !accelerating {
+             let p = pressure(n - 1);
+-            widths[n - 1] = (d * p.powf(E_PRESS)).clamp(0.5, cap);
++            widths[n - 1] = (d * p.powf(E_PRESS)).clamp(floor, cap);
+         }
+     }
+     widths
+ }
+ 
+ /// Decimate a parallel `(points, widths)` stream, keeping a point when it is at
+-/// least `MIN_STEP` from the last kept one **or** its width changed appreciably (so
++/// least `step` from the last kept one **or** its width changed appreciably (so
+ /// the velocity-driven blobs at ends/turns survive). Endpoints always kept.
+-fn decimate_pairs(pts: &[points::Point], widths: &[f32]) -> (Vec<points::Point>, Vec<f32>) {
++fn decimate_pairs(
++    pts: &[points::Point],
++    widths: &[f32],
++    step: f32,
++) -> (Vec<points::Point>, Vec<f32>) {
+     let n = pts.len();
+     if n <= 2 {
+         return (pts.to_vec(), widths.to_vec());
+@@ -150,7 +161,7 @@ fn decimate_pairs(pts: &[points::Point], widths: &[f32]) -> (Vec<points::Point>,
+     for i in 1..n - 1 {
+         let dx = pts[i].x - last.x;
+         let dy = pts[i].y - last.y;
+-        if dx * dx + dy * dy >= MIN_STEP * MIN_STEP || (widths[i] - last_w).abs() >= MIN_DW {
++        if dx * dx + dy * dy >= step * step || (widths[i] - last_w).abs() >= MIN_DW {
+             op.push(pts[i]);
+             ow.push(widths[i]);
+             last = pts[i];
+@@ -170,13 +181,16 @@ fn draw_segments(
+     pts: &[points::Point],
+     widths: &[f32],
+     color: Rgba,
++    is_custom: bool,
+ ) {
+     if pts.len() == 1 {
+-        b.fill_path(canvas, &[dot(pts[0].x, pts[0].y, widths[0] / 2.0)], color);
++        let r = widths[0] / 2.0;
++        b.fill_path(canvas, &[dot(pts[0].x, pts[0].y, r, is_custom)], color);
+         return;
+     }
++    let floor = if is_custom { 0.001 } else { 0.2 };
+     for i in 0..pts.len() - 1 {
+-        let w = ((widths[i] + widths[i + 1]) / 2.0).max(0.2);
++        let w = ((widths[i] + widths[i + 1]) / 2.0).max(floor);
+         let seg = [(pts[i].x, pts[i].y), (pts[i + 1].x, pts[i + 1].y)];
+         b.stroke_polyline(canvas, &seg, w, color, None);
+     }
+@@ -195,72 +209,237 @@ fn fountain_width(nominal: f32, pressure: u16) -> f32 {
+     (0.964 * (nominal + 3.0) * p.powf(0.599)).max(2.0)
+ }
+ 
++/// Stroke rendering mode: default (with decimation and fallback) vs strict (point-preserving, rejecting unsupported).
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
++#[non_exhaustive]
++pub enum StrokeMode {
++    /// Default mode: decimates stroke points to bound output size; textured pens rasterize; unknown pens fall back to constant width.
++    #[default]
++    Default,
++    /// Strict mode: preserves all recorded points; rejects textured raster pens (e.g. charcoal 22) and unknown pens.
++    Strict,
++}
++
++/// Check if a pen_type is a supported vector pen in strict mode.
++///
++/// Supported vector pens:
++/// - 2 / 2000..=2999: ballpoint and boundary/history copies (constant width)
++/// - 5: fountain (pressure curve)
++/// - 15: marker / highlighter (nominal constant width with multiply blend)
++/// - 21: nBrush (neo brush, two-phase velocity and pressure curve)
++/// - 60: calligraphy (+45° chisel nib)
++/// - 61: calligraphy (-45° chisel nib)
++pub fn is_supported_strict_vector_pen(pen_type: i64) -> bool {
++    matches!(pen_type, 2 | 5 | 15 | 21 | 60 | 61) || (2000..=2999).contains(&pen_type)
++}
++
+ pub(crate) fn draw(b: &mut impl Backend, canvas: &Canvas, stroke: &RenderStroke) {
+-    // Charcoal/pencil (pen 22) bakes into a grain raster (see
+-    // `render/charcoal.rs`), placed as an inline image like BOOX's export. The
+-    // model consumes the raw recorded points (a dab every 3 px, per-point tilt
+-    // for the stamp size), so don't decimate here.
+-    if stroke.pen_type == 22 {
+-        if let Some((png, l, t, r, btm)) = charcoal::render(
+-            &stroke.points,
+-            stroke.width,
+-            stroke.color,
+-            stroke.charcoal_texture,
+-        ) {
+-            b.draw_inline_image(canvas, &png, l, t, r, btm);
+-        }
+-        return;
+-    }
++    let _ = draw_with_mode(b, canvas, stroke, StrokeMode::Default);
++}
+ 
+-    let pts = decimate(&stroke.points);
+-    if pts.is_empty() {
+-        return;
++pub(crate) fn draw_strict(
++    b: &mut impl Backend,
++    canvas: &Canvas,
++    stroke: &RenderStroke,
++) -> Result<()> {
++    draw_with_mode(b, canvas, stroke, StrokeMode::Strict)
++}
++
++pub(crate) fn draw_with_mode(
++    b: &mut impl Backend,
++    canvas: &Canvas,
++    stroke: &RenderStroke,
++    mode: StrokeMode,
++) -> Result<()> {
++    if stroke.points.is_empty() {
++        return Ok(());
+     }
+ 
+-    // Marker (15) composites with Multiply (see `draw_marker`); other
+-    // translucent strokes use normal alpha. begin_group no-ops (returns false)
+-    // for opaque strokes.
+-    let blend = if stroke.pen_type == 15 {
+-        GroupBlend::Multiply
++    let is_custom = stroke.stroke_width_config.is_custom();
++    let resolved_width = stroke.stroke_width_config.resolve_width(stroke.width);
++    let step = if is_custom {
++        resolved_width.clamp(0.001, MIN_STEP)
+     } else {
+-        GroupBlend::Normal
++        MIN_STEP
+     };
+-    let grouped = b.begin_group(stroke.color.a, blend);
+-    // Inside a group children draw opaque (the group applies the alpha);
+-    // ungrouped, the color keeps its own alpha (the backends apply it
+-    // per-primitive).
+-    let color = if grouped {
+-        Rgba {
+-            a: 1.0,
+-            ..stroke.color
++
++    match mode {
++        StrokeMode::Default => {
++            // Charcoal/pencil (pen 22) bakes into a grain raster (see
++            // `render/charcoal.rs`), placed as an inline image like BOOX's export. The
++            // model consumes the raw recorded points (a dab every 3 px, per-point tilt
++            // for the stamp size), so don't decimate here.
++            if stroke.pen_type == 22 {
++                if let Some((png, l, t, r, btm)) = charcoal::render(
++                    &stroke.points,
++                    resolved_width,
++                    stroke.color,
++                    stroke.charcoal_texture,
++                ) {
++                    b.draw_inline_image(canvas, &png, l, t, r, btm);
++                }
++                return Ok(());
++            }
++
++            let pts = decimate(&stroke.points, step);
++            if pts.is_empty() {
++                return Ok(());
++            }
++
++            // Marker (15) composites with Multiply (see `draw_marker`); other
++            // translucent strokes use normal alpha. begin_group no-ops (returns false)
++            // for opaque strokes.
++            let blend = if stroke.pen_type == 15 {
++                GroupBlend::Multiply
++            } else {
++                GroupBlend::Normal
++            };
++            let grouped = b.begin_group(stroke.color.a, blend);
++            // Inside a group children draw opaque (the group applies the alpha);
++            // ungrouped, the color keeps its own alpha (the backends apply it
++            // per-primitive).
++            let color = if grouped {
++                Rgba {
++                    a: 1.0,
++                    ..stroke.color
++                }
++            } else {
++                stroke.color
++            };
++
++            match stroke.pen_type {
++                // nBrush: compute widths over the raw points (the integrator needs every
++                // recorded point), then decimate point+width pairs jointly. No extra
++                // smoothing — the integrator's look-ahead blend is the only smoothing.
++                21 => {
++                    let widths = match stroke.stroke_width_config {
++                        StrokeWidthConfig::Upstream => {
++                            neo_brush_widths_with_custom(stroke.width, &stroke.points, false)
++                        }
++                        StrokeWidthConfig::Fixed(w) => vec![w.max(0.001); stroke.points.len()],
++                        StrokeWidthConfig::DeviceNative => {
++                            neo_brush_widths_with_custom(stroke.width * 0.24, &stroke.points, true)
++                        }
++                        StrokeWidthConfig::Scale(s) => {
++                            let mut w =
++                                neo_brush_widths_with_custom(stroke.width, &stroke.points, false);
++                            for val in &mut w {
++                                *val = (*val * s).max(0.001);
++                            }
++                            w
++                        }
++                    };
++                    let (rpts, rwidths) = decimate_pairs(&stroke.points, &widths, step);
++                    draw_segments(b, canvas, &rpts, &rwidths, color, is_custom);
++                }
++                // Marker/highlighter: one constant-width polyline of the raw points,
++                // composited by the enclosing 127/255 Multiply group (see `draw_marker`).
++                15 => draw_marker(b, canvas, stroke, &pts, color),
++                // Calligraphy: stamp the fixed rotated-rectangle nib (flat chisel ends),
++                // not a round-capped variable-width centerline.
++                60 | 61 => draw_calligraphy_with_config(
++                    b,
++                    canvas,
++                    stroke.pen_type,
++                    stroke.width,
++                    stroke.stroke_width_config,
++                    &pts,
++                    color,
++                ),
++                // Fountain: pressure-curve segment widths.
++                5 => draw_fountain(b, canvas, stroke, &pts, color),
++                // Every other pen (ballpoint 2, pen-2000 history, …): constant width.
++                _ => draw_constant_width(b, canvas, stroke, &pts, color),
++            }
++
++            if grouped {
++                b.end_group();
++            }
++            Ok(())
+         }
+-    } else {
+-        stroke.color
+-    };
++        StrokeMode::Strict => {
++            // Strict vector path:
++            // 1. Reject textured/raster pen 22 explicitly: no rasterization of vector handwriting.
++            if stroke.pen_type == 22 {
++                return Err(Error::UnsupportedPen { pen_type: 22 });
++            }
++
++            // 2. Reject unknown/unsupported pen explicitly (no silent fallback to constant width).
++            if !is_supported_strict_vector_pen(stroke.pen_type) {
++                return Err(Error::UnsupportedPen {
++                    pen_type: stroke.pen_type,
++                });
++            }
+ 
+-    match stroke.pen_type {
+-        // nBrush: compute widths over the raw points (the integrator needs every
+-        // recorded point), then decimate point+width pairs jointly. No extra
+-        // smoothing — the integrator's look-ahead blend is the only smoothing.
+-        21 => {
+-            let widths = neo_brush_widths(stroke.width, &stroke.points);
+-            let (rpts, rwidths) = decimate_pairs(&stroke.points, &widths);
+-            draw_segments(b, canvas, &rpts, &rwidths, color);
+-        }
+-        // Marker/highlighter: one constant-width polyline of the raw points,
+-        // composited by the enclosing 127/255 Multiply group (see `draw_marker`).
+-        15 => draw_marker(b, canvas, stroke, &pts, color),
+-        // Calligraphy: stamp the fixed rotated-rectangle nib (flat chisel ends),
+-        // not a round-capped variable-width centerline.
+-        60 | 61 => draw_calligraphy(b, canvas, stroke.pen_type, stroke.width, &pts, color),
+-        // Fountain: pressure-curve segment widths.
+-        5 => draw_fountain(b, canvas, stroke, &pts, color),
+-        // Every other pen (ballpoint 2, pen-2000 history, …): constant width.
+-        _ => draw_constant_width(b, canvas, stroke, &pts, color),
+-    }
+-
+-    if grouped {
+-        b.end_group();
++            // 3. Preserve ALL recorded points: decimate is bypassed.
++            let pts = &stroke.points;
++
++            let blend = if stroke.pen_type == 15 {
++                GroupBlend::Multiply
++            } else {
++                GroupBlend::Normal
++            };
++            let grouped = b.begin_group(stroke.color.a, blend);
++            let color = if grouped {
++                Rgba {
++                    a: 1.0,
++                    ..stroke.color
++                }
++            } else {
++                stroke.color
++            };
++
++            match stroke.pen_type {
++                21 => {
++                    // nBrush: compute widths over raw points; decimate_pairs is bypassed.
++                    let widths = match stroke.stroke_width_config {
++                        StrokeWidthConfig::Upstream => {
++                            neo_brush_widths_with_custom(stroke.width, &stroke.points, false)
++                        }
++                        StrokeWidthConfig::Fixed(w) => vec![w.max(0.001); stroke.points.len()],
++                        StrokeWidthConfig::DeviceNative => {
++                            neo_brush_widths_with_custom(stroke.width * 0.24, &stroke.points, true)
++                        }
++                        StrokeWidthConfig::Scale(s) => {
++                            let mut w =
++                                neo_brush_widths_with_custom(stroke.width, &stroke.points, false);
++                            for val in &mut w {
++                                *val = (*val * s).max(0.001);
++                            }
++                            w
++                        }
++                    };
++                    draw_segments(b, canvas, &stroke.points, &widths, color, is_custom);
++                }
++                15 => {
++                    // Marker: retain all points (flat_marker also uses all raw points).
++                    draw_marker_with_points(b, canvas, stroke, &stroke.points, color);
++                }
++                60 | 61 => {
++                    draw_calligraphy_with_config(
++                        b,
++                        canvas,
++                        stroke.pen_type,
++                        stroke.width,
++                        stroke.stroke_width_config,
++                        pts,
++                        color,
++                    );
++                }
++                5 => {
++                    draw_fountain(b, canvas, stroke, pts, color);
++                }
++                2 | 2000..=2999 => {
++                    draw_constant_width(b, canvas, stroke, pts, color);
++                }
++                _ => unreachable!(),
++            }
++
++            if grouped {
++                b.end_group();
++            }
++            Ok(())
++        }
+     }
+ }
+ 
+@@ -276,6 +455,7 @@ pub(crate) fn draw(b: &mut impl Backend, canvas: &Canvas, stroke: &RenderStroke)
+ /// Pressure- and tilt-independent. Each segment emits the convex hull of its
+ /// two nib rectangles (a gap-free swept quad); all hulls fill at once (nonzero
+ /// winding absorbs the overlaps).
++#[allow(dead_code)]
+ fn draw_calligraphy(
+     b: &mut impl Backend,
+     canvas: &Canvas,
+@@ -284,9 +464,39 @@ fn draw_calligraphy(
+     pts: &[points::Point],
+     color: Rgba,
+ ) {
+-    let l = thickness.max(0.3);
++    draw_calligraphy_with_config(
++        b,
++        canvas,
++        pen_type,
++        thickness,
++        StrokeWidthConfig::Upstream,
++        pts,
++        color,
++    );
++}
++
++fn draw_calligraphy_with_config(
++    b: &mut impl Backend,
++    canvas: &Canvas,
++    pen_type: i64,
++    nominal: f32,
++    config: StrokeWidthConfig,
++    pts: &[points::Point],
++    color: Rgba,
++) {
++    let is_custom = config.is_custom();
++    let (l, half_w) = if !is_custom {
++        let l = nominal.max(0.3);
++        let half_w = l / nominal.clamp(1.0, 10.0) / 2.0;
++        (l, half_w)
++    } else {
++        let eff_w = config.resolve_width(nominal).max(0.001);
++        let half_l = eff_w / 2.0;
++        let aspect = nominal.clamp(1.0, 10.0).max(1.0);
++        let half_w = (half_l / aspect).max(0.0005);
++        (eff_w, half_w)
++    };
+     let half_l = l / 2.0;
+-    let half_w = l / thickness.clamp(1.0, 10.0) / 2.0;
+     let alpha = if pen_type == 60 {
+         std::f32::consts::FRAC_PI_4
+     } else {
+@@ -358,9 +568,21 @@ fn draw_constant_width(
+     pts: &[points::Point],
+     color: Rgba,
+ ) {
+-    let width = stroke.width.max(0.2);
++    let is_custom = stroke.stroke_width_config.is_custom();
++    let width = if is_custom {
++        stroke
++            .stroke_width_config
++            .resolve_width(stroke.width)
++            .max(0.001)
++    } else {
++        stroke.width.max(0.2)
++    };
+     if pts.len() == 1 {
+-        b.fill_path(canvas, &[dot(pts[0].x, pts[0].y, width / 2.0)], color);
++        b.fill_path(
++            canvas,
++            &[dot(pts[0].x, pts[0].y, width / 2.0, is_custom)],
++            color,
++        );
+         return;
+     }
+     let xy: Vec<(f32, f32)> = pts.iter().map(|p| (p.x, p.y)).collect();
+@@ -385,43 +607,60 @@ fn draw_constant_width(
+ /// self-crossings. A single fill op composites once in every viewer; overlaps
+ /// *between* strokes still alpha/Multiply-darken as before. Decimation is fine
+ /// here — the geometry is width-constant.
+-fn draw_marker(
++fn draw_marker_with_points(
+     b: &mut impl Backend,
+     canvas: &Canvas,
+     stroke: &RenderStroke,
+-    decimated: &[points::Point],
++    pts: &[points::Point],
+     color: Rgba,
+ ) {
+-    let width = stroke.width.max(0.2);
++    let is_custom = stroke.stroke_width_config.is_custom();
++    let width = if is_custom {
++        stroke
++            .stroke_width_config
++            .resolve_width(stroke.width)
++            .max(0.001)
++    } else {
++        stroke.width.max(0.2)
++    };
+     let r = width / 2.0;
++    if pts.is_empty() {
++        return;
++    }
++    if pts.len() == 1 {
++        b.fill_path(canvas, &[dot(pts[0].x, pts[0].y, r, is_custom)], color);
++        return;
++    }
+     if stroke.flat_marker {
+-        let pts = decimated;
+-        if pts.len() == 1 {
+-            b.fill_path(canvas, &[dot(pts[0].x, pts[0].y, r)], color);
+-            return;
+-        }
+         let rings: Vec<Vec<(f32, f32)>> = (0..pts.len() - 1)
+             .map(|i| {
+-                let mut hull = dot(pts[i].x, pts[i].y, r);
+-                hull.extend(dot(pts[i + 1].x, pts[i + 1].y, r));
++                let mut hull = dot(pts[i].x, pts[i].y, r, is_custom);
++                hull.extend(dot(pts[i + 1].x, pts[i + 1].y, r, is_custom));
+                 convex_hull(&hull)
+             })
+             .collect();
+         b.fill_path(canvas, &rings, color);
+         return;
+     }
+-    let pts = &stroke.points;
+-    if pts.is_empty() {
+-        return;
+-    }
+-    if pts.len() == 1 {
+-        b.fill_path(canvas, &[dot(pts[0].x, pts[0].y, r)], color);
+-        return;
+-    }
+     let xy: Vec<(f32, f32)> = pts.iter().map(|p| (p.x, p.y)).collect();
+     b.stroke_polyline(canvas, &xy, width, color, None);
+ }
+ 
++fn draw_marker(
++    b: &mut impl Backend,
++    canvas: &Canvas,
++    stroke: &RenderStroke,
++    decimated: &[points::Point],
++    color: Rgba,
++) {
++    let pts = if stroke.flat_marker {
++        decimated
++    } else {
++        &stroke.points
++    };
++    draw_marker_with_points(b, canvas, stroke, pts, color);
++}
++
+ /// Fountain (5): one round-capped segment per point pair, each at the mean width
+ /// of its two endpoints (BOOX's `#ONYX-STROKE` method). The per-point widths
+ /// come from the pressure curve, low-passed like BOOX does (a zero-phase EMA —
+@@ -435,21 +674,50 @@ fn draw_fountain(
+     pts: &[points::Point],
+     color: Rgba,
+ ) {
+-    let mut widths: Vec<f32> = pts
+-        .iter()
+-        .map(|p| fountain_width(stroke.width, p.pressure))
+-        .collect();
+-    smooth_widths_zero_phase(&mut widths, 0.2);
+-    draw_segments(b, canvas, pts, &widths, color);
++    let is_custom = stroke.stroke_width_config.is_custom();
++    let widths: Vec<f32> = match stroke.stroke_width_config {
++        StrokeWidthConfig::Upstream => {
++            let mut w: Vec<f32> = pts
++                .iter()
++                .map(|p| fountain_width(stroke.width, p.pressure))
++                .collect();
++            smooth_widths_zero_phase(&mut w, 0.2);
++            w
++        }
++        StrokeWidthConfig::Fixed(fixed_w) => {
++            vec![fixed_w.max(0.001); pts.len()]
++        }
++        StrokeWidthConfig::DeviceNative => {
++            let base_pt = stroke.width * 0.24;
++            let mut w: Vec<f32> = pts
++                .iter()
++                .map(|p| {
++                    let p_norm = (p.pressure as f32 / PRESSURE_MAX).clamp(0.0, 1.0);
++                    (base_pt * (0.4 + 0.6 * p_norm.powf(0.6))).max(0.001)
++                })
++                .collect();
++            smooth_widths_zero_phase(&mut w, 0.2);
++            w
++        }
++        StrokeWidthConfig::Scale(scale) => {
++            let mut w: Vec<f32> = pts
++                .iter()
++                .map(|p| (fountain_width(stroke.width, p.pressure) * scale).max(0.001))
++                .collect();
++            smooth_widths_zero_phase(&mut w, 0.2);
++            w
++        }
++    };
++    draw_segments(b, canvas, pts, &widths, color, is_custom);
+ }
+ 
+-/// Keep the first/last point and any point that is either at least `MIN_STEP`
++/// Keep the first/last point and any point that is either at least `step`
+ /// away from the last kept one **or** whose pressure changed by `MIN_PRESSURE`.
+ /// The pressure criterion is essential at stroke ends, where the pen slows and
+-/// lifts: those points sit <`MIN_STEP` apart but their pressure (hence width)
++/// lifts: those points sit <`step` apart but their pressure (hence width)
+ /// drops fast — dropping them on distance alone collapses the taper into one fat
+ /// blunt segment instead of a fine point.
+-fn decimate(points: &[points::Point]) -> Vec<points::Point> {
++fn decimate(points: &[points::Point], step: f32) -> Vec<points::Point> {
+     if points.len() <= 2 {
+         return points.to_vec();
+     }
+@@ -461,7 +729,7 @@ fn decimate(points: &[points::Point]) -> Vec<points::Point> {
+         let dx = p.x - last.x;
+         let dy = p.y - last.y;
+         let dp = (p.pressure as i32 - last.pressure as i32).abs();
+-        if dx * dx + dy * dy >= MIN_STEP * MIN_STEP || dp >= MIN_PRESSURE {
++        if dx * dx + dy * dy >= step * step || dp >= MIN_PRESSURE {
+             out.push(*p);
+             last = *p;
+         }
+@@ -487,18 +755,30 @@ fn smooth_widths_zero_phase(widths: &mut [f32], alpha: f32) {
+     }
+ }
+ 
+-/// A filled disc (n-gon) in global coords, for lone-point dots. Circumscribed so
+-/// the flats reach `r`.
+-fn dot(cx: f32, cy: f32, r: f32) -> Vec<(f32, f32)> {
+-    let r = r.max(0.3);
+-    let sides = if r > 6.0 { 16 } else { 8 };
+-    let rr = r / (std::f32::consts::PI / sides as f32).cos();
+-    (0..sides)
+-        .map(|k| {
+-            let t = std::f32::consts::TAU * (k as f32) / sides as f32;
+-            (cx + rr * t.cos(), cy + rr * t.sin())
+-        })
+-        .collect()
++/// A filled disc (n-gon) in global coords, for lone-point dots.
++/// In upstream mode: circumscribed so flats reach `r.max(0.3)`.
++/// In custom mode: radius reaches `r.max(0.0005)` without circumscription exceeding `r`.
++fn dot(cx: f32, cy: f32, r: f32, is_custom: bool) -> Vec<(f32, f32)> {
++    if !is_custom {
++        let r = r.max(0.3);
++        let sides = if r > 6.0 { 16 } else { 8 };
++        let rr = r / (std::f32::consts::PI / sides as f32).cos();
++        (0..sides)
++            .map(|k| {
++                let t = std::f32::consts::TAU * (k as f32) / sides as f32;
++                (cx + rr * t.cos(), cy + rr * t.sin())
++            })
++            .collect()
++    } else {
++        let r = r.max(0.0005);
++        let sides = if r > 6.0 { 16 } else { 8 };
++        (0..sides)
++            .map(|k| {
++                let t = std::f32::consts::TAU * (k as f32) / sides as f32;
++                (cx + r * t.cos(), cy + r * t.sin())
++            })
++            .collect()
++    }
+ }
+ 
+ #[cfg(test)]
+@@ -758,4 +1038,388 @@ mod tests {
+         // The spike's energy spreads to both neighbours (lifts them above 2.0).
+         assert!(w[2] > 2.0 && w[4] > 2.0, "smoothing must spread both ways");
+     }
++
++    #[derive(Default)]
++    struct CaptureBackend {
++        fill_rings: Vec<Vec<(f32, f32)>>,
++        polylines: Vec<(Vec<(f32, f32)>, f32)>,
++        inline_images: usize,
++        groups: usize,
++    }
++
++    impl Backend for CaptureBackend {
++        fn fill_background(&mut self, _: &Canvas, _: Rgba) {}
++        fn fill_path(&mut self, _: &Canvas, rings: &[Vec<(f32, f32)>], _: Rgba) {
++            self.fill_rings.extend(rings.iter().cloned());
++        }
++        fn stroke_polyline(
++            &mut self,
++            _: &Canvas,
++            pts: &[(f32, f32)],
++            width: f32,
++            _: Rgba,
++            _: Option<&[f32]>,
++        ) {
++            self.polylines.push((pts.to_vec(), width));
++        }
++        fn draw_inline_image(&mut self, _: &Canvas, _: &[u8], _: f32, _: f32, _: f32, _: f32) {
++            self.inline_images += 1;
++        }
++        fn draw_text_line(
++            &mut self,
++            _: &Canvas,
++            _: f32,
++            _: f32,
++            _: &str,
++            _: f32,
++            _: Rgba,
++            _: bool,
++            _: bool,
++            _: &crate::render::fonts::ResolvedFont,
++        ) {
++        }
++        fn begin_group(&mut self, _: f32, _: GroupBlend) -> bool {
++            self.groups += 1;
++            true
++        }
++        fn end_group(&mut self) {}
++    }
++
++    fn test_canvas() -> Canvas {
++        Canvas {
++            width: 1000.0,
++            height: 1000.0,
++            origin_x: 0.0,
++            origin_y: 0.0,
++            items: Vec::new(),
++        }
++    }
++
++    fn test_point(x: f32, y: f32, pressure: u16, t: u32) -> points::Point {
++        points::Point {
++            x,
++            y,
++            tilt_x: 0,
++            tilt_y: 0,
++            pressure,
++            t,
++        }
++    }
++
++    fn test_stroke(pen_type: i64, points: Vec<points::Point>) -> RenderStroke {
++        RenderStroke {
++            points,
++            width: 3.0,
++            color: Rgba {
++                r: 0,
++                g: 0,
++                b: 0,
++                a: 1.0,
++            },
++            pen_type,
++            charcoal_texture: 1,
++            flat_marker: false,
++            stroke_width_config: StrokeWidthConfig::Upstream,
++        }
++    }
++
++    #[test]
++    fn strict_preserves_close_points_bypassing_decimate() {
++        // 10 points spaced by 0.04 pt (total span 0.36 pt < MIN_STEP = 0.6) with constant pressure.
++        let pts: Vec<points::Point> = (0..10)
++            .map(|i| test_point(10.0 + i as f32 * 0.04, 20.0, 2000, i * 5))
++            .collect();
++        let stroke = test_stroke(2, pts);
++        let canvas = test_canvas();
++
++        // Default mode: decimate drops all intermediate points because total span < 0.6 and dp == 0.
++        let mut b_default = CaptureBackend::default();
++        draw(&mut b_default, &canvas, &stroke);
++        assert_eq!(b_default.polylines.len(), 1);
++        assert_eq!(
++            b_default.polylines[0].0.len(),
++            2,
++            "default mode should decimate to only endpoints"
++        );
++
++        // Strict mode: all 10 points are preserved!
++        let mut b_strict = CaptureBackend::default();
++        draw_strict(&mut b_strict, &canvas, &stroke).expect("strict draw succeeds");
++        assert_eq!(b_strict.polylines.len(), 1);
++        assert_eq!(
++            b_strict.polylines[0].0.len(),
++            10,
++            "strict mode must preserve all 10 recorded points"
++        );
++    }
++
++    #[test]
++    fn strict_preserves_single_dot_for_all_supported_pens() {
++        let canvas = test_canvas();
++        for &pen_type in &[2, 5, 15, 21, 60, 61, 2000] {
++            let pts = vec![test_point(150.0, 250.0, 2048, 0)];
++            let stroke = test_stroke(pen_type, pts);
++            let mut b = CaptureBackend::default();
++            draw_strict(&mut b, &canvas, &stroke)
++                .unwrap_or_else(|e| panic!("pen {pen_type} dot failed: {e}"));
++            assert!(
++                !b.fill_rings.is_empty(),
++                "single point for pen {pen_type} must render as a filled dot"
++            );
++        }
++    }
++
++    #[test]
++    fn strict_preserves_raw_points_and_pressure_in_neo_brush_bypassing_decimate_pairs() {
++        // 20 points spaced by 0.1 pt with small pressure variations.
++        let pts: Vec<points::Point> = (0..20)
++            .map(|i| test_point(50.0 + i as f32 * 0.1, 50.0, 2000 + (i as u16 * 10), i * 3))
++            .collect();
++        let stroke = test_stroke(21, pts);
++        let canvas = test_canvas();
++
++        // Default mode: decimate_pairs reduces the number of segments.
++        let mut b_default = CaptureBackend::default();
++        draw(&mut b_default, &canvas, &stroke);
++        let default_segs = b_default.polylines.len();
++
++        // Strict mode: decimate_pairs is bypassed; 20 points produce exactly 19 segments.
++        let mut b_strict = CaptureBackend::default();
++        draw_strict(&mut b_strict, &canvas, &stroke).expect("strict neo brush draw succeeds");
++        let strict_segs = b_strict.polylines.len();
++
++        assert_eq!(
++            strict_segs, 19,
++            "strict neo_brush must retain every consecutive segment (19 segments for 20 points)"
++        );
++        assert!(
++            default_segs < strict_segs,
++            "default decimated {default_segs} segments should be less than strict {strict_segs}"
++        );
++    }
++
++    #[test]
++    fn strict_rejects_charcoal_and_unknown_pens() {
++        let canvas = test_canvas();
++        let pts = vec![
++            test_point(10.0, 10.0, 2000, 0),
++            test_point(20.0, 20.0, 2000, 10),
++        ];
++
++        // Charcoal (22): textured/raster pen must be rejected.
++        let stroke_charcoal = test_stroke(22, pts.clone());
++        let mut b1 = CaptureBackend::default();
++        let res = draw_strict(&mut b1, &canvas, &stroke_charcoal);
++        assert!(
++            matches!(res, Err(Error::UnsupportedPen { pen_type: 22 })),
++            "strict mode must reject charcoal pen 22: {res:?}"
++        );
++        assert_eq!(b1.inline_images, 0, "no raster image should be drawn");
++
++        // Unknown pen 999: must be rejected (no fallback to constant width).
++        let stroke_unknown = test_stroke(999, pts.clone());
++        let mut b2 = CaptureBackend::default();
++        let res = draw_strict(&mut b2, &canvas, &stroke_unknown);
++        assert!(
++            matches!(res, Err(Error::UnsupportedPen { pen_type: 999 })),
++            "strict mode must reject unknown pen 999: {res:?}"
++        );
++        assert!(b2.polylines.is_empty(), "no fallback polyline drawn");
++
++        // History pen 2000: supported vector pen (constant width polyline).
++        let stroke_history = test_stroke(2000, pts);
++        let mut b3 = CaptureBackend::default();
++        let res = draw_strict(&mut b3, &canvas, &stroke_history);
++        assert!(
++            res.is_ok(),
++            "strict mode must support history pen 2000: {res:?}"
++        );
++        assert_eq!(
++            b3.polylines.len(),
++            1,
++            "history pen 2000 renders as constant width polyline"
++        );
++    }
++
++    #[test]
++    fn default_mode_retains_fallback_and_rasterization_compatibility() {
++        let canvas = test_canvas();
++        let pts = vec![
++            test_point(10.0, 10.0, 2000, 0),
++            test_point(30.0, 30.0, 2000, 10),
++        ];
++
++        // Unknown pen 999 falls back to constant width in default mode.
++        let stroke_unknown = test_stroke(999, pts);
++        let mut b = CaptureBackend::default();
++        draw(&mut b, &canvas, &stroke_unknown);
++        assert_eq!(
++            b.polylines.len(),
++            1,
++            "default mode should fall back to constant-width polyline for unknown pen"
++        );
++    }
++
++    #[test]
++    fn lone_dot_geometry_upstream_vs_custom() {
++        let canvas = test_canvas();
++        let pt = vec![test_point(100.0, 100.0, 2048, 0)];
++
++        // Upstream mode with nominal width 0.01 pt:
++        // Radius is clamped to 0.3 pt, and circumscribed (rr = 0.3 / cos(pi/12) ≈ 0.31058 pt)
++        let mut stroke_upstream = test_stroke(2, pt.clone());
++        stroke_upstream.width = 0.01;
++        stroke_upstream.stroke_width_config = StrokeWidthConfig::Upstream;
++        let mut b_upstream = CaptureBackend::default();
++        draw(&mut b_upstream, &canvas, &stroke_upstream);
++        assert_eq!(b_upstream.fill_rings.len(), 1);
++        let ring_upstream = &b_upstream.fill_rings[0];
++        assert_eq!(ring_upstream.len(), 8);
++        for &(vx, vy) in ring_upstream {
++            let dist = ((vx - 100.0).powi(2) + (vy - 100.0).powi(2)).sqrt();
++            assert!(
++                dist > 0.3,
++                "upstream dot must clamp to at least 0.3 pt and circumscribe: got {dist}"
++            );
++        }
++
++        // Custom mode with Fixed(0.01 pt):
++        // Radius must be half the requested width (0.005 pt), 0.3 pt clamp removed,
++        // and non-circumscribed: vertices must NOT exceed the requested radius 0.005 pt.
++        let mut stroke_custom = test_stroke(2, pt);
++        stroke_custom.width = 0.01;
++        stroke_custom.stroke_width_config = StrokeWidthConfig::Fixed(0.01);
++        let mut b_custom = CaptureBackend::default();
++        draw(&mut b_custom, &canvas, &stroke_custom);
++        assert_eq!(b_custom.fill_rings.len(), 1);
++        let ring_custom = &b_custom.fill_rings[0];
++        assert_eq!(ring_custom.len(), 8);
++        for &(vx, vy) in ring_custom {
++            let dist = ((vx - 100.0).powi(2) + (vy - 100.0).powi(2)).sqrt();
++            assert!(
++                (dist - 0.005).abs() < 1e-5,
++                "custom dot radius must be exactly half requested width (0.005 pt) and not circumscribe: got {dist}"
++            );
++            assert!(
++                dist <= 0.005001,
++                "custom dot vertices must not exceed requested radius: got {dist}"
++            );
++        }
++    }
++
++    #[test]
++    fn fountain_pen_width_modes() {
++        let canvas = test_canvas();
++        let pts = vec![
++            test_point(10.0, 10.0, 500, 0),
++            test_point(20.0, 20.0, 2048, 10),
++            test_point(30.0, 30.0, 4000, 20),
++        ];
++
++        // 1. Upstream mode: pressure-curved widths
++        let stroke_up = test_stroke(5, pts.clone());
++        let mut b_up = CaptureBackend::default();
++        draw_strict(&mut b_up, &canvas, &stroke_up).unwrap();
++        assert_eq!(b_up.polylines.len(), 2);
++        let w_up_0 = b_up.polylines[0].1;
++        let w_up_1 = b_up.polylines[1].1;
++        assert!(w_up_0 > 0.0 && w_up_1 > 0.0);
++
++        // 2. Fixed mode (0.05 pt): constant width regardless of pressure
++        let mut stroke_fixed = test_stroke(5, pts.clone());
++        stroke_fixed.stroke_width_config = StrokeWidthConfig::Fixed(0.05);
++        let mut b_fixed = CaptureBackend::default();
++        draw_strict(&mut b_fixed, &canvas, &stroke_fixed).unwrap();
++        assert_eq!(b_fixed.polylines.len(), 2);
++        assert!((b_fixed.polylines[0].1 - 0.05).abs() < 1e-4);
++        assert!((b_fixed.polylines[1].1 - 0.05).abs() < 1e-4);
++
++        // 3. DeviceNative mode: base_pt = nominal * 0.24 = 3.0 * 0.24 = 0.72 pt
++        let mut stroke_native = test_stroke(5, pts.clone());
++        stroke_native.stroke_width_config = StrokeWidthConfig::DeviceNative;
++        let mut b_native = CaptureBackend::default();
++        draw_strict(&mut b_native, &canvas, &stroke_native).unwrap();
++        assert_eq!(b_native.polylines.len(), 2);
++        assert!(b_native.polylines[0].1 < b_native.polylines[1].1);
++        assert!(b_native.polylines[0].1 < 1.0);
++
++        // 4. Scale mode (0.5): exactly upstream widths * 0.5
++        let mut stroke_scale = test_stroke(5, pts);
++        stroke_scale.stroke_width_config = StrokeWidthConfig::Scale(0.5);
++        let mut b_scale = CaptureBackend::default();
++        draw_strict(&mut b_scale, &canvas, &stroke_scale).unwrap();
++        assert_eq!(b_scale.polylines.len(), 2);
++        assert!((b_scale.polylines[0].1 - w_up_0 * 0.5).abs() < 1e-4);
++        assert!((b_scale.polylines[1].1 - w_up_1 * 0.5).abs() < 1e-4);
++    }
++
++    #[test]
++    fn calligraphy_width_modes() {
++        let canvas = test_canvas();
++        let pts = vec![
++            test_point(10.0, 10.0, 2048, 0),
++            test_point(20.0, 20.0, 2048, 10),
++        ];
++
++        // Upstream mode with nominal 0.01 pt: clamped to 0.3 pt
++        let mut stroke_up = test_stroke(60, pts.clone());
++        stroke_up.width = 0.01;
++        stroke_up.stroke_width_config = StrokeWidthConfig::Upstream;
++        let mut b_up = CaptureBackend::default();
++        draw_strict(&mut b_up, &canvas, &stroke_up).unwrap();
++        assert!(!b_up.fill_rings.is_empty());
++
++        // Custom mode: Fixed(0.01 pt) removes 0.3 pt clamp
++        let mut stroke_custom = test_stroke(60, pts);
++        stroke_custom.width = 0.01;
++        stroke_custom.stroke_width_config = StrokeWidthConfig::Fixed(0.01);
++        let mut b_custom = CaptureBackend::default();
++        draw_strict(&mut b_custom, &canvas, &stroke_custom).unwrap();
++        assert!(!b_custom.fill_rings.is_empty());
++    }
++
++    #[test]
++    fn configured_single_canvas_contains_rendered_ink() {
++        use crate::model::{Document, Layout, RenderItem};
++        for pen in [2, 5, 15, 21, 60, 61, 2000] {
++            for config in [
++                StrokeWidthConfig::Fixed(100.0),
++                StrokeWidthConfig::Scale(100.0),
++                StrokeWidthConfig::DeviceNative,
++                StrokeWidthConfig::Upstream,
++            ] {
++                for layout in [Layout::SingleCanvas, Layout::PerPage] {
++                    let mut stroke = test_stroke(pen, vec![test_point(0.0, 0.0, 4095, 0)]);
++                    stroke.width = 1.0;
++                    let mut canvas = test_canvas();
++                    canvas.items.push(RenderItem::Stroke(stroke));
++                    let mut doc = Document {
++                        canvases: vec![canvas],
++                    };
++                    doc.apply_stroke_width_config(config, layout);
++                    let canvas = &doc.canvases[0];
++                    if !config.is_custom() || matches!(layout, Layout::PerPage) {
++                        assert_eq!(canvas.width, 1000.0);
++                        assert_eq!(canvas.origin_x, 0.0);
++                        continue;
++                    }
++                    let RenderItem::Stroke(stroke) = &canvas.items[0] else {
++                        panic!("stroke missing")
++                    };
++                    let mut capture = CaptureBackend::default();
++                    draw_strict(&mut capture, canvas, stroke).unwrap();
++                    for ring in capture.fill_rings {
++                        for (x, y) in ring {
++                            assert!(x >= canvas.origin_x && x <= canvas.origin_x + canvas.width);
++                            assert!(y >= canvas.origin_y && y <= canvas.origin_y + canvas.height);
++                        }
++                    }
++                    if pen == 2 && matches!(config, StrokeWidthConfig::Fixed(_)) {
++                        assert_eq!(canvas.width, 148.0);
++                        assert_eq!(canvas.height, 148.0);
++                    }
++                }
++            }
++        }
++    }
+ }
+diff --git a/crates/boox-notes-renderer/src/render/text.rs b/crates/boox-notes-renderer/src/render/text.rs
+index 137115b..bf35f8e 100644
+--- a/crates/boox-notes-renderer/src/render/text.rs
++++ b/crates/boox-notes-renderer/src/render/text.rs
+@@ -25,11 +25,35 @@ struct SChar {
+ }
+ 
+ pub(crate) fn draw(b: &mut impl Backend, canvas: &Canvas, t: &RenderText, fonts: &FontDb) {
++    let _ = draw_internal(b, canvas, t, fonts, false);
++}
++
++pub(crate) fn draw_strict(
++    b: &mut impl Backend,
++    canvas: &Canvas,
++    t: &RenderText,
++    fonts: &FontDb,
++) -> crate::error::Result<()> {
++    draw_internal(b, canvas, t, fonts, true)
++}
++
++fn draw_internal(
++    b: &mut impl Backend,
++    canvas: &Canvas,
++    t: &RenderText,
++    fonts: &FontDb,
++    strict: bool,
++) -> crate::error::Result<()> {
+     let box_w = (t.right - t.left).abs();
+     let size = t.font_size;
+     // Resolve this box's font once (name request + BOOX device-path hint).
+     let Some(font) = fonts.resolve(t.font_name.as_deref(), t.font_hint.as_deref()) else {
+-        return; // no usable font
++        if strict {
++            return Err(crate::error::Error::MissingContent {
++                what: format!("unresolved font for text box: {:?}", t.font_name),
++            });
++        }
++        return Ok(()); // no usable font
+     };
+ 
+     // Flatten styled runs into characters: per char, decide how it draws
+@@ -44,11 +68,29 @@ pub(crate) fn draw(b: &mut impl Backend, canvas: &Canvas, t: &RenderText, fonts:
+             let draw = super::fonts::char_draw(fonts, &font, c, lang);
+             let w = match &draw {
+                 CharDraw::Skip => 0.0,
+-                CharDraw::Emoji => size, // an inline image, one em square
+-                CharDraw::Glyph(f) => fonts
+-                    .advance_em(f, c)
+-                    .map(|em| em * size)
+-                    .unwrap_or_else(|| char_em(c) * size),
++                CharDraw::Emoji => {
++                    if strict && emoji::png_for(fonts, c).is_none() {
++                        return Err(crate::error::Error::MissingContent {
++                            what: format!(
++                                "missing emoji bitmap for character '{c}' (U+{:04X})",
++                                c as u32
++                            ),
++                        });
++                    }
++                    size // an inline image, one em square
++                }
++                CharDraw::Glyph(f) => {
++                    let adv = fonts.advance_em(f, c);
++                    if strict && !c.is_whitespace() && adv.is_none() {
++                        return Err(crate::error::Error::MissingContent {
++                            what: format!(
++                                "missing glyph for character '{c}' (U+{:04X}) in font {:?}",
++                                c as u32, f.0
++                            ),
++                        });
++                    }
++                    adv.map(|em| em * size).unwrap_or_else(|| char_em(c) * size)
++                }
+             };
+             chars.push(SChar {
+                 c,
+@@ -132,6 +174,7 @@ pub(crate) fn draw(b: &mut impl Backend, canvas: &Canvas, t: &RenderText, fonts:
+         }
+         baseline += line_height;
+     }
++    Ok(())
+ }
+ 
+ /// Rough advance width of a character in em units: emoji modifiers 0.0,

@@ -164,6 +164,14 @@ Generate calibration controls in a fresh or empty directory with
 `python tools/calibration_controls.py --generate-fixtures audit-output/NEW_CALIBRATION`.
 The damaged controls share the reference layout. The tests check the expected
 defect for each pair and require identical pixels for the zero-tolerance control.
+
+Research chain tests in `test_overnight.py` additionally cover packed-object
+storage staging, exact decimal metadata cloning, logical orphan retention,
+source-run partitions, same-width endpoint continuity, gaps, dots, repeated
+loop vertices and inherited transparency. `joined-rdp-0` is a separate chaining
+control with possible raster edge changes; it is not the unchanged-path
+zero-tolerance control. None of these tests certifies arbitrary handwriting
+meaning or replaces review of changed pages and protected detail crops.
 When running `tools/experiment_manifest.py`, an optional `--exact-baseline` PDF
 must have its adjacent production JSON report. The manifest checks exact
 preservation evidence and both PDF hashes before accepting it as the comparator.
@@ -178,6 +186,12 @@ qualified by the existing compatibility commands.
 
 ## Real documents and timing
 
+The separate [overnight research runner](overnight-benchmark.md) has generated
+saved-PDF regression coverage in `tests/test_overnight.py` and a small end-to-end
+check via `tools/benchmark_overnight.py --smoke --skip-native --output audit-output/NEW_OVERNIGHT_SMOKE`.
+These check prototype operation and independent path bounds, not actual-note
+quality or P16-D/E qualification. Run the full suite after executable changes.
+
 Run one document at a time. For direct mode add `--viewing-profile quick`; keep its reports with transformation counts, preservation coverage, hashes and descriptive stage elapsed times. Compare size savings against prior selected outputs. Thirty seconds is not a pass/fail criterion. The source is never rewritten.
 
 The remaining timing guidance applies to thorough mode, whose reports also include candidate decisions and raw rendering-speed measurements.
@@ -189,3 +203,22 @@ all-page and final renderer/browser checks as repository-generated candidates.
 Compare medians and variability using the same machine, dependency versions, annotation settings and page samples. Do not benchmark alongside other renderers or heavy tests. Operator preparation, cold rendering, cached drawing and browser page sequences are different measurements. Avoid adding their timings or describing a smaller file as faster without a measured result.
 
 The private corpus results are summarized in [validation.md](validation.md). Personal PDFs and raw local paths are deliberately excluded from the repository. The original corpus cannot be reconstructed from this checkout.
+
+
+### Optional BOOX notebook preflight
+
+Adapter regressions use generated fixtures. Set `PDF_NOTE_TEST_INPUT` to an explicitly
+selected local `.note` file to enable the private preflight smoke test; unset means
+an explicit skip, and an invalid supplied path fails. Keep private paths out of commits.
+The archive limits remain 50,000 entries and 500 MiB cumulative expanded data;
+larger notebooks are unsupported under these bounds. These are inspection limits,
+not target PDF sizes. The optional disk budget controls temporary working storage.
+
+
+### Pinned renderer for generated adapter tests
+
+The full Python suite includes real generated `.note` conversions. Build the
+pinned renderer using `tools/build_boox_renderer.py` and set `BOOX_NOTES_RENDERER`
+to its output before running those tests. GitHub Actions performs the same build.
+The public source pin, patch, source hashes and MIT notice are under
+`vendor/boox-renderer/`. Prebuilt executables and build workspaces stay local.

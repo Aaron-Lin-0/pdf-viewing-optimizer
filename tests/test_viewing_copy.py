@@ -33,6 +33,37 @@ def annotation_fixture():
 
 
 class ViewingTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'win32', 'Windows cache path conventions')
+    def test_cache_directory_handles_local_unc_and_extended_paths(self):
+        from pdf_runtime import filesystem_path
+        for original, expected in [
+            (r'C:\cache', '\\\\?\\C:\\cache'),
+            (r'\\server\share\cache', '\\\\?\\UNC\\server\\share\\cache'),
+            ('\\\\?\\C:\\cache', '\\\\?\\C:\\cache'),
+        ]:
+            with self.subTest(path=original):
+                self.assertEqual(str(filesystem_path(original)), expected)
+
+    def test_verification_cache_renders_compares_and_cleans_long_paths(self):
+        from pdf_runtime import temporary_directory
+        with temporary_directory() as folder:
+            root=Path(folder);source=root/'s.pdf'
+            writer=PdfWriter();writer.add_blank_page(width=60,height=60);writer.write(source);writer.close()
+            cache=root
+            while len(str(cache)) < 280:
+                cache=cache/'long-cache-segment'
+            session=VerificationSession(source,cache,1)
+            try:
+                self.assertTrue(all(row['exact'] for row in session.compare(source,[0])))
+                self.assertTrue(all(row['exact'] for row in session.compare(source,[0])))
+                self.assertEqual(session.stats['source_renders_created'],1)
+                self.assertEqual(session.stats['source_renders_reused'],1)
+                self.assertTrue(session._source_path(0).is_file())
+            finally:
+                session.close(force=True)
+                shutil.rmtree(session.directory)
+            self.assertFalse(session.directory.exists())
+
     def test_pdfjs_heap_reserves_ram_across_workers(self):
         from viewing_copy import pdfjs_heap_args
         for available,workers,expected in [(None,2,[]),(8,2,[]),(20,2,['--max-old-space-size=5120']),

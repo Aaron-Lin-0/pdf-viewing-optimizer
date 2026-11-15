@@ -8,12 +8,14 @@ import tempfile
 import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
-PROGRAM=['optimize_pdf.py','handwriting.py','invisible_text.py','navigation.py','geometry.py',
+PROGRAM=['tools/build_boox_renderer.py','vendor/boox-renderer/README.md','vendor/boox-renderer/LICENSE',
+         'vendor/boox-renderer/source.json','vendor/boox-renderer/fork.patch','note_to_pdf.py','optimize_pdf.py','handwriting.py','invisible_text.py','navigation.py','geometry.py',
          'annotation_ink.py','viewing_copy.py','batch_workflow.py','viewing_copy_gui.py','browser_check.py',
          'pdfjs_benchmark.mjs','browser_harness.html','verification_worker.py','tools/evidence_cache.py',
          'pdf_runtime.py','quick_lossless.py','lossless_verify.py',
          'tools/experiment_manifest.py','tools/pdf_characterize.py','tools/revision_pages.py']
-DOCS=['docs/adr-batch-workflow.md','docs/audit-repair-walkthrough.md','docs/comparison.md',
+DOCS=['docs/boox-note-handoff.md','docs/adr-batch-workflow.md','docs/audit-repair-walkthrough.md','docs/comparison.md',
+      'docs/overnight-benchmark.md',
       'docs/design.md','docs/optimizer-comparison-handoff.md','docs/quick-lossless-plan.md',
       'docs/release-v0.2.0.md','docs/roadmap.md','docs/testing.md',
       'docs/validation.json','docs/validation.md']

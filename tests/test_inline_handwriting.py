@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from handwriting import HEADER, inline_handwriting
+from handwriting import HEADER, inline_handwriting, _inline_leaf
 from optimize_pdf import optimize
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import ArrayObject, BooleanObject, DecodedStreamObject, DictionaryObject, NameObject, NumberObject
@@ -46,6 +46,26 @@ def fixture():
 
 
 class InlineTests(unittest.TestCase):
+    def test_discovery_does_not_decode_forms_that_cannot_contain_children(self):
+        writer,_,leaf=fixture()
+        standalone=DecodedStreamObject()
+        standalone.update(leaf)
+        writer._add_object(standalone)
+        with patch.object(standalone,'get_data',side_effect=AssertionError('non-container decoded')):
+            self.assertEqual(inline_handwriting(writer),(2,1))
+
+    def test_leaf_grammar_selection_preserves_both_formats_and_rejects_mixtures(self):
+        _,_,leaf=fixture()
+        segment=b'2 w 10 10 m 15 15 l S\n2 w 30 30 m 30 30 l S\n'
+        for body in (BODY,segment):
+            with self.subTest(body=body):
+                leaf.set_data(HEADER+body)
+                self.assertEqual(_inline_leaf(leaf)[0],body)
+        for body in (BODY+segment,segment+BODY,BODY+b'bad',b'\n'+BODY):
+            with self.subTest(body=body):
+                leaf.set_data(HEADER+body)
+                self.assertIsNone(_inline_leaf(leaf))
+
     def test_mixed_calls_shared_resources_collision_and_order(self):
         w, parents, leaf = fixture()
         other_resources = parents[1]['/Resources']

@@ -14,3 +14,13 @@ dist/
 .env
 .env.*
 !.env.example
+
+# Local renderer builds and agent scratch notes
+/vendor/boox-notes-renderer.exe
+/target/
+/.ruff_cache/
+/output_p2_*
+/docs/antigravity-local-handoff.md
+
+# Generated test workspaces
+/tests/tmp*/

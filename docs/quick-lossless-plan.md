@@ -84,6 +84,14 @@ binds profile, recipe, code/tool/renderer identities and source/output hashes.
 
 ## Next speed work
 
+The first processing-cost refinement removes Direct's final disk-backed root
+rebuild. Explicit in-memory reachability cleanup preserves the same cleanup
+purpose, including unreachable cycles, while keeping a saved unmerged fallback
+and the existing saved navigation/resource checks. Inlining also avoids decoding
+non-container Forms and scanning both pen-body grammars. The Direct chain, CLI,
+packing recipe and all preservation checks are unchanged; compression-only is
+still an explicit selection, not a new heuristic default.
+
 Use stage elapsed times to identify costs inside this chain. Investigate reusing
 loaded documents and parsed signatures within a job, and reduce repeated renderer
 startup while bounding memory and preserving cancellation. Keep renderer/resolution/

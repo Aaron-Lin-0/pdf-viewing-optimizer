@@ -8,11 +8,10 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
-import tempfile
 import time
 
 from lossless_verify import POLICY_VERSION, UnsupportedPDF, validate_quick_input, verify_lossless
-from pdf_runtime import (RunBudget, TimeBudgetExceeded, DiskBudgetExceeded, filehash,
+from pdf_runtime import (temporary_directory, RunBudget, TimeBudgetExceeded, DiskBudgetExceeded, filehash,
                          qpdf_identity, build_qpdf_candidate, check_qpdf, _run)
 
 
@@ -68,8 +67,37 @@ def direct_candidate(source,working,identity,budget,stage,report):
     return selected,manifest
 
 
+VERIFICATION_CHUNK_PAGE_THRESHOLD = 50
+VERIFICATION_CHUNK_SIZE = 30
+
+
+def verify_pdfjs_chunked(source, candidate, pages, allow_edges=False, budget=None, workers=None,
+                          threshold=VERIFICATION_CHUNK_PAGE_THRESHOLD, chunk_size=VERIFICATION_CHUNK_SIZE):
+    """Verify PDF.js appearance across pages, chunking into sequential batches when pages exceed threshold."""
+    from viewing_copy import verify_pdfjs
+    total_pages = pages if isinstance(pages, int) else len(pages)
+    if total_pages > threshold:
+        all_records = []
+        page_list = list(range(1, total_pages + 1)) if isinstance(pages, int) else list(pages)
+        for i in range(0, len(page_list), chunk_size):
+            chunk = page_list[i:i + chunk_size]
+            if budget:
+                budget.check('PDF.js appearance batch', (source, candidate))
+            records = verify_pdfjs(
+                source, candidate, chunk,
+                allow_edges=allow_edges, budget=budget, workers=workers, total_pages=total_pages
+            )
+            all_records.extend(records)
+        all_records.sort(key=lambda row: row['page'])
+        return all_records
+    return verify_pdfjs(
+        source, candidate, pages,
+        allow_edges=allow_edges, budget=budget, workers=workers, total_pages=total_pages
+    )
+
+
 def verify_direct(source,candidate,manifest,budget,working,stage,report):
-    from viewing_copy import (verify_candidate,verify_pdfjs,detail_crop,
+    from viewing_copy import (verify_candidate,detail_crop,
                               VerificationSession,default_verification_workers)
     from verification_worker import page_comparisons
     workers=default_verification_workers()
@@ -96,7 +124,7 @@ def verify_direct(source,candidate,manifest,budget,working,stage,report):
     if not proof['exact']:raise ValueError('Direct optimization requires identical tested pixels.')
     pages=len(proof['pages'])
     report['pdfjs_all_pages']=stage('PDF.js appearance on every page',
-        lambda:verify_pdfjs(source,candidate,pages,allow_edges=False,budget=budget,workers=workers))
+        lambda:verify_pdfjs_chunked(source,candidate,pages,allow_edges=False,budget=budget,workers=workers))
     samples=sorted({1,(pages+1)//2,pages})
     def details():
         page,crop=detail_crop(source,samples)
@@ -175,7 +203,7 @@ def optimize_quick(source,destination,expected_source_sha256=None,checkpoint=Non
         os.replace(temporary,target)
     def fresh_source():
         if filehash(source)!=source_hash:raise ValueError('Original changed during processing.')
-    with tempfile.TemporaryDirectory(prefix='pdf-quick-',dir=destination.parent) as temporary:
+    with temporary_directory(prefix='pdf-quick-',dir=destination.parent) as temporary:
         working=Path(temporary);candidate=working/'candidate.pdf'
         def check():budget.check('quick lossless verification',(working,))
         def stage(name,operation):

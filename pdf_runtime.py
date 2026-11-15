@@ -1,4 +1,5 @@
 """Shared non-rendering runtime, process budgets and qpdf compression recipe."""
+import contextlib
 import hashlib
 import os
 from pathlib import Path
@@ -6,6 +7,25 @@ import shutil
 import subprocess
 import sys
 import time
+import tempfile
+
+
+def filesystem_path(path):
+    path = str(Path(path).absolute())
+    # Windows image IO and recursive cleanup need the extended prefix on long paths.
+    if os.name == 'nt' and not path.startswith('\\\\?\\'):
+        path = '\\\\?\\UNC\\' + path[2:] if path.startswith('\\\\') else '\\\\?\\' + path
+    return Path(path)
+
+
+@contextlib.contextmanager
+def temporary_directory(**kwargs):
+    temporary = tempfile.TemporaryDirectory(**kwargs)
+    try:
+        yield temporary.name
+    finally:
+        temporary.name = str(filesystem_path(temporary.name))
+        temporary.cleanup()
 
 
 class TimeBudgetExceeded(RuntimeError):

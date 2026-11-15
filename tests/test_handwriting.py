@@ -108,6 +108,27 @@ def make_crossing_masked_fixture(path, type3_fallback=False):
 
 
 class HandwritingTests(unittest.TestCase):
+    def test_resource_scan_skips_terminal_values_but_protects_nested_forms(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            source=Path(temporary)/'source.pdf';make_boox(source)
+            writer=PdfWriter(clone_from=source)
+            resource=writer.pages[0]['/Resources']
+            form=resource['/XObject']['/FFT0']
+            font=DictionaryObject({NameObject('/Type'):NameObject('/Font'),NameObject('/Subtype'):NameObject('/Type1'),
+                NameObject('/BaseFont'):NameObject('/Helvetica'),
+                NameObject('/PrivateScalars'):ArrayObject([NumberObject(500) for _ in range(100100)])})
+            ref=writer._add_object(font)
+            resource[NameObject('/Font')]=DictionaryObject({NameObject('/Unused'):ref})
+            self.assertEqual(batching_contexts(writer)[id(form)],set())
+            font[NameObject('/Cycle')]=ref
+            font[NameObject('/PrivateForm')]=resource['/XObject'].raw_get('/FFT0')
+            self.assertIn('indirect paint resource /Font',batching_contexts(writer)[id(form)])
+            with patch('handwriting.MAX_PROTECTED_RESOURCE_NODES',2):
+                with self.assertRaisesRegex(ValueError,'structural-node bound'):batching_contexts(writer)
+            with patch('handwriting.MAX_PROTECTION_VISITS',10):
+                with self.assertRaisesRegex(ValueError,'reference/value visit bound'):batching_contexts(writer)
+            writer.close()
+
     def test_type3_glyph_fallback_protects_shared_form_from_batching(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
             source, output = (Path(folder) / name for name in ('source.pdf', 'output.pdf'))

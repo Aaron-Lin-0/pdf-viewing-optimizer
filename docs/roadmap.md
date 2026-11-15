@@ -42,6 +42,24 @@ retypesetting, with its own review contract; it cannot qualify as an exact viewi
 copy or a P16 geometry-preserving treatment. P17 research may proceed independently
 of P16, without displacing the current direct-mode and P13/P14 qualification work.
 
+**Active input track: [P18 — BOOX `.note` to vector PDF](#p18-boox-note-to-vector-pdf-pipeline).**
+A pinned, narrowly patched Rust fork of `boox-notes-renderer` provides strict,
+decimation-free vector conversion behind the `note_to_pdf.py` adapter. Multi-page
+whole-notebook lossless verification against the converter's vector output (`ME 505.note`,
+91 pages) bounds verification memory with 30-page PDF.js appearance chunks, and Stage 2 Direct
+optimization achieves 73–75% size reductions on dense handwriting while preserving the
+converter's stream without regression. This verifies optimizer stream preservation, not
+equivalence to the BOOX tablet's hardware rasterizer. Tablet export comparison (`ME 505.pdf`)
+was an empirical sample across 7 representative pages without an all-page gate. The tablet
+export contains 60,575 vector stamp annotations with vector appearance streams
+(`/Annots` -> `/Stamp` -> `/AP` -> `/N`), not raster handwriting (the 91 embedded page
+images occupy only ~698 KB combined and serve as background templates); its 440 MB size
+stems from per-stroke annotation dictionary and stream overhead, making structural optimization
+(flattening annotations, resource deduplication, stream packing) a viable target.
+An independent all-page tablet fidelity acceptance gate remains open. The separate
+conversion contract is finalized in [design.md](design.md#boox-note-conversion-contract-milestone-p18).
+P18 does not relax PDF acceptance rules.
+
 **Current priority (corrected 2026-11-02): direct viewing copies.** Keep useful
 transformations and comparable storage savings while removing exhaustive optimizer
 comparisons and rendering-speed benchmarks from routine jobs. Thirty seconds on a
@@ -53,6 +71,21 @@ lane remains an explicit qpdf option. [design.md](design.md) defines both profil
 thorough gates remain unchanged. Fresh generated matrix and interaction fixtures
 pass the native-browser harness, and P15's native two-file GUI/release checks are
 complete.
+
+**Independent research: repeated Direct passes.** Use the
+[repeated-pass benchmark](comparison.md#repeated-direct-pass-benchmark) to
+measure whether a published Direct copy exposes additional savings or changes
+rendering cost. A second pass needs repeatable gains and preservation evidence
+against the original before it warrants investigation. If a transformation
+accounts for the gain, test whether it can run in the first pass.
+
+**Processing-cost follow-up:** the Direct construction path now replaces its
+final parse/rebuild with explicit reachability cleanup and an exclusive copy
+of the checked saved candidate. Inlining avoids redundant grammar scans and
+decoding Forms without child XObjects. See [the Direct plan](quick-lossless-plan.md#next-speed-work).
+This does not change recipe selection, preservation thresholds or P13/P14's
+outstanding qualification work. Private timing evidence stays under ignored
+`audit-output/`.
 
 The maintained implementation already includes:
 
@@ -120,6 +153,7 @@ P17's source inspection and compiler probes did not run recognition or compile n
 | Existing optimizer/direct-mode work | Follow the current P13/P14 priority and inspect their actual outstanding evidence | Do not replace these tasks with a new feature just because P16/P17 appear later in the roadmap |
 | Approximate coordinate/point-reduction work | P16-A: reconstruct the inherited-mask case, add a failing regression, repair the shared eligibility boundary | Focused and full tests pass and the altered transparent result cannot publish; then begin P16-B/C before the simplifier |
 | Notes-to-LaTeX research | P17-A/B: inspect the companion, write the transcription contract, and qualify one recognition backend on generated/reference cases | Preserve source coverage and distinguish recognizer output from a compiling skeleton; a known-source TeX smoke under P17-D may be developed independently |
+| BOOX `.note` conversion | P18-A through P18-E: strict vector fork, bounded archive preflight, note_to_pdf adapter, Direct optimization, and reference qualification | P18-A through P18-C complete; P18-D in progress (sampled comparison complete; independent all-page fidelity acceptance gate remains open); separate conversion contract documented in design.md |
 | Public experimental option | Implement the relevant qualified research treatment first | P16-G or P17-F is conditional; no new public mode or automatic default is needed to start research |
 
 For P16-A, the existing focused tests can be run from the root with
@@ -376,6 +410,43 @@ reuse; deferred native qualification remains deferred, never an inferred pass.
 Do not add these features to routine direct jobs while research is incomplete.
 
 ### P16 scope, ownership and evidence
+
+The resource scan's protection budget counts structural resource nodes rather
+than terminal numeric/name/string values, with a separate total visit bound.
+This addresses false preflight exhaustion on large metadata without removing
+Form protection or opacity checks. Focused research can require actual changed,
+checked recipes through `--require-recipes`; a blocked lossy preflight then
+prevents unrelated exact-only viewing timings. Failed candidate generation is
+not a completed lossy experiment.
+
+The research runner now includes `joined-rdp` controls and bounded reductions
+for adjacent opaque round-capped segments with literal shared endpoints and
+identical widths. It preserves gaps, width changes and dots, and independently
+checks saved source-run partitions and path bounds. Exact decimal cloning,
+binary ID preservation and strictly verified storage-neutral staging address
+baseline-copy failures without relaxing the graph comparator. Intermediate
+proof PDFs use owned temporary storage. See the focused recipe command in
+[the overnight guide](overnight-benchmark.md#hypotheses-registered-before-trials).
+This remains exploratory: raster edge shading, neighboring topology, clipping,
+small-writing review and native/holdout qualification are not certified by a
+path-distance bound. P16-D/E are not marked complete; cubic fitting remains
+conditional under P16-F and production modes stay exact.
+
+The overnight research runner can preprocess NeoPdf incremental exports into
+verified current-revision snapshots. This preserves the complete current logical
+graph and streams, not historical revision layout; the actual original remains
+the viewing-time reference. See [the overnight guide](overnight-benchmark.md).
+Production input acceptance is unchanged.
+
+**Exploratory overnight harness (2026-11-11):**
+[overnight-benchmark.md](overnight-benchmark.md) documents the runnable local
+experiment in `tools/benchmark_overnight.py`: processing/packing variants,
+source-relative viewing measurements, preregistered trial hypotheses, saved-PDF
+path bounds and all-page visual evidence. Its research-only polyline reducer
+does not complete P16-D/E: local gap/topology protection, calibrated protected
+crops/print checks, semantic review and actual-document holdout qualification
+remain open. Approximate candidates remain unreviewed; production rules are
+unchanged. Curve fitting remains conditional under P16-F.
 
 - Preserve the current CLI/API, exact/default modes and their acceptance rules.
   Approximate research gets a distinct transformation and quality-policy identity;
@@ -936,6 +1007,273 @@ study copy, including content-review effort and unpreserved PDF functions.
 accurate status, review coverage and limits. Drafts and accepted study copies remain
 distinct; the immutable original is always available.
 
+## P18: BOOX `.note` to vector PDF pipeline
+
+**Status: P18-A through P18-C completed; P18-D in progress (sampled comparison complete; independent all-page fidelity acceptance gate remains open); P18-E conversion contract documented 2026-11-14.**
+The earlier chat, **Convert Note Files To PDF**, identified the starting projects.
+Upstream README, license, container/model, stroke/PDF renderer, CLI and conversion
+tests were inspected at [`niw/boox-notes-renderer` commit `e3964ace870c6fc2aab65996665b004705ef23dc`](https://github.com/niw/boox-notes-renderer/tree/e3964ace870c6fc2aab65996665b004705ef23dc).
+The pinned fork implements `--strict` mode (raw point preservation, zero decimation,
+and fail-closed rejection of raster pens, active templates, and hidden layers).
+`note_to_pdf.py` provides an isolated two-stage pipeline linking strict conversion
+to Direct viewing copy optimization (`quick_lossless`). Real-file qualification
+against a 91-page college notebook (`ME 505.note`) confirms that Stage 2 Direct
+viewing copy optimization preserves the converter's vector output stream without
+regression while achieving 73–75% storage savings. Empirical tablet export comparison
+(`ME 505.pdf`) was sampled across 7 representative pages without an all-page gate.
+The tablet export contains 60,575 vector stamp annotations with vector appearance
+streams (`/Annots` -> `/Stamp` -> `/AP` -> `/N`), not raster handwriting (the 91
+embedded page images occupy only ~698 KB combined and serve as background templates);
+its 440 MB size stems from isolated annotation dictionary and appearance stream
+overhead, making structural optimization (inlining/flattening annotations, resource
+deduplication, stream packing) a valuable target. An independent all-page tablet
+fidelity acceptance gate remains open. The finalized conversion contract is documented in
+[design.md](design.md#boox-note-conversion-contract-milestone-p18).
+
+### Starting solution and boundaries
+
+Use a small fork of **BOOX Notes Renderer**, retaining its Rust parser and PDF
+backend behind one Python command adapter. Its
+[MIT license](https://github.com/niw/boox-notes-renderer/blob/e3964ace870c6fc2aab65996665b004705ef23dc/LICENSE)
+permits modification/distribution with its notice retained; dependency and font
+redistribution terms still need an inventory before packaging. Keep Rust build
+tools out of normal Python/PDF setup. Build an executable for the tested Windows
+target; choose its installation path at setup, never hard-code a personal path.
+Do not port the parser to Python or import an entire upstream application.
+
+The [README](https://github.com/niw/boox-notes-renderer/blob/e3964ace870c6fc2aab65996665b004705ef23dc/README.md)
+describes modern `geo_layout` notes, regular/infinite pages, pressure strokes,
+images, typed text and geometric shapes. These are capabilities to qualify,
+not this project's supported-input promise. Important inspected gaps:
+
+- [Stroke rendering](https://github.com/niw/boox-notes-renderer/blob/e3964ace870c6fc2aab65996665b004705ef23dc/crates/boox-notes-renderer/src/render/stroke.rs)
+  automatically decimates several pen types, infers/smooths widths and rasterizes
+  charcoal. A default export is not a no-point-loss, wholly vector baseline.
+- [Model assembly](https://github.com/niw/boox-notes-renderer/blob/e3964ace870c6fc2aab65996665b004705ef23dc/crates/boox-notes-renderer/src/model/mod.rs)
+  omits hidden-layer items, orders translucent strokes before opaque strokes and
+  has skip/default paths for unresolved content. The README explicitly omits
+  template backgrounds and rejects older SQLite containers.
+- [Archive loading](https://github.com/niw/boox-notes-renderer/blob/e3964ace870c6fc2aab65996665b004705ef23dc/crates/boox-notes-renderer/src/container.rs)
+  eagerly loads entries without application work budgets; duplicate names replace
+  earlier entries. The CLI writes outputs with ordinary overwriting writes.
+- [Upstream integration tests](https://github.com/niw/boox-notes-renderer/blob/e3964ace870c6fc2aab65996665b004705ef23dc/crates/boox-notes-renderer/tests/convert.rs)
+  check parsing/output basics; matching BOOX PDFs are manual references, not
+  asserted appearance equivalence.
+
+[`nrontsis/boox-note-optimizer`](https://github.com/nrontsis/boox-note-optimizer)
+is a secondary format/pen-semantics reference and possible diagnostic control.
+It now advertises PDF/SVG export as well as `.note` optimization, but its point
+decimation is outside this baseline. The existing `boox-note/default-export`
+comparison slot describes that distinct upstream workflow; do not relabel it as
+our new converter or reuse its identity. Older SQLite support is a later,
+sample-driven decision, not an automatic fallback to a second renderer.
+
+### P18-A — Pin the fork and define the first supported input
+
+1. Check the current diff and active jobs before implementation; preserve unrelated
+   work and do not change executing comparison code. Start the converter work on
+   an isolated `codex/` branch when implementing, reusing a suitable checkout.
+2. Fork the pinned renderer, retain upstream history/notices and make only the
+   strict-conversion changes below. Keep Rust changes/tests in that fork and the
+   Python adapter in this repository. Record fork revision, `Cargo.lock`, Rust
+   toolchain/target, build flags and executable hash; build/test with `--locked`.
+   The first deliverable is a Windows build plus a generated-fixture smoke result,
+   not a GUI or a release.
+3. When supplied, inventory each authorized sample read-only: content hash, device
+   model/firmware/export method when known, container type, notebook/page IDs,
+   order/dimensions, pen types, transforms, visible/hidden layers, backgrounds,
+   text/fonts, images, links/attachments and recognition/search data. Detect
+   signatures/encryption/protection and unsupported variants before conversion.
+4. Start with one notebook per archive and native per-page layout. Support only
+   the pen/features actually qualified by samples; reject unknown ones with a
+   reason. Preserve intentionally blank pages. Infinite-canvas stitching,
+   multi-notebook splitting and older containers wait for demonstrated need.
+
+**Exit:** pinned build, source inventory and explicit support/rejection matrix.
+No inference that a `.note` filename identifies one stable BOOX format.
+
+### P18-B — Make conversion strict before optimizing its output
+
+1. Bound top-level and nested ZIP work: entry counts, individual/total decompressed
+   bytes, actual bytes read, nesting and image/point/page allocations. Validate
+   paths, duplicate names, offsets/lengths, IDs and finite numeric values. Do not
+   extract archive-selected paths, follow external references or read arbitrary
+   host paths from note metadata. Enforce bounds in the parser as well as preflight.
+2. Add strict diagnostics and object accounting to the fork. Every active source
+   object must map to an output item or an explicit rejection; distinguish proven
+   superseded/erased history from missing live data. Turn warning-and-skip,
+   silent image/font failures and unsupported pen fallbacks into blocking errors.
+   Missing tile/page/layer metadata must not become a successful blank/default
+   result. An empty-looking PDF and exit code zero do not establish coverage.
+3. Disable geometric decimation in the baseline, including paired point/width
+   reduction. Retain raw point sequences and pressure/tilt/time data for audit;
+   qualify inferred pen-width models separately against device references.
+   Preserve dots, loops, caps, joins, transforms, clipping and paint order. Do not
+   assume translucent-before-opaque ordering is correct for every notebook.
+4. Keep vector pens as vector content without per-segment annotation objects.
+   Reject charcoal/textured pens until an applicable preservation contract exists;
+   no silent raster fallback. Preserve source images without unreviewed resampling
+   or lossy re-encoding. Reuse the backend's state coalescing/font subsetting before
+   adding new storage machinery; no batching across order/alpha/clip boundaries.
+5. Resolve required templates/backgrounds from verified embedded or explicitly
+   supplied local assets; otherwise reject. Disable automatic CDN/font downloads.
+   Pin local font identities and report substitution/missing glyphs. Preserve
+   text/search content, links and other required data when present, or reject that
+   input until supported. Do not imply that handwriting conversion creates OCR.
+6. Preserve layer membership and visibility in PDF optional content when needed,
+   including hidden content; until qualified, reject those layered inputs rather
+   than treating a flattened visible snapshot as preserved. Keep the `.note`
+   immutable and disclose that the generated PDF is not an editable BOOX notebook.
+
+**Exit:** generated positive/negative fixtures prove that supported content is
+accounted for and unsupported/unresolved content cannot publish. Retaining every
+point alone does not prove equivalence of BOOX's proprietary pen rendering.
+
+### P18 preservation repairs - 2026-11-15
+
+Bookmark failures block publication unless --no-toc is explicit. Per-notebook
+page mapping follows renderer order, normalizes IDs and enforces a 64-level TOC
+limit. Saved outlines are reopened and verified. Custom single-canvas widths
+recompute configured visual bounds; upstream and per-page bounds stay unchanged.
+Density-scaled is canonical with device-native retained as an alias. P18-D
+independent tablet fidelity qualification remains open.
+
+### P18-C — Add one sequential local conversion command
+
+Implement a separate experimental Python adapter/CLI (proposed root file
+`note_to_pdf.py`) that runs the trusted fork executable with argument arrays,
+timeout, owned-process cleanup and a fresh private work directory. The child
+writes only there; reuse exclusive publication/hash helpers to publish checked
+PDF/report bytes. Never give the upstream writer a final user destination.
+Snapshot/hash the input and recheck it before publication; preserve original and
+existing outputs/reports, clean partial artifacts and separate draft/rejected/
+qualified outcomes. Do not open signed/encrypted inputs through another route.
+
+Bind evidence to `.note`, optional matching device PDF, template/font hashes,
+fork/build/settings, converter diagnostics, page/object mapping and output hash.
+The conversion verdict and later PDF-optimization verdict are separate fields.
+Keep logs and private reports under a fresh ignored `audit-output/` run folder.
+
+First emit the direct conversion for inspection. An optional second stage may
+pass it through existing Direct optimization unchanged; verify that stage against
+the generated PDF using current gates. If it provides no improvement, retain the
+qualified converted PDF. Passing generated-PDF-to-optimized-PDF checks cannot
+prove fidelity to `.note`. Do not put a conversion in an exact-PDF candidate
+manifest or fabricate a geometry signature for the different source format.
+
+**Exit:** one command produces a traceable diagnostic PDF/report or a clear
+failure, with collision, mutation, timeout, malformed-output and cleanup tests.
+No default change to `optimize_pdf.optimize(...)` or existing PDF CLI modes.
+
+### P18-D — Qualify against independent references, then measure benefit
+
+Ask for a small plain handwriting note, a dense multi-page notebook, and a note
+with the features actually used (pressure, highlighter, erased/moved strokes,
+templates, layers, text/images/shapes). Matching BOOX-exported vector PDFs from
+the same saved revisions are the preferred independent references; record the
+user-declared pairing plus both hashes. Device screenshots or a manual tablet
+comparison can resolve ambiguity but do not replace all-page reference coverage.
+Without matching references, parsing/conversion smoke work can proceed, while
+fidelity qualification remains open. Private samples stay ignored and out of
+forks, fixtures and packages; use generated equivalents for regression tests.
+
+1. Compare inventory/page order/boxes and independent source-object coverage.
+   Check every page in PDFium and PDF.js at matched size, then high-resolution,
+   print and detail views following `testing.md`. Check local missing/added ink,
+   displacement, thickness and topology, especially tiny signs, dots, fraction
+   bars and subscripts. Verify text, assets, navigation and layers separately.
+2. Use known-source generated cases and negative controls: missing dot/stroke,
+   dropped blank page, wrong width/transform, wrong highlight order, missing
+   template/glyph/image/layer and unknown pen. Shared-parser agreement, whole-page
+   average error or two blank renderings must not approve missing content.
+   Freeze feature-specific calibration and held-out cases before qualification.
+3. Treat unexplained differences as unresolved. Existing exact PDF thresholds
+   remain unchanged; source-format conversion needs its own documented contract
+   before product integration. Human review records residual differences without
+   turning an inferred brush model into a claim of exact rendering.
+4. After fidelity checks, compare matching device PDF, device PDF through Direct,
+   direct conversion, and conversion through Direct (if useful). Measure conversion
+   and optimization time, bytes, object/operator counts, first draw, revisit and
+   zoom separately. Reuse sequential fresh-process/native measurement protocols;
+   release renderers between passes and avoid competing heavy work. Smaller output
+   does not establish faster viewing. Record unavailable checks honestly.
+
+**Status / Exit:** Open / in progress ('sampled comparison complete; independent all-page fidelity acceptance gate remains open').
+Completed hash-bound fidelity and measurement report, explicit supported
+device/format/features and limits, and an evidence-based go/no-go. Full-notebook
+Stage 2 Direct optimizer lossless verification memory bounded with 30-page PDF.js
+appearance chunks; empirical comparison against tablet export (`ME 505.pdf`) was
+sampled across 7 representative pages without an all-page gate. Independent all-page
+fidelity qualification against tablet hardware rendering remains open.
+
+### P18-E — Conditional app integration and release
+
+The separate conversion contract is documented in [design.md](design.md#boox-note-conversion-contract-milestone-p18),
+defining input validation, strict vector pen support matrix (pens 2, 5, 15, 21, 60,
+61, 2000–2999), fail-closed rejection of active templates and charcoal raster pens,
+and two-stage integration with Direct viewing copy optimization.
+
+Review distinguishes conversion from PDF optimization and reports preflight
+unsupported features before launch. Recovery identity binds input kind, converter
+build hash, assets, and conversion contract.
+
+Implementation reach: root adapter `note_to_pdf.py` and fork Rust tests;
+`batch_workflow.py` planning, dispatch, result/recovery validation; `viewing_copy_gui.py`
+picker, dependency diagnostics, stages and review; focused adapter/batch/GUI fixtures;
+README, `docs/design.md`, `docs/testing.md`, and launchers; `tools/build_release.py`
+runtime/notices/hash inventory. End users do not require Cargo.
+
+**Exit:** explicit tested `.note` conversion with honest coverage, stable PDF
+callers, and documented conversion contract in `design.md`.
+
+### P18 completion notes — 2026-11-14
+
+- **Fork and strict vector mode (P18-A/B):** The pinned Rust fork (`boox-notes-renderer`)
+  implements `--strict` mode. All geometric decimation (Douglas-Peucker point
+  filtering and paired point dropping) is completely bypassed. Raw recorded points,
+  pressure, tilt, and timestamps are preserved 100%. Supported vector pens:
+  pens 2/2000..2999 (ballpoint/history copies), 5 (fountain), 15 (marker/highlighter),
+  21 (nBrush), 60/61 (calligraphy), plus text boxes (6/16), images (19), and
+  shape-tool geometry (40). Fail-closed rejection is enforced for charcoal raster
+  pen 22 (`Error::UnsupportedPen`), active/unbundled templates (`Error::UnsupportedFeature`),
+  hidden layers (`check_hidden_layers`), missing stroke points (`Error::MissingContent`),
+  and malformed tiles. Exclusive file creation (`xb`) with atomic rollback on failure
+  prevents file collisions and partial artifacts.
+- **Python bridge adapter (P18-C):** `note_to_pdf.py` performs in-memory preflight
+  inspection (`inspect_note`) without host extraction, verifying ZIP structure,
+  page lists, shape/layer counts, and template descriptors. Subprocess execution
+  runs inside an isolated temporary directory (`tempfile.TemporaryDirectory`)
+  guarded by `RunBudget` timeouts and disk limits. Dual-format reports
+  (`<name>.json` and `<name>.md`) and audit runs under `audit-output/` record
+  complete SHA-256 provenance for source, intermediate, and published files.
+- **Tablet reference comparison & optimizer preservation (P18-D in progress):**
+  - *Optimizer stream preservation (91 pages)*: The 91-page PDF.js / PDFium lossless
+    verification verified that the Stage 2 Direct viewing copy preserves the Rust converter's
+    vector output stream without regression (e.g. Page 1: 2.24 MB -> 588 KB / 73.7%
+    reduction; Page 58 pen 2000 copy: 5.44 MB -> 1.34 MB / 75.4% reduction, both passing
+    all 11 lossless verification stages; all 91 pages convert in 12.99s to a 340 MB vector PDF).
+    To prevent Node.js worker heap exhaustion during full-note PDF.js appearance checks,
+    verification chunking breaks documents exceeding 50 pages into sequential batches of
+    at most 30 pages. This strictly establishes that Direct optimization does not regress
+    the converter's output stream; it does NOT establish that the converter matches the
+    BOOX tablet's hardware rasterizer.
+  - *Tablet fidelity qualification status*: The visual comparison against matching BOOX
+    tablet export (`ME 505.pdf`) was an empirical sample across 7 representative pages,
+    not an exhaustive all-page acceptance gate. The tablet export contains 60,575 vector
+    stamp annotations with vector appearance streams (`/Annots` -> `/Stamp` -> `/AP` -> `/N`),
+    not raster handwriting. The 91 embedded page images occupy only ~698 KB combined and
+    serve as page background templates. The 440 MB size of the tablet export results from
+    per-stroke annotation dictionary and appearance stream bloat (60,575 objects), making
+    structural optimization of the tablet PDF (inlining/flattening annotations into page
+    contents, resource deduplication, stream cleanup) a viable and valuable optimization
+    target. Unsupported claims of 100% tablet hardware fidelity qualification are removed;
+    the independent all-page fidelity acceptance gate remains open.
+- **Conversion contract documented (P18-E):** Finalized separate conversion contract
+  in `docs/design.md`. Defined input preflight, source immutability, vector pen
+  support matrix, rejection policies, two-stage Direct optimization integration,
+  and lossless fallback guarantees. Focused tests in `tests/test_note_to_pdf.py`
+  and Rust unit/integration tests in `crates/boox-notes-renderer` pass.
+
 ## Scope and fixed boundaries
 
 Build the first version as a companion planner/runner using the maintained tools.
@@ -1202,6 +1540,15 @@ Suggested module names above do not imply implemented APIs.
   source-region coverage, export/rebuild `.tex` plus assets and PDF, and review
   mathematical content independently of compiler success. This is a separately
   selected derivative workflow; compare viewing benefit only after content checks.
+
+- [-] **P18 — BOOX `.note` to vector PDF pipeline.** Follow
+  [P18-A through P18-E](#p18-boox-note-to-vector-pdf-pipeline): pinned Rust fork
+  with strict raw-point vector preservation, implemented isolated `note_to_pdf.py`
+  adapter, verified Stage 2 Direct optimizer lossless stream preservation across all
+  91 pages of `ME 505.note` with 30-page PDF.js chunking, and documented the conversion
+  contract in `docs/design.md`. P18-A through P18-C completed; P18-D in progress
+  (sampled comparison complete across 7 representative pages; independent all-page
+  tablet fidelity acceptance gate remains open).
 
 ### P0 progress notes — 2026-10-18
 

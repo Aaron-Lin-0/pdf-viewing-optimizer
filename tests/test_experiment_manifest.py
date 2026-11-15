@@ -192,7 +192,7 @@ class ExperimentManifestTests(unittest.TestCase):
 
             manifest = build_experiment_manifest(source)
             self.assertEqual(manifest['schema'], SCHEMA)
-            self.assertEqual(len(manifest['treatment_table']), 7)
+            self.assertEqual(len(manifest['treatment_table']), 9)
             treatment_names = [t['name'] for t in manifest['treatment_table']]
             self.assertEqual(treatment_names, [
                 'Original',
@@ -202,6 +202,8 @@ class ExperimentManifestTests(unittest.TestCase):
                 'Point reduction alone',
                 'Point reduction plus qualified batching',
                 'Curve fitting',
+                'Exact-endpoint segment-chain control',
+                'Segment-chain bounded point reduction',
             ])
             self.assertEqual(manifest['comparator']['baseline_type'], 'original')
             self.assertEqual(manifest['sample_pages']['page_1'], 1)

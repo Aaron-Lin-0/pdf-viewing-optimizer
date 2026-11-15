@@ -48,6 +48,12 @@ class _ExactFloat(FloatObject):
             raise UnsupportedPDF('Non-finite PDF number.')
         return obj
 
+    def clone(self, pdf_dest, force_duplicate=False, ignore_fields=()):
+        return self._reference_clone(_ExactFloat(self.exact_decimal), pdf_dest, force_duplicate)
+
+    def myrepr(self):
+        return format(self.exact_decimal, 'f')
+
 
 class _StrictReader(PdfReader):
     def _read_pdf15_xref_stream(self,stream):
@@ -233,14 +239,14 @@ def _raw_items(value):
     return {str(k): v for k, v in value.items()}
 
 
-def verify_lossless(source, candidate, check=lambda: None):
+def verify_lossless(source, candidate, check=lambda: None, *, _source_reader=None):
     """Compare every reachable logical object, preserving reference identity.
 
     Unreachable objects must be preserved with a complete identity mapping too.
     Ambiguous mappings that cannot be verified and incremental history are declined.
     Stream decoding is bounded and restricted to the Flate transport layer.
     """
-    with strict_parsing(), strict_reader(source) as before, strict_reader(candidate) as after:
+    with strict_parsing(), (_source_reader or strict_reader)(source) as before, strict_reader(candidate) as after:
         headers=[]
         for reader in (before,after):
             match=re.fullmatch(r'%PDF-(\d)\.(\d)',reader.pdf_header)

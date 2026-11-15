@@ -317,6 +317,49 @@ class CompatibilityTests(unittest.TestCase):
             with patch('viewing_copy.PdfWriter',side_effect=tracked):build_candidate(source,out,'dedup')
             self.assertEqual(len(writers),2)
 
+    def test_direct_uses_one_writer_and_prunes_unreachable_cycles(self):
+        from pypdf.generic import TextStringObject
+        with tempfile.TemporaryDirectory() as folder:
+            source,out=Path(folder)/'source.pdf',Path(folder)/'out.pdf'
+            w=PdfWriter();w.add_blank_page(width=60,height=60)
+            retained=DictionaryObject();retained_ref=w._add_object(retained)
+            retained[NameObject('/Next')]=retained_ref
+            w._root_object[NameObject('/RetainedCycle')]=retained_ref
+            w.add_attachment('retained.bin',b'attachment stays')
+            w.add_outline_item('retained bookmark',0)
+            w.write(source)
+            def inline(writer):
+                first=DictionaryObject();second=DictionaryObject()
+                a,b=writer._add_object(first),writer._add_object(second)
+                first[NameObject('/Other')]=b;second[NameObject('/Other')]=a
+                first[NameObject('/Recovery')]=TextStringObject('obsolete '*10000)
+                return 1,1
+            original=PdfWriter
+            with patch('handwriting.inline_handwriting',side_effect=inline),\
+                 patch('viewing_copy.PdfWriter',side_effect=original) as constructors:
+                build_candidate(source,out,'direct')
+            self.assertEqual(constructors.call_count,1)
+            self.assertNotIn(b'obsolete ',out.read_bytes())
+            with PdfReader(out) as reader:
+                self.assertEqual(reader.attachments['retained.bin'],[b'attachment stays'])
+                self.assertEqual(reader.outline[0].title,'retained bookmark')
+                retained=reader.trailer['/Root']['/RetainedCycle']
+                self.assertEqual(retained.raw_get('/Next').idnum,retained.indirect_reference.idnum)
+
+    def test_direct_keeps_unmerged_fallback_when_distinct_identities_would_merge(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source,out=Path(folder)/'source.pdf',Path(folder)/'out.pdf'
+            writer=PdfWriter();page=writer.add_blank_page(width=60,height=60)
+            refs=[writer._add_object(DictionaryObject({NameObject('/Subtype'):NameObject('/Text'),
+                NameObject('/Rect'):ArrayObject([NumberObject(n) for n in (1,1,10,10)])})) for _ in range(2)]
+            page[NameObject('/Annots')]=ArrayObject(refs)
+            writer.write(source)
+            manifest=build_candidate(source,out,'direct')
+            self.assertIn('deduplication_skipped',manifest)
+            with PdfReader(out) as reader:
+                refs=reader.pages[0]['/Annots']
+                self.assertNotEqual(refs[0].idnum,refs[1].idnum)
+
     def test_source_change_during_preflight_is_detected(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
             source,out=Path(folder)/'a.pdf',Path(folder)/'b.pdf'

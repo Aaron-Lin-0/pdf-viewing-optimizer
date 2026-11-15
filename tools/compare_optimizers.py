@@ -189,7 +189,10 @@ def run_process(command, directory, name, timeout=1800):
     except Exception as exc:
         record.update(status='failed', error=f'{type(exc).__name__}: {exc}')
     finally:
-        firefox_measure.kill_owned(list(processes.values()))
+        unresolved = firefox_measure.kill_owned(list(processes.values()))
+        if unresolved:
+            record.update(status='failed', cleanup_unresolved_pids=unresolved,
+                          error='Owned process cleanup could not be confirmed.')
         if process:
             with contextlib.suppress(subprocess.TimeoutExpired):
                 process.wait(timeout=5)

@@ -10,7 +10,7 @@ sys.path[:0] = [str(ROOT), str(ROOT / 'tools')]
 from pdf_characterize import characterize
 
 
-SCHEMA = 'p16-b-v1'
+SCHEMA = 'p16-b-v2'
 
 FROZEN_TREATMENTS = [
     {
@@ -68,6 +68,22 @@ FROZEN_TREATMENTS = [
         'purpose': 'Determine whether fewer curve commands actually beat line reduction',
         'packing_settings': 'standard_qpdf_object_streams',
         'status': 'deferred_until_p16_f_opens',
+    },
+    {
+        'id': 'treatment-7-joined-control',
+        'name': 'Exact-endpoint segment-chain control',
+        'recipe': 'joined-rdp-0',
+        'purpose': 'Isolate fewer paint calls and round-join edge shading without path deviation',
+        'packing_settings': 'standard_qpdf_object_streams',
+        'status': 'research_unreviewed',
+    },
+    {
+        'id': 'treatment-8-joined-reduction',
+        'name': 'Segment-chain bounded point reduction',
+        'recipe': 'joined-rdp',
+        'purpose': 'Reduce vertices inside supported literal-endpoint, identical-width chains',
+        'packing_settings': 'standard_qpdf_object_streams',
+        'status': 'research_unreviewed',
     },
 ]
 
@@ -289,6 +305,11 @@ def analyze_drawing_opportunity(source_or_characterization):
             'eligible_points_count': supported_points_total,
             'eligible_paint_calls': supported_paint_total,
             'skip_reasons': skip_reasons,
+        },
+        'segment_chain_research': {
+            'two_point_segments': total_two_point,
+            'status': 'Separate treatment; source counters do not establish eligible chains',
+            'eligibility': 'Candidate generation proves all invocation contexts, widths and literal shared endpoints',
         },
         'pages': page_reports,
         'denominator_tracking': {

@@ -540,5 +540,45 @@ class InkCalibrationTests(unittest.TestCase):
             self.assertEqual(doc['outputs'][1]['tradeoffs']['first_visit/p1/None']['quality_axes'][:2], [1, None])
 
 
+@unittest.skipUnless(HAS_METRICS,'Install requirements-comparison.txt')
+class BoundedMetricTests(unittest.TestCase):
+    def test_striped_ssim_keeps_all_valid_windows(self):
+        import numpy as np
+        from comparison_metrics import structural_score
+        from skimage.metrics import structural_similarity
+        rng=np.random.default_rng(123)
+        for shape in ((7,7),(8,20),(137,21),(301,37)):
+            a=rng.integers(0,256,shape).astype(float);b=a.copy()
+            b[::9,::3]=0
+            self.assertAlmostEqual(structural_score(a,b),float(structural_similarity(a,b,data_range=255)),places=12)
+        self.assertIsNone(structural_score(np.zeros((6,8)),np.zeros((6,8))))
+
+    def test_rgb_difference_keeps_full_255_range_and_float_reference(self):
+        import numpy as np
+        from PIL import Image
+        from comparison_metrics import image_metrics,distribution
+        a=np.full((24,24,3),255,dtype='uint8');b=a.copy()
+        a[8:16,8:16]=[255,0,0];b[8:16,8:16]=[0,0,255]
+        result=image_metrics(Image.fromarray(a),Image.fromarray(b),(24,24))
+        delta=np.abs(a.astype(float)-b)
+        union=(np.dot(a,[.299,.587,.114])<250)|(np.dot(b,[.299,.587,.114])<250)
+        self.assertEqual(result['rgb_foreground_absolute_difference'],distribution(delta[union].ravel()))
+        self.assertEqual(result['whole_page_mean_rgb_difference'],float(delta.mean()))
+
+
+class CleanupPermissionTests(unittest.TestCase):
+    def test_denied_process_does_not_abort_other_cleanup(self):
+        import psutil
+        denied, finished = MagicMock(), MagicMock()
+        denied.pid = 123
+        denied.terminate.side_effect = psutil.AccessDenied(123)
+        denied.kill.side_effect = psutil.AccessDenied(123)
+        denied.wait.side_effect = psutil.AccessDenied(123)
+        with patch('psutil.wait_procs', side_effect=psutil.AccessDenied(123)):
+            self.assertEqual(firefox_measure.kill_owned([denied, finished]), [123])
+        finished.terminate.assert_called_once()
+        finished.wait.assert_called()
+
+
 if __name__ == '__main__':
     unittest.main()

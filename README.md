@@ -53,6 +53,15 @@ $env:PDF_BROWSER = 'C:\Program Files\Mozilla Firefox\firefox.exe'
 
 Keep the complete `pdfjs-dist` package, including its font, CMap, ICC and WASM resources. The renderer needs these to decode some PDFs correctly. `PDF_NODE`, `PDF_NODE_MODULES` and `PDF_BROWSER` can select alternate installed runtimes. Without local Node dependencies, the scripts can reuse Codex's bundled runtime. The Windows release uses its bundled qpdf 12.4.2 for a lossless Flate/object-stream candidate; set `PDF_QPDF` to select another executable.
 
+## Experimental BOOX notebook conversion
+
+The optional CLI converts supported modern `.note` archives to static vector PDFs
+with configurable stroke widths and hierarchical bookmarks. It is separate from
+the ordinary PDF picker. Follow [BOOX setup and limits](docs/boox-note-handoff.md)
+and [build the pinned renderer](vendor/boox-renderer/README.md). The executable is
+not included in Git or the optimizer package; ordinary PDF users do not need it.
+Independent all-page fidelity to BOOX tablet exports remains open.
+
 ## Create a viewing copy
 
 On Windows, open **Create Viewing Copies.cmd** and select one or more PDFs. After each
@@ -206,6 +215,13 @@ See [design and acceptance rules](docs/design.md), [test instructions](docs/test
 ## Develop and package
 
 For local comparisons with other optimizers, see [comparison setup and limitations](docs/comparison.md).
+For an unattended local experiment comparing optimizer runtime, PDF drawing cost
+and bounded point-reduction candidates, see [the overnight benchmark](docs/overnight-benchmark.md).
+It records a hypothesis for each treatment and keeps altered handwriting pending
+review; it does not change ordinary viewing-copy acceptance.
+The research runner also offers explicit `joined-rdp` recipes for supported
+BOOX segment chains; use `--recipes` for a focused experiment. These are separate
+from the exact Direct/Thorough modes.
 The separate comparison CLI records preservation, foreground changes and native
 Firefox timings (or explicit instrumentation failure), without changing production
 acceptance rules. Start with `comparison-tools.example.json` and a fresh ignored output folder.

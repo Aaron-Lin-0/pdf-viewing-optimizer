@@ -18,6 +18,17 @@ def distribution(values):
     return dict(zip(('p05', 'median', 'p95', 'max'), map(float, np.percentile(values, [5, 50, 95, 100]))))
 
 
+def structural_score(before,after):
+    if min(before.shape)<7:return None
+    total=0.;rows=0
+    # Each valid pixel keeps its full 7x7 window; only the reduction order changes.
+    for start in range(3,before.shape[0]-3,128):
+        end=min(start+128,before.shape[0]-3)
+        value=structural_similarity(before[start-3:end+3],after[start-3:end+3],data_range=255)
+        total+=value*(end-start);rows+=end-start
+    return float(total/rows)
+
+
 def topology(mask):
     skeleton = skeletonize(mask)
     neighbors = ndi.convolve(skeleton.astype('uint8'), np.ones((3, 3), dtype='uint8')) - skeleton
@@ -99,6 +110,7 @@ def mask_metrics(before, after, mm_per_pixel):
         missing_added[str(tolerance)] = {'missing_pixels': missing, 'added_pixels': added,
             'missing_fraction': missing / area if area else None,
             'added_fraction': added / area if area else None}
+    del to_after,to_before
     old_topology, old_skeleton, old_labels = topology(before)
     new_topology, new_skeleton, new_labels = topology(after)
     old_width = 2 * ndi.distance_transform_edt(before, sampling=sampling)
@@ -107,12 +119,14 @@ def mask_metrics(before, after, mm_per_pixel):
         distances, nearest = ndi.distance_transform_edt(~new_skeleton, sampling=sampling, return_indices=True)
         matched = old_skeleton & (distances <= .1)
         source_thickness = new_width[tuple(nearest[:, matched])] - old_width[matched]
+        forward = distances[old_skeleton]
+        del distances,nearest
         reverse_distances, reverse_nearest = ndi.distance_transform_edt(~old_skeleton, sampling=sampling, return_indices=True)
         reverse_matched = new_skeleton & (reverse_distances <= .1)
         output_thickness = new_width[reverse_matched] - old_width[tuple(reverse_nearest[:, reverse_matched])]
         thickness = np.concatenate([source_thickness, output_thickness])
         reverse = reverse_distances[new_skeleton]
-        forward = distances[old_skeleton]
+        del reverse_distances,reverse_nearest
         displacement = distribution(np.concatenate([forward, reverse]))
     else:
         matched = np.zeros_like(old_skeleton)
@@ -171,12 +185,12 @@ def image_metrics(before, after, page_mm):
     mm_per_pixel = (page_mm[0] / a.shape[1], page_mm[1] / a.shape[0])
     gray_a = np.dot(a, [.299, .587, .114])
     gray_b = np.dot(b, [.299, .587, .114])
-    delta = np.abs(a.astype(float) - b)
+    delta = np.abs(a.astype('int16') - b)
     union = (gray_a < 250) | (gray_b < 250)
     per_threshold = {str(t): mask_metrics(gray_a < t, gray_b < t, mm_per_pixel) for t in THRESHOLDS}
     signatures = [(x['potential_topology_change'], bool(x['potential_missing_components']),
                    x['tolerances_mm']['0.05']['missing_fraction']) for x in per_threshold.values()]
-    similarity = float(structural_similarity(gray_a, gray_b, data_range=255)) if min(gray_a.shape) >= 7 else None
+    similarity = structural_score(gray_a,gray_b)
     foreground_delta = delta[union]
     return {'status': 'pass', 'analysis': 'foreground analysis; handwriting isolation uncertain',
             'exact': bool(np.array_equal(a, b)), 'mm_per_pixel': mm_per_pixel,

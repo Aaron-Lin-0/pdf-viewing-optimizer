@@ -18,14 +18,28 @@ def discover(override=None):
 
 def kill_owned(processes):
     import psutil
+    def wait(items):
+        try:
+            return psutil.wait_procs(items, timeout=3)[1]
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            deadline = time.monotonic() + 3
+            unresolved = []
+            for process in items:
+                try:
+                    process.wait(timeout=max(0, deadline-time.monotonic()))
+                except psutil.NoSuchProcess:
+                    pass
+                except (psutil.AccessDenied, psutil.TimeoutExpired):
+                    unresolved.append(process)
+            return unresolved
     for process in reversed(processes):
         with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
             process.terminate()
-    _, alive = psutil.wait_procs(processes, timeout=3)
+    alive = wait(processes)
     for process in alive:
         with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
             process.kill()
-    psutil.wait_procs(alive, timeout=3)
+    return [process.pid for process in wait(alive)]
 
 
 @contextlib.contextmanager
@@ -89,8 +103,10 @@ def session(binary, directory):
             stop.set()
             if thread:
                 thread.join(3)
-            kill_owned(list(owned.values()))
+            unresolved = kill_owned(list(owned.values()))
             service.stop()
+            if unresolved:
+                raise RuntimeError('Browser process cleanup could not be confirmed: ' + str(unresolved))
 
 
 # Viewer initialization is discovered at document creation. A late hook is rejected

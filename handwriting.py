@@ -3,13 +3,14 @@ import re
 
 from PIL import ImageChops, ImageStat
 import pypdfium2 as pdfium
-from pypdf.generic import ContentStream, DecodedStreamObject, DictionaryObject, EncodedStreamObject, NameObject, StreamObject
+from pypdf.generic import ContentStream, DecodedStreamObject, DictionaryObject, EncodedStreamObject, NameObject, StreamObject, IndirectObject
 
 NUMBER = rb"[-+]?(?:\d+(?:\.\d*)?|\.\d+)"
 POINT = NUMBER + rb" " + NUMBER
 SEGMENT = re.compile(rb"(" + NUMBER + rb") w (" + POINT + rb") m (" + POINT + rb") l S\n")
 PATH = re.compile(rb"(" + POINT + rb") m (" + POINT + rb") l\n")
 GROUP = re.compile(rb"(" + NUMBER + rb") w\n((?:" + POINT + rb" m " + POINT + rb" l\n)+)S\n")
+RUN_START = re.compile(NUMBER + rb" w(\n| )")
 HEADER = b"/GS gs\n0 0 0 RG\n1 j 1 J\n"
 DUPLICATE = re.compile(
     rb"q 1 0 0 1 0 0 cm /FFT0 Do Q\n"
@@ -18,6 +19,8 @@ DUPLICATE = re.compile(
 FORM_CALL = re.compile(rb'q ((?:' + NUMBER + rb' ){5}' + NUMBER + rb') cm /([A-Za-z0-9]+) Do Q\n')
 PEN_STATE = {'/AIS': False, '/BM': '/Normal', '/CA': 1, '/LC': 2,
              '/Type': '/ExtGState', '/ca': 1}
+MAX_PROTECTED_RESOURCE_NODES = 100000
+MAX_PROTECTION_VISITS = 2000000
 
 
 class NoSupportedHandwriting(ValueError):
@@ -41,11 +44,13 @@ def _inline_leaf(form):
     if not data.startswith(HEADER):
         return None
     body = data[len(HEADER):]
-    groups = list(GROUP.finditer(body))
-    if not groups or b''.join(g[0] for g in groups) != body:
-        segments = list(SEGMENT.finditer(body))
-        if not segments or b''.join(s[0] for s in segments) != body:
-            return None
+    start = RUN_START.match(body)
+    if start is None:
+        return None
+    pattern = GROUP if start[1] == b'\n' else SEGMENT
+    runs = list(pattern.finditer(body))
+    if not runs or b''.join(run[0] for run in runs) != body:
+        return None
     bbox = form['/BBox'] if '/BBox' in form else None
     if bbox is None or len(bbox) != 4 or bbox[0] > bbox[2] or bbox[1] > bbox[3]:
         return None
@@ -64,13 +69,15 @@ def inline_handwriting(writer):
         # pypdf can rewrite encoded streams in place only with a single Flate filter.
         if isinstance(parent, EncodedStreamObject) and parent.get('/Filter') not in ('/FlateDecode', ['/FlateDecode']):
             continue
+        resources = parent.get('/Resources', DictionaryObject()).get_object()
+        xobjects = resources.get('/XObject', DictionaryObject()).get_object()
+        if not xobjects:
+            continue
         data = parent.get_data()
         calls = list(FORM_CALL.finditer(data))
         # shortcut: only BOOX containers consisting entirely of isolated Form calls are supported.
         if not calls or b''.join(c[0] for c in calls) != data:
             continue
-        resources = parent.get('/Resources', DictionaryObject()).get_object()
-        xobjects = resources.get('/XObject', DictionaryObject()).get_object()
         leaves = []
         for call in calls:
             form = xobjects.get('/' + call[2].decode())
@@ -253,13 +260,22 @@ def opaque_drawing(form, writer, active=None):
 
 def batching_contexts(writer):
     """Intersect opacity proofs over every reachable page/Form invocation."""
-    reasons={};visits=0;protected=set()
+    reasons={};visits=0;protected=set();protection_visits=0
     def protect(value,reason):
-        value=value.get_object() if hasattr(value,'get_object') else value
+        nonlocal protection_visits
+        protection_visits+=1
+        if protection_visits>MAX_PROTECTION_VISITS:
+            raise ValueError('Batching resource inventory exceeded its reference/value visit bound.')
+        if isinstance(value,IndirectObject):value=value.get_object()
+        if isinstance(value,IndirectObject):
+            raise ValueError('Batching resource inventory cannot resolve an indirect paint reference.')
+        # Terminal numbers, names and strings cannot reference a Form.
+        if not isinstance(value,(dict,list)):return
         key=(id(value),reason)
         if key in protected:return
         protected.add(key)
-        if len(protected)>100000:raise ValueError('Batching resource inventory exceeded its work bound.')
+        if len(protected)>MAX_PROTECTED_RESOURCE_NODES:
+            raise ValueError('Batching resource inventory exceeded its structural-node bound.')
         if isinstance(value,StreamObject) and value.get('/Subtype')=='/Form':
             reasons.setdefault(id(value),set()).add(reason)
         if isinstance(value,dict):

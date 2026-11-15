@@ -10,20 +10,19 @@ from pathlib import Path
 import shutil
 import statistics
 import subprocess
-import tempfile
 import time
 import sys
 import multiprocessing
 from PIL import ImageChops, ImageFilter, ImageStat
 from pypdf import PdfWriter
-from pypdf.generic import NameObject
+from pypdf.generic import NameObject, IndirectObject
 import pypdfium2 as pdfium
 from navigation import navigation_fingerprint, reader_for, validate_input
 from annotation_ink import flatten_ink, consolidate_ink, verify_flattened, verify_consolidated
 from geometry import page_signature
 from tools.evidence_cache import EvidenceCache
 import verification_worker
-from pdf_runtime import (RunBudget, TimeBudgetExceeded, DiskBudgetExceeded, _run,
+from pdf_runtime import (filesystem_path, temporary_directory, RunBudget, TimeBudgetExceeded, DiskBudgetExceeded, _run,
                          filehash, qpdf_identity as _qpdf_identity, build_qpdf_candidate)
 from verification_worker import DeltaAccumulator, bitmap_size, halo, page_delta, render_rows
 
@@ -98,7 +97,7 @@ def verification_resources(requested=None):
 class VerificationSession:
     def __init__(self, source, directory, workers, budget=None, revision_evidence=None):
         from verification_worker import compare_page, render_source
-        self.source = Path(source).absolute();self.directory = Path(directory)
+        self.source = Path(source).absolute();self.directory = filesystem_path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
         self.reader = reader_for(self.source);self.budget = budget
         self._render_source = render_source;self._compare_page = compare_page
@@ -362,11 +361,19 @@ def verify_pdfjs_page(source,candidate,page,allow_edges=False,budget=None,node=N
     return json.loads(child.stdout.strip().splitlines()[-1])
 
 
-def verify_pdfjs(source,candidate,count,allow_edges=False,budget=None,node=None,workers=None):
-    workers=min(count,verification_resources(workers)['effective_workers'])
+def verify_pdfjs(source,candidate,count,allow_edges=False,budget=None,node=None,workers=None,total_pages=None):
+    if isinstance(count, int):
+        page_numbers = list(range(1, count + 1))
+        display_total = total_pages or count
+    else:
+        page_numbers = list(count)
+        display_total = total_pages or len(page_numbers)
+    if not page_numbers:
+        return []
+    workers=min(len(page_numbers),verification_resources(workers)['effective_workers'])
     heap_args=pdfjs_heap_args(workers)
     if heap_args:print(f'PDF.js verification: {workers} workers, {heap_args[0]} MiB per worker.',flush=True)
-    groups=[list(range(start,count+1,workers)) for start in range(1,workers+1)]
+    groups=[page_numbers[start::workers] for start in range(workers)]
     processes=[]
     def run_group(child,pages):
         if budget:budget.check('final PDF.js acceptance',(source,candidate))
@@ -413,18 +420,18 @@ def verify_pdfjs(source,candidate,count,allow_edges=False,budget=None,node=None,
                              ('heap limit','out of memory','allocation failed')):
             print('PDF.js worker exhausted memory; retrying all pages in fresh sequential processes.',flush=True)
             records=[]
-            for page in range(1,count+1):
+            for page in page_numbers:
                 row=verify_pdfjs_page(source,candidate,page,allow_edges,budget,node)
                 if row.get('page')!=page or row.get('error') or not row.get('ok'):
                     raise ValueError(f'PDF.js page {page} failed isolated acceptance.') from exc
                 records.append(row)
-                print(f'PDF.js appearance verified: {page}/{count}',flush=True)
+                print(f'PDF.js appearance verified: {page}/{display_total}',flush=True)
             return records
         raise
     records.sort(key=lambda row:row['page'])
-    if [row['page'] for row in records]!=list(range(1,count+1)):
+    if [row['page'] for row in records]!=sorted(page_numbers):
         raise ValueError('PDF.js verification results were missing or duplicated.')
-    for page in range(1,count+1):print(f'PDF.js appearance verified: {page}/{count}',flush=True)
+    for page in page_numbers:print(f'PDF.js appearance verified: {page}/{display_total}',flush=True)
     return records
 
 
@@ -455,6 +462,26 @@ def choose_candidate(source,candidates,results):
     best=min(sum(v['cpu'] for v in c['median'].values()) for c in eligible)
     close=[c for c in eligible if sum(v['cpu'] for v in c['median'].values())<=best*1.05]
     return min(close,key=lambda c:(not c['exact'],Path(c['path']).stat().st_size))
+
+
+def _prune_unreachable(writer):
+    """Discard unreachable graphs without serializing and parsing another root clone."""
+    pending=[writer._root_object.indirect_reference,writer._info_obj,getattr(writer,'_ID',None)]
+    keep=set();seen=set()
+    while pending:
+        value=pending.pop()
+        if isinstance(value,IndirectObject):
+            if value.pdf is not writer or not 1<=value.idnum<=len(writer._objects):
+                raise ValueError('Cleanup found a foreign or unresolved reference.')
+            if value.idnum in keep:continue
+            keep.add(value.idnum)
+            value=writer._objects[value.idnum-1]
+        if isinstance(value,(dict,list)):
+            if id(value) in seen:continue
+            seen.add(id(value))
+            pending.extend(value.values() if isinstance(value,dict) else value)
+    for index in range(len(writer._objects)):
+        if index+1 not in keep:writer._objects[index]=None
 
 
 def build_candidate(source,destination,kind):
@@ -492,6 +519,7 @@ def build_candidate(source,destination,kind):
                                 inlining_skipped='No supported inlining containers; retain prior transformations, deduplication and cleanup.')
         else:inline_handwriting(writer)
     baseline_navigation=navigation_fingerprint(reader,{int(k):v for k,v in manifest.get('converted',{}).items()})
+    if kind=='direct':_prune_unreachable(writer)
     unmerged=Path(destination).with_suffix('.unmerged.pdf')
     writer.write(unmerged)
     if manifest.get('converted'):
@@ -515,6 +543,7 @@ def build_candidate(source,destination,kind):
     # Page snapshots retain their writer (and its source reader) through indirect references.
     original_pages.clear()
     writer.compress_identical_objects(remove_duplicates=True,remove_unreferenced=True)
+    if kind=='direct':_prune_unreachable(writer)
     # Navigation verification rejects merges of independently interactive identities.
     first=Path(destination).with_suffix('.first.pdf')
     writer.write(first);writer.close();del writer,reader;gc.collect()
@@ -534,9 +563,13 @@ def build_candidate(source,destination,kind):
     finally:
         merged_reader=unmerged_reader=None
         gc.collect()
-    with selected.open('rb') as stream:
-        rebuilt=PdfWriter(clone_from=reader_for(stream));rebuilt.write(destination);rebuilt.close()
-    del rebuilt;gc.collect()
+    if kind=='direct':
+        with selected.open('rb') as stream,Path(destination).open('xb') as output:
+            shutil.copyfileobj(stream,output)
+    else:
+        with selected.open('rb') as stream:
+            rebuilt=PdfWriter(clone_from=reader_for(stream));rebuilt.write(destination);rebuilt.close()
+        del rebuilt;gc.collect()
     if navigation_fingerprint(reader_for(destination))!=baseline_navigation:
         raise ValueError('Deduplication changed protected navigation/identities; candidate rejected.')
     first.unlink()
@@ -671,7 +704,7 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
             'stage_wall_seconds':{},
             'source_evidence_reuse':{'source_renders_created':0,'source_renders_reused':0,
                                      'source_signatures_created':0,'source_signatures_reused':0}}
-    with tempfile.TemporaryDirectory(prefix='pdf-viewing-',dir=destination.parent) as temporary:
+    with temporary_directory(prefix='pdf-viewing-',dir=destination.parent) as temporary:
         valid=[];verification_session=None
         evidence_stats={key:0 for key in report['source_evidence_reuse']}
         def session():

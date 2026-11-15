@@ -11,6 +11,34 @@ The comparison tools are separate from production optimization and its acceptanc
 rules. They collect differences rather than relaxing those rules. Reports describe
 tested evidence, not semantic approval of altered handwriting.
 
+## Repeated Direct pass benchmark
+
+For a separate unattended processing/viewing experiment with packing variants,
+experimental point reduction, registered hypotheses and hash-checked restart,
+see [the overnight benchmark](overnight-benchmark.md). It has its own exploratory
+quality contract; the fixed-profile comparison runner below is unchanged.
+
+```powershell
+.\.venv\Scripts\python.exe tools/benchmark_repeated_passes.py --fixtures --output audit-output/NEW_RUN
+```
+
+Supply authorized PDF paths as positional arguments to add real documents, or
+omit `--fixtures` to test only those paths. Run on an otherwise idle machine.
+The harness runs the production Direct CLI sequentially, feeding each verified
+publication into the next pass, up to three attempts. A reports-only result
+ends the chain. Candidate sizes recorded by Direct can help explain the stop.
+
+Each document's `result.json` records completed passes, hashes, elapsed
+optimization time, integrity results and relative changes. The production
+reports and original-relative checks provide preservation evidence. Raw PDF.js
+timings are in `timings.jsonl`, with three fresh-process repetitions in
+alternating version order and a cached redraw in each process. Short documents
+time all pages. Longer documents sample first, middle, last and dense pages.
+Load is the document-promise wait and ready time runs from file read through
+the first draw. The OS cache is uncontrolled. The pooled nearest-rank P95 is
+descriptive, especially with few pages. Rendering results apply to this PDF.js
+configuration and sample.
+
 ## Progress and monitoring
 
 The terminal prints the current document, optimizer/profile, browser operation,
