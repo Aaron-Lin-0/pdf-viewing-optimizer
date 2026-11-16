@@ -56,8 +56,7 @@ Keep the complete `pdfjs-dist` package, including its font, CMap, ICC and WASM r
 ## Experimental BOOX notebook conversion
 
 The optional CLI converts supported modern `.note` archives to static vector PDFs
-with configurable stroke widths and hierarchical bookmarks. It is separate from
-the ordinary PDF picker. Follow [BOOX setup and limits](docs/boox-note-handoff.md)
+with configurable stroke widths and hierarchical bookmarks. The GUI accepts mixed PDF and BOOX note batches; BOOX settings apply only to notes. Follow [BOOX setup and limits](docs/boox-note-handoff.md)
 and [build the pinned renderer](vendor/boox-renderer/README.md). The executable is
 not included in Git or the optimizer package; ordinary PDF users do not need it.
 Independent all-page fidelity to BOOX tablet exports remains open.

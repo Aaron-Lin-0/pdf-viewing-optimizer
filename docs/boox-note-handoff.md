@@ -1,8 +1,8 @@
 # BOOX note conversion
 
-The experimental command-line adapter converts supported modern `geo_layout`
+The experimental GUI and command-line adapter convert supported modern `geo_layout`
 `.note` archives to static vector PDFs, then optionally applies Direct optimization.
-It is separate from the PDF picker and does not change existing PDF modes.
+The GUI accepts mixed PDF and BOOX note batches without changing existing PDF modes.
 
 ## Setup and use
 
@@ -54,3 +54,23 @@ Tests use generated fixtures. `PDF_NOTE_TEST_INPUT` explicitly opts into private
 preflight/TOC checks; it is skipped when unset and fails for an invalid path.
 Keep private PDFs, reports and local handoffs under ignored `audit-output/`.
 See [design](design.md), [testing](testing.md) and the ordered [roadmap](roadmap.md).
+
+
+## Windows GUI
+
+Choose PDFs or BOOX notes together, adjust settings and review the batch. Notes
+show an experimental BOOX section with a converter Browse control, pen mode,
+fixed width in mm/pt or scale, Keep bookmarks and Convert and Direct optimize.
+Default pen widths retain the upstream model. Unchecking optimization produces
+a converted-only PDF. PDF mode/engine settings apply only to PDF inputs.
+
+Supply an existing patched executable; the GUI does not build or download it.
+Availability and required flags are checked during background planning. Missing
+converters reject note jobs while eligible PDFs remain runnable. Settings and
+source/converter hashes are fixed at review and checked again by the child.
+
+Notes use adjacent `.converted-YYYY-MM-DD` folders and publish PDF/JSON/Markdown
+sets exclusively. Note checkpoints use schema 3 and do not reuse prior conversion
+results or intermediate verification. Stop waits for the current file. Conversion
+results distinguish optimized, converted-only and retained-conversion fallback.
+The conversion report contract is `boox-gui-1`; timeout/disk exit codes are 2/3.

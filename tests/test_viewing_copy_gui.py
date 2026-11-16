@@ -124,7 +124,7 @@ class ViewingCopyGuiTests(unittest.TestCase):
         with patch.object(tk.Tk,'mainloop',smoke),\
              patch('viewing_copy_gui.dependency_diagnostics',return_value=()) as setup:
             main()
-        self.assertEqual([call.args[0] for call in setup.call_args_list],['quick','thorough','quick'])
+        self.assertEqual([call.args[0] for call in setup.call_args_list],['quick','quick','quick'])
 
     def test_settings_remain_editable_after_selection_and_back_from_review(self):
         import tkinter as tk
@@ -147,8 +147,8 @@ class ViewingCopyGuiTests(unittest.TestCase):
                     self.assertTrue(predicate())
                 widgets=list(descendants(root))
                 buttons={str(child['text']).rstrip('…'):child for child in widgets if isinstance(child,ttk.Button)}
-                choose, review_button, setup_button = (buttons[label] for label in ('Choose PDFs','Review batch','Check setup'))
-                profile,optimizer=[child for child in widgets if isinstance(child,ttk.Combobox)]
+                choose, review_button, setup_button = (buttons[label] for label in ('Choose files','Review batch','Check setup'))
+                profile,optimizer=[child for child in widgets if isinstance(child,ttk.Combobox) and (PROFILE_LABELS['quick'] in child['values'] or OPTIMIZER_LABELS['adaptive'] in child['values'])]
                 worker=next(child for child in widgets if isinstance(child,ttk.Spinbox))
                 parallel=next(child for child in widgets if isinstance(child,ttk.Checkbutton))
                 try:
@@ -467,8 +467,8 @@ class ViewingCopyGuiTests(unittest.TestCase):
             buttons={str(child['text']).rstrip('…'):child for child in widgets if isinstance(child,ttk.Button)}
             progress=next(child for child in widgets if isinstance(child,ttk.Progressbar))
             try:
-                wait_for(lambda:buttons['Choose PDFs'].instate(['!disabled']))
-                buttons['Choose PDFs'].invoke()
+                wait_for(lambda:buttons['Choose files'].instate(['!disabled']))
+                buttons['Choose files'].invoke()
                 buttons['Review batch'].invoke()
                 wait_for(lambda:0<progress['value']<1)
                 self.assertEqual(progress['maximum'],2)

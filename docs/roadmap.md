@@ -1206,6 +1206,15 @@ appearance chunks; empirical comparison against tablet export (`ME 505.pdf`) was
 sampled across 7 representative pages without an all-page gate. Independent all-page
 fidelity qualification against tablet hardware rendering remains open.
 
+### P18 mixed GUI integration - 2026-11-15
+
+The GUI accepts mixed PDF/note batches with an existing converter selected via
+Browse. Note options, source/renderer hashes and the conversion contract are
+reviewed and validated independently of PDF jobs. Notes use strict conversion,
+optional Direct optimization, distinct converted results and schema-3 restart
+records without cross-run conversion reuse. Binary distribution and P18-D
+independent tablet fidelity qualification remain open.
+
 ### P18-E — Conditional app integration and release
 
 The separate conversion contract is documented in [design.md](design.md#boox-note-conversion-contract-milestone-p18),

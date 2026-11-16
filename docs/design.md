@@ -102,8 +102,8 @@ publishes. The thorough policy below remains unchanged.
 `optimize_pdf.py` keeps the legacy CLI and Python API. `viewing_copy.py` builds candidates, checks preservation, measures rendering cost and publishes only a qualifying result. `annotation_ink.py` handles eligible BOOX appearances; `handwriting.py` handles supported drawing containers and batching. `geometry.py` and `navigation.py` compare saved structures independently of rendering.
 
 The Windows batch GUI is a thin adapter over the headless controller in
-`batch_workflow.py` and a separate `optimize_pdf.py --viewing-copy` process for
-each selected file. Planning collapses duplicate selections, rejects unsafe inputs,
+`batch_workflow.py` and one subprocess per file: `optimize_pdf.py --viewing-copy`
+for PDFs or `note_to_pdf.py` for BOOX notes. Planning collapses duplicate selections, rejects unsafe inputs,
 snapshots the source SHA256 and reserves an unused adjacent
 `NAME.optimized-YYYY-MM-DD[-N]` run folder before displaying every source-to-output
 mapping for confirmation. When Windows path limits require it, planning uses a
@@ -168,8 +168,9 @@ publication; reducing concurrency alone does not resolve retained page caches.
 The GUI displays stage age and reports time and disk budget exhaustion as distinct
 terminal states.
 
-Before selection, the GUI checks the pinned Python packages, Node/PDF.js/canvas and
-configured Zen/Firefox executable and bundled qpdf runtime once. Blocking
+Before selection, the GUI checks the pinned Python packages, Node/PDF.js/canvas
+and bundled qpdf runtime. Thorough PDF browser requirements and optional BOOX
+converter capabilities are checked during review without blocking other input kinds. Blocking
 diagnostics include a local corrective action and never bypass acceptance. Diagnostics
 and PDF planning run on background workers while all pickers, review dialogs and
 widget updates remain on the Tk thread. Settings are snapshotted before planning;
@@ -449,3 +450,14 @@ hierarchy, destinations and page count are checked before accepting conversion.
 Custom widths recalculate single-canvas bounds with a shared conservative pen
 envelope and the existing 24-point margin. Per-page dimensions and upstream bounds
 retain their existing behavior. Density scaling remains experimental; P18-D remains open.
+
+
+### Mixed GUI batches
+
+The Tk GUI dispatches PDFs through the existing optimizer and notes through the
+strict conversion adapter. Frozen note options and reviewed source/renderer hashes
+bind each launch and its `boox-gui-1` report. Note jobs use separate schema-3
+checkpoints, restart conversion after interruption and never reuse intermediate
+conversion evidence. Note result validation checks source, renderer, settings,
+output identity and completed Direct proof for any optimization claim. Converter
+availability is a per-note planning check; it cannot block eligible PDFs.

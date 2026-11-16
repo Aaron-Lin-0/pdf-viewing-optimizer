@@ -1,6 +1,6 @@
 """Plan and run verified viewing-copy jobs sequentially."""
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, replace, asdict
 from datetime import date
 import ctypes
 import hashlib
@@ -24,6 +24,7 @@ OPTIMIZER_LABELS = {
     'qpdf': 'qpdf — lossless compression only',
     'pymupdf': 'PyMuPDF — structural packing only',
 }
+NOTE_WIDTH_LABELS={'upstream':'Default pen widths','fixed':'Fixed width','scale':'Scale','density-scaled':'Experimental density scaling'}
 PROFILE_LABELS = {'quick':'Direct optimization (no benchmarks)', 'thorough':'Thorough optimization'}
 RECOVERABLE_STATUSES = {'ready','running','timeout','budget exhausted'}
 
@@ -166,17 +167,17 @@ def _paths_fit(output, profile):
     return all(len(str(path).encode('utf-16-le')) // 2 <= 259 for path in paths)
 
 
-def adjacent_output(source, reserved=(), profile='thorough'):
+def adjacent_output(source, reserved=(), profile='thorough', label='optimized'):
     source = Path(source).absolute()
     number = 1
     compact = False
     while True:
         suffix = f"-{number}" if number > 1 else ""
         if compact:
-            output = source.with_name(f"{_compact_stem(source)}.optimized{suffix}.pdf")
+            output = source.with_name(f"{_compact_stem(source)}.{label}{suffix}.pdf")
         else:
-            folder = source.with_name(source.stem + ".optimized-" + date.today().isoformat() + suffix)
-            output = folder / (source.stem + ".optimized.pdf")
+            folder = source.with_name(source.stem + "." + label + "-" + date.today().isoformat() + suffix)
+            output = folder / (source.stem + "." + label + ".pdf")
         if not _paths_fit(output, profile):
             if compact:
                 raise ValueError("The PDF folder path is too long for optimization. Move the PDF to a shorter folder path and try again.")
@@ -208,10 +209,14 @@ def _save_job(job):
     if not job.output:return
     root=_checkpoint_root(job);root.mkdir(parents=True,exist_ok=True);record=root/'job.json'
     temporary=record.with_name(f'.job.{os.getpid()}.tmp')
-    temporary.write_text(json.dumps({'schema':2 if job.profile=='quick' else 1,'source':str(job.source),'output':str(job.output),
+    temporary.write_text(json.dumps({'schema':3 if job.input_kind=='note' else (2 if job.profile=='quick' else 1),'source':str(job.source),'output':str(job.output),
                                      'source_sha256':job.source_sha256,'status':job.status,
                                      'optimizer':job.optimizer,
-                                     'profile':job.profile,
+                                     'profile':job.profile, 'input_kind':job.input_kind,
+                                     'conversion_contract':'boox-gui-1' if job.input_kind=='note' else None,
+                                     'note_options':asdict(job.note_options) if job.note_options else None,
+                                     'renderer':str(job.renderer) if job.renderer else None,
+                                     'renderer_sha256':job.renderer_sha256,
                                      'error':job.error}),encoding='utf-8')
     os.replace(temporary,record)
 
@@ -299,6 +304,36 @@ def _recover_job(source,source_hash,optimizer,profile='thorough'):
 
 
 @dataclass(frozen=True)
+class NoteOptions:
+    mode: str = 'upstream'
+    width: str = '0.10mm'
+    scale: float = 1.0
+    keep_bookmarks: bool = True
+    optimize: bool = True
+
+    def validate(self):
+        from note_to_pdf import validate_note_options
+        validate_note_options(self.mode, self.width, self.scale)
+
+
+def _plan_note(source, reserved, options, renderer):
+    from note_to_pdf import find_renderer, inspect_note
+    options.validate()
+    binary = find_renderer(renderer)
+    help_text = subprocess.run([str(binary), '--help'], capture_output=True, text=True,
+                              timeout=10, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    if help_text.returncode or any(flag not in help_text.stdout for flag in
+                                  ('--strict', '--stroke-mode', '--fixed-stroke-width', '--stroke-scale')):
+        raise ValueError('Choose the patched BOOX converter; required options are missing.')
+    info = inspect_note(source, renderer=binary)
+    if not info['strictly_compatible']:
+        raise ValueError('; '.join(info['unsupported_reasons']))
+    return Job(source, adjacent_output(source, reserved, 'quick', 'converted'), info['sha256'],
+               'ready', profile='quick', input_kind='note', note_options=options,
+               renderer=binary, renderer_sha256=filehash(binary))
+
+
+@dataclass(frozen=True)
 class Job:
     source: Path
     output: Path | None
@@ -307,13 +342,17 @@ class Job:
     error: str | None = None
     optimizer: str = 'adaptive'
     profile: str = 'thorough'
+    input_kind: str = 'pdf'
+    note_options: NoteOptions | None = None
+    renderer: Path | None = None
+    renderer_sha256: str | None = None
 
     @property
     def targets(self):
         return _targets(self.output) if self.output else ()
 
 
-def plan_batch(sources,optimizer='adaptive',profile='thorough',progress=None):
+def plan_batch(sources,optimizer='adaptive',profile='thorough',progress=None,*,note_options=None,renderer=None):
     if optimizer not in OPTIMIZER_LABELS:raise ValueError('Unknown PDF optimizer.')
     if profile not in PROFILE_LABELS:raise ValueError('Unknown viewing profile.')
     if profile=='quick':
@@ -330,6 +369,11 @@ def plan_batch(sources,optimizer='adaptive',profile='thorough',progress=None):
         try:
             if not source.is_file():
                 raise ValueError("Input must be a PDF file.")
+            if source.suffix.lower() == '.note':
+                recovered = _plan_note(source, reserved, note_options or NoteOptions(), renderer)
+                reserved.update(map(_path_key, recovered.targets))
+                jobs.append(recovered)
+                continue
             source_hash = filehash(source)
             if profile=='quick':
                 from lossless_verify import validate_quick_input
@@ -342,11 +386,23 @@ def plan_batch(sources,optimizer='adaptive',profile='thorough',progress=None):
             reserved.update(map(_path_key, recovered.targets))
             jobs.append(recovered)
         except Exception as exc:
-            jobs.append(replace(job, status="rejected", error=str(exc)))
+            jobs.append(replace(job, status="rejected", error=str(exc), input_kind="note" if source.suffix.lower()==".note" else "pdf"))
     return tuple(jobs)
 
 
 def confirmation_text(jobs, verification_workers=None, resources=None, parallel_candidates=False):
+    pdfs = tuple(j for j in jobs if j.input_kind == 'pdf')
+    if len(pdfs) != len(jobs):
+        notes = [j for j in jobs if j.input_kind == 'note']
+        text = f"{sum(j.status=='ready' for j in jobs)} ready to start; {sum(j.status=='rejected' for j in jobs)} rejected\n\n"
+        if pdfs:text += 'PDF files\n' + confirmation_text(pdfs, verification_workers, resources, parallel_candidates)
+        text += '\nBOOX notes\n'
+        for job in notes:
+            opts=job.note_options
+            settings=('Not validated' if opts is None else
+                      f"Pen widths: {NOTE_WIDTH_LABELS[opts.mode]}{(' '+opts.width) if opts.mode=='fixed' else (' '+str(opts.scale) if opts.mode=='scale' else '')}; bookmarks: {'keep' if opts.keep_bookmarks else 'omit'}; {'convert and Direct optimize' if opts.optimize else 'convert only'}")
+            text += f'\n{job.source.name}\n  Source: {job.source}\n  Output: {job.output}\n  Settings: {settings}\n  Converter: {job.renderer}\n  Status: {job.status} {job.error or chr(32)}\n'
+        return text + '\nBOOX conversion is experimental. Brush rendering may differ from the tablet. Custom widths change appearance. Originals are retained.'
     quick=bool(jobs and jobs[0].profile=='quick')
     if not quick:
         from viewing_copy import default_verification_workers
@@ -394,8 +450,19 @@ def run_optimizer(job, emit, started, verification_workers=None, parallel_candid
                "--checkpoint", str(job.output.with_suffix('.checkpoint')),
                "--time-budget-seconds", str(DEFAULT_TIME_BUDGET_SECONDS),
                "--disk-budget-bytes", str(DEFAULT_DISK_BUDGET_BYTES)]
-    if verification_workers is not None:command.extend(("--verification-workers",str(verification_workers)))
-    if parallel_candidates:command.append('--parallel-candidates')
+    if job.input_kind == 'note':
+        opts = job.note_options
+        command = [sys.executable, str(ROOT/'note_to_pdf.py'), str(job.source), str(job.output),
+                   '--renderer', str(job.renderer), '--expected-source-sha256', job.source_sha256,
+                   '--expected-renderer-sha256', job.renderer_sha256,
+                   '--time-budget', str(DEFAULT_TIME_BUDGET_SECONDS), '--disk-budget', str(DEFAULT_DISK_BUDGET_BYTES),
+                   '--stroke-mode', opts.mode]
+        if opts.mode == 'fixed': command.extend(['--fixed-stroke-width', opts.width])
+        if opts.mode == 'scale': command.extend(['--stroke-scale', str(opts.scale)])
+        if not opts.keep_bookmarks: command.append('--no-toc')
+        if not opts.optimize: command.append('--skip-optimize')
+    if job.input_kind == 'pdf' and verification_workers is not None:command.extend(("--verification-workers",str(verification_workers)))
+    if job.input_kind == 'pdf' and parallel_candidates:command.append('--parallel-candidates')
     last_error=None
     with subprocess.Popen(command, cwd=ROOT, stdout=subprocess.PIPE,
                           stderr=subprocess.STDOUT, text=True, errors="replace",
@@ -404,9 +471,13 @@ def run_optimizer(job, emit, started, verification_workers=None, parallel_candid
         for line in child.stdout:
             line=line.rstrip()
             if line.startswith('Error: '):last_error=line[7:]
+            if job.input_kind=='note' and line.startswith('Reason: '):last_error=line[8:]
             if line.startswith('Stage: '):emit('stage',(line[7:],time.monotonic()))
             emit("output", line)
         returncode = child.wait()
+    if job.input_kind=='note' and returncode in (2,3):
+        error=JobTimeout if returncode==2 else JobBudgetExceeded
+        raise error((last_error or 'Conversion resource limit reached') + '. The original is unchanged; select again to restart.')
     if returncode==2:
         recovery=('Quick mode restarts its single pass when selected again.' if job.profile=='quick' else
                   'Completed checks were saved. Select it again to resume.')
@@ -424,6 +495,35 @@ def validate_result(job,recovering=False):
         report = json.loads(json_report.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise RuntimeError(f"could not read optimizer report: {exc}") from exc
+    if job.input_kind == 'note':
+        opts = job.note_options
+        expected = {'mode':opts.mode, 'width':opts.width if opts.mode=='fixed' else None,
+                    'scale':opts.scale if opts.mode=='scale' else None,
+                    'keep_bookmarks':opts.keep_bookmarks, 'optimize':opts.optimize}
+        final = report.get('final_output', {})
+        if (report.get('contract') != 'boox-gui-1' or report.get('status') != 'success' or
+            report.get('conversion_verdict') != 'converted' or not report.get('renderer', {}).get('strict') or report.get('requested_options') != expected or
+            Path(report.get('source_note', '')).absolute() != job.source or
+            report.get('source_note_sha256') != job.source_sha256 or filehash(job.source) != job.source_sha256 or
+            report.get('renderer', {}).get('sha256') != job.renderer_sha256 or
+            filehash(job.renderer) != job.renderer_sha256 or
+            Path(final.get('path', '')).absolute() != output or not output.is_file() or
+            final.get('sha256') != filehash(output) or final.get('bytes') != output.stat().st_size):
+            raise RuntimeError('Conversion report does not match the reviewed job or output.')
+        optimized = report.get('optimization_verdict') == 'smaller-lossless'
+        if optimized:
+            proof = report.get('optimization_report', {})
+            from quick_lossless import acceptance_context
+            from pdf_runtime import qpdf_identity
+            if (proof.get('status') != 'optimized' or proof.get('acceptance_context') != acceptance_context(qpdf_identity(),'adaptive') or
+                not opts.optimize or not proof.get('verification', {}).get('complete') or
+                proof.get('source_sha256') != report.get('conversion_output', {}).get('sha256') or
+                proof.get('output_sha256') != final['sha256']):
+                raise RuntimeError('Conversion lacks completed Direct verification.')
+        elif final['sha256'] != report.get('conversion_output', {}).get('sha256'):
+            raise RuntimeError('Retained conversion hash mismatch.')
+        return 'converted', ('Converted and optimized' if optimized else
+                             ('Converted only' if not opts.optimize else 'Converted; optimization unavailable or no size benefit'))
     status = report.get("status")
     if status not in {"optimized", "no improvement"}:
         raise RuntimeError(f"unexpected optimizer status: {status}")
@@ -476,7 +576,7 @@ class BatchController:
 
     def _record(self, index, status, error=None):
         self.jobs[index] = replace(self.jobs[index], status=status, error=error)
-        if status != 'skipped' and (status in {'optimized','no improvement','failed','timeout','budget exhausted'} or
+        if status != 'skipped' and (status in {'optimized','converted','no improvement','failed','timeout','budget exhausted'} or
                                     _job_record(self.jobs[index]).is_file()):
             try:_save_job(self.jobs[index])
             except (OSError,ValueError):pass
@@ -508,6 +608,8 @@ class BatchController:
                 self._record(index, "skipped", reason)
 
     def _launch_check(self, job):
+        if job.input_kind == 'note' and (not job.renderer.is_file() or filehash(job.renderer) != job.renderer_sha256):
+            raise ValueError('BOOX converter changed after review')
         if not job.source.is_file() or filehash(job.source) != job.source_sha256:
             raise ValueError("source changed after review")
         if job.output.parent!=job.source.parent and job.output.parent.exists() and not _job_record(job).is_file():

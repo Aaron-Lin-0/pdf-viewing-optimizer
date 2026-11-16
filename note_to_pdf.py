@@ -4,6 +4,7 @@ import datetime
 import io
 import json
 import logging
+import math
 import os
 from pathlib import Path
 import secrets
@@ -400,9 +401,25 @@ def inspect_note(note_path, renderer=None, budget=None):
     }
 
 
+def validate_note_options(mode, width, scale):
+    if mode not in ('upstream', 'fixed', 'scale', 'density-scaled'):
+        raise ValueError('Unknown BOOX pen width mode')
+    if mode == 'fixed':
+        unit = 'mm' if width.endswith('mm') else ('pt' if width.endswith('pt') else '')
+        if not unit:
+            raise ValueError('GUI fixed widths require mm or pt')
+        value = float(width[:-2]) * (72/25.4 if unit=='mm' else 1)
+        if not math.isfinite(value) or not .001 <= value <= 100:
+            raise ValueError('Fixed width must be between 0.001 and 100 PDF points')
+    if mode == 'scale' and (not math.isfinite(scale) or not .001 <= scale <= 100):
+        raise ValueError('Scale must be between 0.001 and 100')
+
+
 def find_renderer(explicit_path=None):
     """Locate the boox-notes-renderer executable portably without hardcoded absolute paths."""
     candidates = []
+    if explicit_path and not Path(explicit_path).is_file():
+        raise FileNotFoundError('Selected BOOX converter does not exist')
     if explicit_path:
         candidates.append(Path(explicit_path))
 
@@ -796,6 +813,8 @@ def convert_note_to_pdf(
     fixed_stroke_width=None,
     stroke_scale=None,
     no_toc=False,
+    expected_source_sha256=None,
+    expected_renderer_sha256=None,
 ):
     """Bridge BOOX .note archive to verified vector PDF with isolation, disk safety, and budget enforcement."""
     started = time.monotonic()
@@ -807,10 +826,13 @@ def convert_note_to_pdf(
     budget = RunBudget(time_budget_seconds, disk_budget_bytes)
     budget.check('preflight')
 
+    print('Stage: note inspection', flush=True)
     # Preflight inspection (enforces bounds and fail-closed validation)
     preflight = inspect_note(note_path, renderer=renderer, budget=budget)
     note_sha256 = preflight['sha256']
     note_bytes = preflight['size_bytes']
+    if expected_source_sha256 is not None and note_sha256 != expected_source_sha256:
+        raise ValueError('Note changed after review')
 
     # Reference tablet export
     ref_info = None
@@ -828,6 +850,8 @@ def convert_note_to_pdf(
     renderer_bin = find_renderer(renderer)
     renderer_sha256 = filehash(renderer_bin)
     preflight['renderer_sha256'] = renderer_sha256
+    if expected_renderer_sha256 is not None and renderer_sha256 != expected_renderer_sha256:
+        raise ValueError('BOOX converter changed after review')
 
     # Verify destination collision safeguards
     out_path = Path(output_pdf).resolve() if output_pdf else None
@@ -843,6 +867,9 @@ def convert_note_to_pdf(
 
     report = {
         'status': 'running',
+        'contract': 'boox-gui-1',
+        'requested_options': {'mode':stroke_mode or 'upstream', 'width':fixed_stroke_width,
+                              'scale':stroke_scale, 'keep_bookmarks':not no_toc, 'optimize':not skip_optimize},
         'conversion_verdict': 'pending',
         'optimization_verdict': 'skipped' if skip_optimize else 'pending',
         'source_note': str(note_path),
@@ -885,6 +912,7 @@ def convert_note_to_pdf(
         report['renderer']['args'] = cmd
 
         try:
+            print('Stage: note conversion', flush=True)
             # Check budgets before rendering
             budget.check('rendering', (scratch_dir, audit_job_dir))
             timeout = budget.timeout(300)
@@ -915,6 +943,7 @@ def convert_note_to_pdf(
 
             # Stage 1.5: Inject Table of Contents (TOC) if present and not disabled
             if not no_toc:
+                print('Stage: note bookmarks', flush=True)
                 try:
                     toc_tree = extract_toc(note_path, page=page, page_names=preflight.get('pages'))
                     if toc_tree:
@@ -952,6 +981,7 @@ def convert_note_to_pdf(
         # Stage 2: Direct Optimization via quick_lossless (optional)
         selected_pdf = scratch_converted_pdf
         if not skip_optimize:
+            print('Stage: note optimization', flush=True)
             scratch_optimized_pdf = scratch_dir / 'optimized.pdf'
             try:
                 # Check budgets before direct optimization
@@ -1019,6 +1049,9 @@ def convert_note_to_pdf(
 
         # Publication & Final Reports
         # Final disk budget check right before publishing output so --skip-optimize cannot publish if exceeded
+        print('Stage: note publication', flush=True)
+        if filehash(renderer_bin) != renderer_sha256:
+            raise ValueError('BOOX converter changed during processing')
         budget.check('publication', (scratch_dir, audit_job_dir))
 
         selected_sha = filehash(selected_pdf)
@@ -1114,6 +1147,8 @@ def main(argv=None):
         help="Disable bookmark (TOC) extraction and injection.",
     )
 
+    parser.add_argument('--expected-source-sha256')
+    parser.add_argument('--expected-renderer-sha256')
     args = parser.parse_args(argv)
 
     if args.inspect_only:
@@ -1139,6 +1174,8 @@ def main(argv=None):
             fixed_stroke_width=args.fixed_stroke_width,
             stroke_scale=args.stroke_scale,
             no_toc=args.no_toc,
+            expected_source_sha256=args.expected_source_sha256,
+            expected_renderer_sha256=args.expected_renderer_sha256,
         )
         print(f"Pipeline Result: {report['status']}")
         print(f"Conversion Verdict: {report['conversion_verdict']}")
@@ -1151,6 +1188,9 @@ def main(argv=None):
             print(f"Reason: {report.get('reason')}")
             return 1
         return 0
+    except (TimeBudgetExceeded, DiskBudgetExceeded) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2 if isinstance(exc, TimeBudgetExceeded) else 3
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
