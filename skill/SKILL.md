@@ -9,6 +9,16 @@ Run the bundled [optimizer](scripts/optimize_pdf.py) locally on user-specified P
 
 ## Inputs and outputs
 
+The separate opt-in `--viewing-copy --viewing-profile bitmap --study-paper letter
+--study-dpi 300` creates experimental raster study copies. Use it only when the user
+explicitly accepts finite-resolution images and flattened visible layers. Paper is
+`letter` or `source`; DPI is 300/450/600. The initial subset rejects fonts/search
+text, annotations, forms/links, hidden layers and positional navigation. Flat Fit
+bookmarks, labels, attachments and metadata are retained. Its reports establish
+saved-image integrity, not mathematical meaning or viewing speed. Human review
+remains necessary. Exact-mode preservation and benchmark descriptions below do
+not apply to bitmap mode; never use it as an automatic fallback.
+
 - Accept local paths, available PDF attachments, and local `file:///` URLs. Decode URL escapes such as `%20`; on Windows, a file URL's `System.Uri.LocalPath` gives the filesystem path. Quote paths containing spaces.
 - Process the files the user names, or the PDF files in a folder they explicitly select for batch processing. If the intended files are unclear, ask for the missing paths.
 - Use the user's requested output folder, or the current task's designated deliverables folder. Pass an explicit output path to the optimizer. Viewing copies use `NAME.viewing.pdf` plus `.json`/`.md` reports. Legacy default filenames are `NAME.optimized.pdf`; use a new numbered name if that path already exists, including collisions between inputs with the same basename.

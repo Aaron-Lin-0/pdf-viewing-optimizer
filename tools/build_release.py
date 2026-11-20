@@ -12,7 +12,7 @@ PROGRAM=['tools/build_boox_renderer.py','vendor/boox-renderer/README.md','vendor
          'vendor/boox-renderer/source.json','vendor/boox-renderer/fork.patch','note_to_pdf.py','optimize_pdf.py','handwriting.py','invisible_text.py','navigation.py','geometry.py',
          'annotation_ink.py','viewing_copy.py','batch_workflow.py','viewing_copy_gui.py','browser_check.py',
          'pdfjs_benchmark.mjs','browser_harness.html','verification_worker.py','tools/evidence_cache.py',
-         'pdf_runtime.py','quick_lossless.py','lossless_verify.py',
+         'bitmap_study.py','pdf_runtime.py','quick_lossless.py','lossless_verify.py',
          'tools/experiment_manifest.py','tools/pdf_characterize.py','tools/revision_pages.py']
 DOCS=['docs/boox-note-handoff.md','docs/adr-batch-workflow.md','docs/audit-repair-walkthrough.md','docs/comparison.md',
       'docs/overnight-benchmark.md',

@@ -16,6 +16,44 @@ is documented in [comparison.md](comparison.md). The companion classifier/planne
 does not replace the production acceptance path; production exact checkpoint reuse
 and batch restart recovery are implemented as described under P11.
 
+## Current work queue
+
+Follow this order for general improvement work. Record any blocked check and
+continue with independent work in queue order. Update this section when evidence
+or a user decision changes the next action. The numbered milestones below hold
+the implementation plans and history. The [design](design.md) governs
+production acceptance, and the [comparison guide](comparison.md) governs the
+separate research runner.
+
+1. **Qualify the isolated bitmap build.** The generated hardening regressions
+   cover missing drawing resources, compact Windows output paths, cumulative image
+   limits and completed-page progress. Verify the release package bytes and
+   extracted runtime, complete native Windows acceptance, review small marks at
+   study and print scale, check an independently authorized supported holdout,
+   and run fresh CI against the shipping source. Use matched-content-scale
+   measurements from that build for any viewing-speed claim. Revisit the planned
+   joint release with the user if bitmap qualifies first. See the
+   [release checklist](testing.md#bitmap-study-copy-release-acceptance).
+2. **Park vector study.** The appearance-screened Form-call and inline treatments
+   missed the 10% standalone cold CPU gate against Direct. Inlining reduced
+   preparation CPU but retained the same drawing-operator count as the Form-call
+   treatment, and the saved drawing times showed little additional gain. Resume
+   grouping, point reduction, curve fitting or a strength slider only when new
+   evidence identifies a safely removable cost with a plausible gain. Use the
+   [P16 research protocol](#p16-approximate-handwriting-research-and-conditional-product-option) when work advances.
+3. **Keep deferred tracks in the backlog.** P13 native qualification and P14's
+   real-document holdout remain open. [P18](#p18-boox-note-to-vector-pdf-pipeline)
+   still needs independent all-page tablet fidelity checks. P19
+   advances only on its own exact preservation and added storage savings gates.
+   [P17](#p17-notes-to-latex-study-copy-research) remains separate transcription
+   research.
+
+Record detailed evidence, source identities and run progress under ignored
+`audit-output/`. Check completed records, artifact hashes and applicable
+acceptance results before advancing a milestone. An earlier package or a
+generated fixture can support a decision within its tested scope. Keep real-PDF
+work and timings sequential.
+
 ## Current foundation and immediate priority
 
 **Next action (2026-11-04): continue P13/P14 through code and automated validation;

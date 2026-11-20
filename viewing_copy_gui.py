@@ -32,10 +32,14 @@ STAGE_PROGRESS = {
     'parallel candidate generation': (8, 15),
     'source browser viability': (58, 68),
     'balanced performance timing': (68, 80),
+    'study input checks': (2, 10),
+    'study rasterization': (10, 70),
+    'study packing': (70, 75),
+    'study saved verification': (75, 95),
     'publication': (98, 99),
 }
 VERIFIED_PAGES = re.compile(
-    r'(?:Verified vector content/navigation/appearance|PDF\.js appearance verified): (\d+)/(\d+)')
+    r'(?:Verified vector content/navigation/appearance|PDF\.js appearance verified|Study pages rasterized|Study pages verified): (\d+)/(\d+)')
 
 
 def stage_progress(stage, previous, input_kind='pdf'):
@@ -180,12 +184,12 @@ def main():
     scroll=ttk.Scrollbar(log_frame,orient='vertical',command=log.yview)
     log.configure(yscrollcommand=scroll.set);log.grid(row=0,column=0,sticky='nsew');scroll.grid(row=0,column=1,sticky='ns')
     controls=ttk.Frame(frame);controls.grid(row=6,column=0,sticky='ew',pady=(12,0));controls.columnconfigure(2,weight=1)
-    actions=ttk.Frame(controls);actions.grid(row=4,column=0,columnspan=6,sticky='e',pady=(8,0))
+    actions=ttk.Frame(controls);actions.grid(row=6,column=0,columnspan=6,sticky='e',pady=(8,0))
     worker_selector=ttk.Spinbox(controls,from_=1,to=resources['logical_cpu_count'],width=5,
                                 textvariable=worker_count,wrap=False)
     def update_resources(*_args):
-        if profile_choice.get()==PROFILE_LABELS['quick']:
-            resource_text.set('Direct checks preservation without measuring viewing speed.')
+        if profile_choice.get()!=PROFILE_LABELS['thorough']:
+            resource_text.set('Bitmap study: finite-resolution images; human review required.' if profile_choice.get()==PROFILE_LABELS['bitmap'] else 'Direct checks preservation without measuring viewing speed.')
             return
         try:value=worker_count.get()
         except tk.TclError:return
@@ -211,6 +215,8 @@ def main():
         choose_button.configure(state='normal' if enabled else 'disabled')
         inspect_button.configure(state='normal' if enabled else 'disabled')
         review_button.configure(state='normal' if enabled and selected_paths else 'disabled')
+        study_paper_selector.configure(state='readonly' if enabled else 'disabled')
+        study_dpi_selector.configure(state='readonly' if enabled else 'disabled')
         for widget in note_widgets:
             widget.configure(state='normal' if enabled else 'disabled')
         if enabled:update_note_controls()
@@ -277,7 +283,7 @@ def main():
         if not selected or not setup_ready:
             return
         profile={label:key for key,label in PROFILE_LABELS.items()}[profile_choice.get()]
-        optimizer='adaptive' if profile=='quick' else {label:key for key,label in OPTIMIZER_LABELS.items()}[optimizer_choice.get()]
+        optimizer='adaptive' if profile in ('quick','bitmap') else {label:key for key,label in OPTIMIZER_LABELS.items()}[optimizer_choice.get()]
         workers=None
         if profile=='thorough' and any(Path(p).suffix.lower()!='.note' for p in selected):
             try:workers=worker_count.get()
@@ -294,6 +300,8 @@ def main():
         except (ValueError, tk.TclError) as exc:
             messagebox.showerror('BOOX settings',str(exc),parent=root)
             return
+        paper = study_paper.get()
+        dpi = int(study_dpi.get())
         converter = note_renderer.get() or None
         task_token+=1;token=task_token
         set_status('Inspecting selected files…');enable_inputs(False);setup_button.configure(state='disabled')
@@ -303,7 +311,7 @@ def main():
             try:
                 jobs=plan_batch(selected,optimizer,profile,
                                 lambda path:events.put(('planning progress',(token,str(path)))),
-                                note_options=options,renderer=converter)
+                                note_options=options,renderer=converter,study_paper=paper,study_dpi=dpi)
                 if profile=='thorough' and any(j.input_kind=='pdf' for j in jobs):
                     blockers=[r for r in dependency_diagnostics(profile) if not r['ok'] and not r['optional']]
                     if blockers:
@@ -542,6 +550,16 @@ def main():
     parallel_selector=ttk.Checkbutton(controls,text='Parallel candidate generation (more RAM)',underline=19,
                                       variable=parallel_candidates)
     parallel_selector.grid(row=2,column=3,columnspan=3,sticky='e',pady=(8,0))
+    study_paper=tk.StringVar(value='letter');study_dpi=tk.StringVar(value='300')
+    study_panel=ttk.LabelFrame(controls,text='Bitmap study copy (experimental)',padding=8)
+    study_panel.grid(row=3,column=0,columnspan=6,sticky='ew',pady=(8,0))
+    ttk.Label(study_panel,text='Paper:').grid(row=0,column=0)
+    study_paper_selector=ttk.Combobox(study_panel,textvariable=study_paper,values=('letter','source'),state='readonly',width=9)
+    study_paper_selector.grid(row=0,column=1,padx=8)
+    ttk.Label(study_panel,text='DPI at selected paper size:').grid(row=0,column=2)
+    study_dpi_selector=ttk.Combobox(study_panel,textvariable=study_dpi,values=('300','450','600'),state='readonly',width=6)
+    study_dpi_selector.grid(row=0,column=3,padx=8)
+    ttk.Label(study_panel,text='Images limit zoom/print detail and flatten visible layers. Review the copy before studying.',wraplength=620).grid(row=1,column=0,columnspan=4,sticky='w')
     note_mode=tk.StringVar(value=NOTE_WIDTH_LABELS['upstream']);note_width=tk.StringVar(value='0.10')
     note_unit=tk.StringVar(value='mm');note_scale=tk.StringVar(value='1.0')
     note_bookmarks=tk.BooleanVar(value=True);note_optimize=tk.BooleanVar(value=True)
@@ -550,7 +568,7 @@ def main():
     try:note_renderer.set(str(find_renderer()))
     except FileNotFoundError:pass
     notes_panel=ttk.LabelFrame(controls,text='BOOX notes (experimental)',padding=8)
-    notes_panel.grid(row=3,column=0,columnspan=6,sticky='ew',pady=(8,0));notes_panel.columnconfigure(1,weight=1)
+    notes_panel.grid(row=5,column=0,columnspan=6,sticky='ew',pady=(8,0));notes_panel.columnconfigure(1,weight=1)
     ttk.Label(notes_panel,text='Converter:').grid(row=0,column=0,sticky='w')
     converter_entry=ttk.Entry(notes_panel,textvariable=note_renderer,width=52)
     converter_entry.grid(row=0,column=1,columnspan=3,sticky='ew')
@@ -581,7 +599,9 @@ def main():
     note_unit.trace_add('write',update_note_controls)
     update_note_controls()
     def update_optimizer_controls(*_args):
-        quick=profile_choice.get()==PROFILE_LABELS['quick']
+        quick=profile_choice.get()!=PROFILE_LABELS['thorough']
+        if profile_choice.get()==PROFILE_LABELS['bitmap']:study_panel.grid()
+        else:study_panel.grid_remove()
         adaptive=not quick and optimizer_choice.get()==OPTIMIZER_LABELS['adaptive']
         if not adaptive:parallel_candidates.set(False)
         parallel_selector.configure(state='normal' if adaptive and not running else 'disabled')

@@ -1,5 +1,15 @@
 PDF optimizer
 
+Experimental bitmap study copies
+  python optimize_pdf.py input.pdf study.pdf --viewing-copy --viewing-profile bitmap --study-paper letter --study-dpi 300
+Also available in Create Viewing Copies.cmd. Choose Letter/source paper and
+300/450/600 DPI. Pages fit without stretching; visible layers flatten and vector
+zoom detail is lost. Review equations/small marks against the original. Initial
+support excludes fonts/search text, annotations, links/forms, hidden layers and
+positional navigation. Flat whole-page bookmarks, labels, attachments and metadata
+are retained. Meaning review and viewing performance remain unqualified.
+The exact-mode image preservation descriptions below do not apply to this mode.
+
 Extract the ZIP and keep its scripts and launchers together. Originals and
 existing output/report files are never overwritten. Encrypted PDFs and PDFs
 with signatures or signature fields are rejected.

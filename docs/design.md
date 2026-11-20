@@ -1,10 +1,69 @@
 # Design and acceptance rules
 
 **Scope: current production behavior.** This document defines the existing
-optimizer's transformations and publication gates. The
-[main improvement plan](roadmap.md) describes future adaptive tool selection;
-those proposals do not change these rules. The separate research runner and its
-native Firefox protocol are documented in [comparison.md](comparison.md).
+optimizer's transformations and publication gates. Development priorities and
+research decisions live in the [roadmap](roadmap.md#current-work-queue).
+The separate research runner and its native Firefox protocol are documented in
+[comparison.md](comparison.md).
+
+**Opt-in study-copy work:** on 2026-11-17 the user approved investigating
+bounded appearance changes, point reduction and raster copies for faster reading.
+Each study-copy profile has its own acceptance contract. Study-copy candidates
+must declare geometry, resolution, feature losses, quality coverage and actual
+performance evidence. Visual tolerance does not silently authorize loss of search, navigation, layers
+or protected interactive data. Raster output has finite zoom/print resolution
+and is not lossless preservation of the original drawing representation.
+
+## Experimental bitmap study contract (`bitmap-study-1`)
+
+The CLI profile `bitmap` and GUI **Bitmap study copy (experimental)** create
+finite-resolution images of visible pages. Letter (612 × 792 points) at 300 DPI
+is the initial preset; source-size paper and 450/600 DPI are explicit alternatives.
+Pages fit centrally without stretching or clipping. Source rotation is baked into
+the image, and physical page size accounts for the PDF's page unit. DPI applies
+after fitting, so a large tablet canvas does not silently
+produce a source-size 300-DPI bitmap when Letter was selected. Each page is capped
+at 40 million rendered pixels. RGB is retained unless all channels are equal;
+images use lossless Flate transport after raster conversion. The raster pass
+limits the full document to 256 MiB of encoded images and 1 GiB of decoded
+image data. The saved-file verifier also enforces its 512 MiB file limit and
+checks image bytes incrementally.
+The existing reachability cleanup removes original drawing/resource graphs that
+the bitmap pages no longer reference. One qpdf packing pass removes storage gaps;
+all image, placement and retained-feature checks run on those final packed bytes.
+
+This first contract accepts annotation-free, font-free PDFs. It declines forms,
+search text, links/comments, tagged content, named destinations/actions, nested or
+positional bookmarks, hidden/alternate/automatic layers and optional-content
+membership expressions. Preflight resolves drawing-resource names in page and
+referenced drawing streams and rejects missing dependencies and drawing cycles
+before rasterization. Supported flat Fit bookmarks jump directly to a local
+page. Chained bookmark actions are declined. Bookmarks, labels, attachments,
+metadata and private navigation data are cloned and independently compared after
+normalizing the declared geometry and layer changes. All-visible layers flatten;
+layer switching and vector editing/zoom are explicitly lost. Unsupported features
+produce a rejection, without an output PDF. Existing strict input rejection,
+source-hash checks, budgets, exclusive publication and rollback apply.
+
+Only this study lane may repair the exact paired qpdf warnings for a malformed
+xref-stream terminator and its missing self-entry. A clean temporary snapshot
+copies the entire object region byte-for-byte, then adds the missing xref self-entry
+and terminator. Independent checks require identical object bytes, index bindings
+and trailer values; orphans therefore remain intact. Only unfiltered xref streams
+with the supported layout qualify. All other warnings remain blocking;
+incremental/signature/encryption rejection is unchanged. The report records the
+original and snapshot hashes, warnings and proof. This does not enable the broader
+research current-revision normalizer in exact profiles.
+
+Every saved image payload, dimensions and placement program are checked, together
+with qpdf syntax and retained feature signatures. This proves saved-image integrity,
+not mathematical meaning, multi-renderer equivalence or a viewing-speed improvement.
+Reports declare human review pending and performance unmeasured. Copies may be
+larger than the source. Interrupted jobs restart; schema-4 batch records bind paper,
+DPI, source hashes and code/tool identities before completed-result recovery.
+
+Exact profiles use their own policy versions and gates. Vector study and any
+strength control are conditional research in the [roadmap](roadmap.md#current-work-queue).
 
 ## Direct profile (CLI token: quick)
 
@@ -429,7 +488,7 @@ unified two-stage pipeline:
 
 ## Limits
 
-The optimizer does not promise maximum compression, universal renderer equivalence or faster scrolling. Unique handwriting still requires drawing work. Bitmap content is not resampled or converted to a lossy codec. Unknown content is preserved or rejected conservatively.
+The optimizer does not promise maximum compression, universal renderer equivalence or faster scrolling. Unique vector handwriting still requires drawing work. Exact profiles do not resample bitmap content or use lossy codecs. The opt-in bitmap contract above instead rasterizes visible pages at the declared resolution. Unknown content is preserved or rejected conservatively.
 
 Scripted and XFA forms are unsupported by browser acceptance. External URI/file targets are preserved structurally but are never opened. The tests do not cover every image codec, malformed export, browser extension, zoom or print setting. Windows/Zen is the tested platform; other platforms may require explicit runtime paths.
 

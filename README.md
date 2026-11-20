@@ -6,16 +6,35 @@ Supports vector, bitmap/scanned and mixed PDFs. BOOX handwriting has dedicated o
 
 Original files and existing output/report files are never overwritten. No personal PDFs are included in this repository; tests generate their own fixtures.
 
+## Experimental bitmap study copies
+
+Choose **Bitmap study copy (experimental)** in the GUI, then choose paper size
+and resolution and review the declared losses. Or run:
+
+```powershell
+.\.venv\Scripts\python.exe optimize_pdf.py input.pdf study.pdf --viewing-copy --viewing-profile bitmap --study-paper letter --study-dpi 300
+```
+
+This fits visible pages onto Letter paper as finite-resolution images. Choose
+`--study-paper source` to retain the displayed source dimensions, or 450/600 DPI
+for more pixels. Vector zoom detail and layer switching are lost. Review equations
+and small marks against the original before studying. No meaning or speed guarantee
+is made. The initial subset rejects fonts/search text, annotations, links, forms,
+hidden layers and positional navigation; supported flat whole-page bookmarks,
+labels, attachments and metadata are retained. See the [contract](docs/design.md).
+Exact Direct and Thorough modes keep their existing behavior.
+
 ## Documentation and main improvement plan
 
-**The main improvement plan is [adaptive optimizer selection](docs/roadmap.md).**
-It defines the next iteration and its ordered milestones. It is a roadmap, not a
-claim that automatic selection across external tools is already available.
+The [current work queue](docs/roadmap.md#current-work-queue) leads with bitmap
+hardening and qualification. Vector study advances only when measurements point
+to a safe change with enough potential to clear its speed gate. Direct remains
+the default Windows workflow, and Thorough measures candidate rendering cost.
 
 | Document | Purpose |
 |---|---|
 | [v0.2.0 release notes](docs/release-v0.2.0.md) | Safer large-page verification, reviewed Windows workflow and upgrade notes |
-| [Main roadmap](docs/roadmap.md) | Primary future improvement plan and decision flow |
+| [Roadmap](docs/roadmap.md) | Current work queue, decision gates and milestone history |
 | [Batch workflow ADR](docs/adr-batch-workflow.md) | Implemented GUI/controller boundary and safety invariants |
 | [Contributor instructions](AGENTS.md) | Source map, preservation constraints and delivery rules |
 | [Design](docs/design.md) | Current production transformations and acceptance rules |
