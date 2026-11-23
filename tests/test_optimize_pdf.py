@@ -33,12 +33,34 @@ class OptimizerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
             source=Path(folder)/'source.pdf';make_pdf(source)
             with patch.object(sys,'argv',['optimize_pdf.py',str(source),'--viewing-copy']),\
+                 patch('batch_workflow._paths_fit', return_value=True),\
                  patch.object(optimizer,'optimize') as run:
                 self.assertEqual(optimizer.main(),0)
             destination=run.call_args.args[1]
             self.assertEqual(destination.name,'source.optimized.pdf')
             self.assertRegex(destination.parent.name,r'^source\.optimized-\d{4}-\d{2}-\d{2}$')
             self.assertTrue(destination.parent.is_dir())
+
+
+    def test_implicit_viewing_copy_uses_compact_name_beside_source(self):
+        from batch_workflow import _compact_stem, adjacent_output
+
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            source = Path(folder)/('long-source-name'*5 + '.pdf')
+            make_pdf(source)
+            stem = _compact_stem(source)
+            occupied = source.with_name(f'{stem}.optimized.json')
+            occupied.write_bytes(b'existing report')
+            with patch.object(sys, 'argv', ['optimize_pdf.py', str(source), '--viewing-copy',
+                                            '--viewing-profile', 'quick']), \
+                 patch('batch_workflow._paths_fit', side_effect=lambda target, profile: target.parent == source.parent), \
+                 patch('batch_workflow.adjacent_output') as allocate, \
+                 patch.object(optimizer, 'optimize') as optimize:
+                allocate.side_effect = [adjacent_output(source), AssertionError('Retried allocation')]
+                self.assertEqual(optimizer.main(), 0)
+            allocate.assert_called_once_with(source, profile='quick')
+            self.assertEqual(optimize.call_args.args[1], source.with_name(f'{stem}.optimized-2.pdf'))
+            self.assertEqual(occupied.read_bytes(), b'existing report')
 
     def test_verification_workers_are_viewing_copy_only(self):
         with self.assertRaisesRegex(ValueError,'viewing-copy mode'):

@@ -14,7 +14,7 @@ from dataclasses import replace
 from pypdf import PdfWriter
 from viewing_copy_gui import collect_pdf_paths,progress_text
 
-from batch_workflow import (BatchController, JobAlreadyRunning, JobBudgetExceeded, JobTimeout,
+from batch_workflow import (BatchController, Job, JobAlreadyRunning, JobBudgetExceeded, JobTimeout,
                             OPTIMIZER_LABELS,
                             _claim_job, _process_alive, _release_claim, _save_job, confirmation_text,
                             dependency_diagnostics, dependency_report, filehash, plan_batch,
@@ -71,6 +71,31 @@ def complete(job, status="no improvement", **changes):
 
 
 class ViewingCopyGuiTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'nt', 'Windows launcher')
+    def test_launcher_without_setup_gives_instructions_instead_of_traceback(self):
+        import subprocess
+        import venv
+
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            root = Path(folder)
+            launcher = root / 'Create Viewing Copies.cmd'
+            launcher.write_bytes((Path(__file__).resolve().parents[1] / launcher.name).read_bytes())
+            (root / 'viewing_copy_gui.py').write_text('raise SystemExit(0)\n', encoding='utf-8')
+            venv.EnvBuilder(with_pip=False).create(root / 'bare-python')
+            env = os.environ.copy()
+            env.pop('PYTHONPATH', None)
+            env.pop('PDF_PYTHON', None)
+            for use_override in (False, True):
+                with self.subTest(use_override=use_override):
+                    if use_override:
+                        env['PDF_PYTHON'] = str(root / 'bare-python' / 'Scripts' / 'python.exe')
+                    run = subprocess.run(['cmd.exe', '/d', '/c', 'call', launcher.name], cwd=root, env=env,
+                                         stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=30,
+                                         creationflags=subprocess.CREATE_NO_WINDOW)
+                    self.assertEqual(run.returncode, 1, run.stderr)
+                    self.assertIn('run Setup Dependencies.cmd', run.stdout)
+                    self.assertEqual(run.stderr, '')
+
     def test_release_can_inspect_pdf_without_checkout_imports(self):
         from tools.build_release import build
 
@@ -84,9 +109,18 @@ class ViewingCopyGuiTests(unittest.TestCase):
                 archive.extractall(extracted)
             result = subprocess.run(
                 [sys.executable, '-I', '-c',
-                 'import sys; sys.path.insert(0, "."); import viewing_copy_gui; '
-                 'from experiment_manifest import analyze_drawing_opportunity; '
-                 'print(analyze_drawing_opportunity(sys.argv[1])["denominator_tracking"]["total_pages"])',
+                 'import sys; sys.path.insert(0, ".")\n'
+                 'from viewing_copy_gui import start_inspection\n'
+                 'from tools.normalize_boox import validate_direct_input\n'
+                 'assert validate_direct_input(sys.argv[1]) == (1, False)\n'
+                 'worker, messages = start_inspection(sys.argv[1])\n'
+                 'with messages:\n'
+                 '    assert messages.recv() == ("inspection progress", (0, 1))\n'
+                 '    assert messages.recv() == ("inspection progress", (1, 1))\n'
+                 '    kind, report = messages.recv()\n'
+                 'worker.join()\n'
+                 'assert kind == "inspection complete" and worker.exitcode == 0\n'
+                 'print(report["denominator_tracking"]["total_pages"])',
                  str(source)],
                 cwd=extracted, capture_output=True, text=True, timeout=30)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -117,14 +151,17 @@ class ViewingCopyGuiTests(unittest.TestCase):
                 self.assertTrue(optimizer.instate(['disabled']));self.assertTrue(worker.instate(['disabled']))
                 wait_for(lambda:profile.instate(['!disabled']))
                 profile.set(PROFILE_LABELS['thorough'])
-                wait_for(lambda:optimizer.instate(['!disabled']) and worker.instate(['!disabled']))
+                wait_for(lambda:'Thorough needs setup' in root.title())
+                self.assertTrue(optimizer.instate(['!disabled']) and worker.instate(['!disabled']))
                 profile.set(PROFILE_LABELS['quick'])
                 wait_for(lambda:optimizer.instate(['disabled']) and worker.instate(['disabled']))
             finally:root.tk.call(root.protocol('WM_DELETE_WINDOW'))
+        missing = {'name': 'Firefox/Zen', 'ok': False, 'optional': False, 'thorough_only': True,
+                   'detail': 'missing', 'action': 'Install Firefox.'}
         with patch.object(tk.Tk,'mainloop',smoke),\
-             patch('viewing_copy_gui.dependency_diagnostics',return_value=()) as setup:
+             patch('viewing_copy_gui.dependency_diagnostics',side_effect=[(), (missing,), ()]) as setup:
             main()
-        self.assertEqual([call.args[0] for call in setup.call_args_list],['quick','quick','quick'])
+        self.assertEqual([call.args[0] for call in setup.call_args_list],['quick','thorough','quick'])
 
     def test_settings_remain_editable_after_selection_and_back_from_review(self):
         import tkinter as tk
@@ -147,7 +184,7 @@ class ViewingCopyGuiTests(unittest.TestCase):
                     self.assertTrue(predicate())
                 widgets=list(descendants(root))
                 buttons={str(child['text']).rstrip('…'):child for child in widgets if isinstance(child,ttk.Button)}
-                choose, review_button, setup_button = (buttons[label] for label in ('Choose files','Review batch','Check setup'))
+                choose, review_button, setup_button = (buttons[label] for label in ('Choose files','Review and run','Check setup'))
                 profile,optimizer=[child for child in widgets if isinstance(child,ttk.Combobox) and (PROFILE_LABELS['quick'] in child['values'] or OPTIMIZER_LABELS['adaptive'] in child['values'])]
                 worker=next(child for child in widgets if isinstance(child,ttk.Spinbox))
                 parallel=next(child for child in widgets if isinstance(child,ttk.Checkbutton))
@@ -208,11 +245,14 @@ class ViewingCopyGuiTests(unittest.TestCase):
                 positions=[]
                 def close_review():
                     dialog=root.winfo_children()[0]
-                    positions.append((dialog.winfo_x(),dialog.winfo_y()))
+                    controls = dialog.winfo_children()[-1]
+                    labels = [button['text'] for button in controls.winfo_children()]
+                    positions.append((dialog.winfo_x(),dialog.winfo_y(),labels))
                     dialog.tk.call(dialog.protocol('WM_DELETE_WINDOW'))
                 root.after(50,close_review)
-                self.assertFalse(review_jobs(root,'Review sample.pdf'))
-                self.assertEqual(positions,[(root.winfo_x()+28,root.winfo_y()+28)])
+                self.assertFalse(review_jobs(root,'Review sample.pdf',can_start=x == 80))
+                self.assertEqual(positions[0][:2],(root.winfo_x()+28,root.winfo_y()+28))
+                self.assertEqual(positions[0][2],['Back to settings','Start batch'] if x == 80 else ['Back to settings'])
         finally:
             root.destroy()
 
@@ -220,31 +260,44 @@ class ViewingCopyGuiTests(unittest.TestCase):
     def test_batch_summary_shows_saved_paths_and_opens_their_folders(self):
         import tkinter as tk
         from tkinter import ttk
-        from unittest.mock import call, patch
+        from unittest.mock import patch
         from viewing_copy_gui import batch_dialog
 
-        root=tk.Tk()
-        outputs=(Path(r'C:\Example\First folder\copy.pdf'),Path(r'C:\Example\Second folder\copy.pdf'))
-        shown=[]
+        root = tk.Tk()
+        outputs = (Path(r'C:\Example\First folder\copy.pdf'), Path(r'C:\Example\Second folder\copy.pdf'))
+        jobs = (Job(Path('first.pdf'), outputs[0], None, 'optimized'),
+                Job(Path('second.pdf'), outputs[1], None, 'no improvement', 'The candidate was not smaller.'),
+                Job(Path('blocked.pdf'), None, None, 'rejected', 'Try Direct for this file.'))
+        shown = []
         def inspect_summary():
-            dialog=root.winfo_children()[0]
+            dialog = root.winfo_children()[0]
             try:
-                text=next(child for frame in dialog.winfo_children() for child in frame.winfo_children()
-                          if isinstance(child,tk.Text))
+                text = next(child for frame in dialog.winfo_children() for child in frame.winfo_children()
+                            if isinstance(child, tk.Text))
                 shown.append(text.get('1.0','end'))
-                for button in text.winfo_children():
-                    if isinstance(button,ttk.Button) and button['text']=='Open folder':
-                        button.invoke()
+                buttons = {str(button['text']): button for frame in text.winfo_children()
+                           for button in frame.winfo_children() if isinstance(button, ttk.Button)}
+                buttons['Open folder'].invoke()
+                buttons['Open report'].invoke()
+                buttons['Copy path'].invoke()
+                shown.append(buttons['Copy path']['text'])
             finally:
                 dialog.destroy()
         try:
-            with patch('viewing_copy_gui.os.startfile') as open_folder:
+            with patch('viewing_copy_gui.os.startfile') as open_folder, \
+                 patch('viewing_copy_gui.subprocess.Popen') as open_report, \
+                 patch.object(tk.Toplevel, 'clipboard_clear'), \
+                 patch.object(tk.Toplevel, 'clipboard_append') as copy:
                 root.after(100,inspect_summary)
-                batch_dialog(root,'Copies saved: 2',saved_paths=outputs)
-                self.assertEqual(open_folder.call_args_list,[call(str(output.parent)) for output in outputs])
-            self.assertIn('Copies saved: 2',shown[0])
-            self.assertIn('Saved locations',shown[0])
-            for output in outputs:self.assertIn(str(output),shown[0])
+                batch_dialog(root, 'Copies saved: 1\nReports only: 1', jobs=jobs)
+                open_folder.assert_called_once_with(str(outputs[0].parent))
+                self.assertEqual(open_report.call_args.args[0][1], str(outputs[1].with_suffix('.md')))
+                copy.assert_called_once_with(str(outputs[1].with_suffix('.md')))
+            for visible in ('first.pdf', 'second.pdf', 'blocked.pdf', 'Keep using the original.',
+                            'The candidate was not smaller.', 'Try Direct for this file.',
+                            str(outputs[0]), str(outputs[1].with_suffix('.md'))):
+                self.assertIn(visible, shown[0])
+            self.assertEqual(shown[1], 'Copied')
         finally:
             root.destroy()
 
@@ -296,8 +349,8 @@ class ViewingCopyGuiTests(unittest.TestCase):
             quick=plan_batch([source],profile='quick')[0]
             self.assertEqual(quick.profile,'quick');self.assertEqual(quick.optimizer,'adaptive')
             text=confirmation_text((quick,))
-            self.assertIn('Direct optimization',text)
-            self.assertIn('Direct checks preservation without measuring viewing speed.',text)
+            self.assertIn('Direct (recommended)',text)
+            self.assertIn('Direct saves a smaller copy if it passes preservation checks.',text)
             self.assertNotIn('PDFium verification RAM',text)
             _save_job(replace(quick,status='running'))
             self.assertEqual(json.loads(quick.output.with_suffix('.checkpoint').joinpath('job.json').read_text())['schema'],2)
@@ -343,7 +396,7 @@ class ViewingCopyGuiTests(unittest.TestCase):
             results = BatchController(jobs, runner=runner).run()
             self.assertEqual([job.status for job in results], ['failed', 'no improvement'])
             self.assertEqual(results[0].error, 'Verification failed: Renderer stopped')
-            self.assertIsNone(results[1].error)
+            self.assertEqual(results[1].error, 'Candidate was not smaller')
             self.assertEqual(json.loads(jobs[0].targets[1].read_text())['status'], 'no improvement')
 
     def test_incremental_pdf_review_shows_thorough_option_and_report_policy(self):
@@ -469,7 +522,7 @@ class ViewingCopyGuiTests(unittest.TestCase):
             try:
                 wait_for(lambda:buttons['Choose files'].instate(['!disabled']))
                 buttons['Choose files'].invoke()
-                buttons['Review batch'].invoke()
+                buttons['Review and run'].invoke()
                 wait_for(lambda:0<progress['value']<1)
                 self.assertEqual(progress['maximum'],2)
                 stage=progress['value']
@@ -486,7 +539,8 @@ class ViewingCopyGuiTests(unittest.TestCase):
                 wait_for(lambda:progress['value']==2)
                 wait_for(lambda:summary.called)
                 self.assertIn('Copies saved: 1',summary.call_args.args[1])
-                self.assertEqual(summary.call_args.kwargs['saved_paths'],tuple(saved))
+                self.assertEqual(summary.call_args.kwargs['jobs'][0].output, saved[0])
+                self.assertEqual(summary.call_args.kwargs['jobs'][1].status, 'no improvement')
             finally:
                 for gate in (page_ready,publication_ready,result_ready,second_ready,finish):gate.set()
                 root.tk.call(root.protocol('WM_DELETE_WINDOW'))
@@ -577,7 +631,7 @@ class ViewingCopyGuiTests(unittest.TestCase):
             self.assertLess(text.index('Candidate generation: parallel'),text.index('Files and outputs'))
             self.assertLess(text.index(str(first)), text.index(str(second)))
             self.assertIn(f'Source: {first}',text)
-            self.assertIn(f'Save copy to: {jobs[0].output}',text)
+            self.assertIn(f'Planned copy location: {jobs[0].output}',text)
             self.assertIn('Candidate generation: parallel',text)
             self.assertEqual([job.source for job in plan_batch([second, first])],
                              [second.absolute(), first.absolute()])
@@ -759,14 +813,22 @@ class ViewingCopyGuiTests(unittest.TestCase):
                 self.assertEqual([item.status for item in results], ["no improvement", "skipped"])
                 self.assertEqual(controller.launches, 1)
 
-    def test_inspect_button_inspects_drawing_opportunities(self):
+    def test_inspect_button_can_review_the_same_pdf_and_rejects_a_stale_report(self):
         import tkinter as tk
         from tkinter import ttk
         from unittest.mock import patch
         from viewing_copy_gui import main
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
             source = Path(folder) / 'source.pdf'
+            pending = Path(folder) / 'pending.pdf'
             make_pdf(source)
+            make_pdf(pending)
+            reviews, errors = [], []
+
+            def review(_root, text, *, can_start):
+                self.assertTrue(can_start)
+                reviews.append(text)
+                return False
 
             def smoke(root):
                 root.withdraw()
@@ -776,51 +838,94 @@ class ViewingCopyGuiTests(unittest.TestCase):
                             yield child
                             yield from descendants(child)
 
-                    deadline = time.monotonic() + 3
-                    inspect_btn = None
-                    while time.monotonic() < deadline:
-                        root.update()
-                        time.sleep(0.01)
-                        inspect_btn = next((child for child in descendants(root)
-                                           if isinstance(child, ttk.Button) and 'Inspect PDF' in str(child['text'])), None)
-                        if inspect_btn and inspect_btn.instate(['!disabled']):
-                            break
-                    self.assertIsNotNone(inspect_btn)
-                    self.assertTrue(inspect_btn.instate(['!disabled']))
+                    def wait_for(condition):
+                        deadline = time.monotonic() + 5
+                        while not condition() and time.monotonic() < deadline:
+                            root.update()
+                            time.sleep(.01)
+                        self.assertTrue(condition(), log.get('1.0', 'end'))
 
-                    log = next(child for child in descendants(root) if isinstance(child, tk.Text))
+                    widgets = list(descendants(root))
+                    buttons = {str(child['text']): child for child in widgets if isinstance(child, ttk.Button)}
+                    log = next(child for child in widgets if isinstance(child, tk.Text))
+                    inspect_btn = buttons['Inspect PDF…']
+                    inspection_review = buttons['Review inspected PDF…']
+                    regular_review = buttons['Review and run…']
+                    self.assertEqual(inspection_review.winfo_manager(), '')
+                    wait_for(lambda: inspect_btn.instate(['!disabled']))
+                    buttons['Choose files…'].invoke()
                     inspect_btn.invoke()
 
-                    deadline = time.monotonic() + 3
-                    while time.monotonic() < deadline:
-                        root.update()
-                        time.sleep(0.01)
-                        if 'Drawing Opportunity Inspection' in log.get('1.0', 'end'):
-                            break
+                    wait_for(lambda: inspection_review.instate(['!disabled']))
+                    self.assertEqual(inspection_review.winfo_manager(), 'grid')
                     log_content = log.get('1.0', 'end')
                     self.assertIn('Drawing Opportunity Inspection', log_content)
                     self.assertIn('Status: NO SUPPORTED OPPORTUNITY', log_content)
                     self.assertIn('Explanation: Document contains no vector drawing operations.', log_content)
                     self.assertIn('Pages: 1 total', log_content)
+
+                    inspection_review.invoke()
+                    wait_for(lambda: len(reviews) == 1)
+                    self.assertIn('1 page inspected, 0 with drawing opportunities.', reviews[0])
+                    self.assertIn(str(source), reviews[0])
+                    self.assertNotIn(str(pending), reviews[0])
+                    self.assertEqual(set(Path(folder).iterdir()), {source,pending})
+
+                    writer=PdfWriter()
+                    writer.add_blank_page(width=61, height=60)
+                    writer.write(source)
+                    inspection_review.invoke()
+                    wait_for(lambda: bool(errors))
+                    self.assertIn('changed since inspection', errors[0])
+                    self.assertEqual(len(reviews), 1)
+
+                    regular_review.invoke()
+                    wait_for(lambda: len(reviews) == 2)
+                    self.assertIn(str(pending), reviews[1])
+                    self.assertNotIn('Drawing inspection', reviews[1])
+                    self.assertEqual(set(Path(folder).iterdir()), {source,pending})
                 finally:
                     root.tk.call(root.protocol('WM_DELETE_WINDOW'))
 
             with patch.object(tk.Tk, 'mainloop', smoke), \
                  patch('viewing_copy_gui.dependency_diagnostics', return_value=()), \
+                 patch('viewing_copy_gui.review_jobs', side_effect=review), \
+                 patch('tkinter.messagebox.showerror', side_effect=lambda _title, message, **_kw: errors.append(message)), \
+                 patch('tkinter.messagebox.askyesno', return_value=False), \
+                 patch('tkinter.filedialog.askopenfilenames', return_value=(str(pending),)), \
                  patch('tkinter.filedialog.askopenfilename', return_value=str(source)):
                 main()
 
-    def test_inspect_formats_numeric_line_widths_without_crashing_event_loop(self):
+    def test_inspection_worker_bounds_large_line_width_inventory(self):
+        from unittest.mock import MagicMock, patch
+        from viewing_copy_gui import inspect_in_worker
+
+        widths=[str(index) for index in range(12_000)]
+        report={'source_sha256':'1'*64,'inventory':{'local_widths':widths},
+                'first_supported_subset':{},'denominator_tracking':{}}
+        messages=MagicMock()
+        with patch('experiment_manifest.analyze_drawing_opportunity',return_value=report):
+            inspect_in_worker('generated.pdf',messages)
+
+        messages.send.assert_called_once()
+        kind,summary=messages.send.call_args.args[0]
+        self.assertEqual(kind,'inspection complete')
+        self.assertEqual(summary['inventory'],{
+            'line_width_summary':'0, 1, 2, 3, 4, 5, 6, 7… (12,000 distinct widths)',
+        })
+
+    def test_inspect_shows_overall_progress_until_report_is_ready(self):
         import tkinter as tk
         from tkinter import ttk
-        from unittest.mock import patch
+        from unittest.mock import MagicMock, patch
         from viewing_copy_gui import main
         mock_report = {
+            'source_sha256': '1'*64,
             'inventory': {
                 'multi_vertex_stroked_paths': 5, 'two_point_segments': 2, 'curves': 0,
                 'variable_width_runs': 0, 'filled_outlines': 0, 'image_stamps': 0, 'annotations': 0,
                 'raster_content': {'image_calls': 0, 'unique_images': 0},
-                'local_widths': [0.5, 1.0, 2.5],
+                'line_width_summary': '0.5, 1.0, 2.5',
                 'point_counts': 12, 'paint_calls': 3,
             },
             'first_supported_subset': {
@@ -829,10 +934,30 @@ class ViewingCopyGuiTests(unittest.TestCase):
                 'skip_reasons': {'device_dependent_hairlines': 0},
             },
             'denominator_tracking': {
-                'total_pages': 1, 'pages_with_supported_opportunity': 1,
-                'pages_raster_only': 0, 'pages_already_efficient': 0, 'pages_unsupported_or_no_op': 0,
+                'total_pages': 2, 'pages_with_supported_opportunity': 1,
+                'pages_raster_only': 0, 'pages_already_efficient': 0, 'pages_unsupported_or_no_op': 1,
             },
         }
+        start_pages = threading.Event()
+        finish_pages = threading.Event()
+        finish_report = threading.Event()
+
+        def inspection_events():
+            if not start_pages.wait(5):
+                raise RuntimeError('Inspection test did not start the page scan.')
+            yield 'inspection progress', (0, 2)
+            yield 'inspection progress', (1, 2)
+            if not finish_pages.wait(5):
+                raise RuntimeError('Inspection test did not finish the page scan.')
+            yield 'inspection progress', (2, 2)
+            if not finish_report.wait(5):
+                raise RuntimeError('Inspection test did not finish the report.')
+            yield 'inspection complete', mock_report
+
+        worker, messages = MagicMock(), MagicMock()
+        worker.is_alive.return_value = False
+        messages.recv.side_effect = inspection_events()
+
         with tempfile.TemporaryDirectory() as folder:
             source = Path(folder) / 'drawing.pdf'
             make_pdf(source)
@@ -853,7 +978,35 @@ class ViewingCopyGuiTests(unittest.TestCase):
                         if inspect_btn and inspect_btn.instate(['!disabled']):
                             break
                     log = next(child for child in descendants(root) if isinstance(child, tk.Text))
+                    bar = next(child for child in descendants(root) if isinstance(child, ttk.Progressbar))
                     inspect_btn.invoke()
+                    self.assertEqual(str(bar['mode']), 'indeterminate')
+                    self.assertEqual(float(bar['maximum']), 100)
+                    start_pages.set()
+                    deadline = time.monotonic() + 3
+                    while time.monotonic() < deadline:
+                        root.update(); time.sleep(0.01)
+                        if 'Inspecting page 2 of 2' in root.title():
+                            break
+                    self.assertEqual(str(bar['mode']), 'determinate')
+                    self.assertEqual(float(bar['maximum']), 100)
+                    self.assertIn('Inspecting page 2 of 2', root.title())
+                    midpoint = float(bar['value'])
+                    self.assertTrue(0 < midpoint < 100)
+                    labels = [root.getvar(str(child['textvariable'])) for child in descendants(root)
+                              if isinstance(child, ttk.Label) and child['textvariable']]
+                    self.assertIn(f'Overall inspection · {int(midpoint)}% (approx.)', labels)
+                    self.assertTrue(any(label.startswith('Inspection elapsed: ') for label in labels))
+                    finish_pages.set()
+                    deadline = time.monotonic() + 3
+                    while time.monotonic() < deadline:
+                        root.update(); time.sleep(0.01)
+                        if 'Finishing drawing inspection' in root.title():
+                            break
+                    self.assertIn('Finishing drawing inspection', root.title())
+                    self.assertTrue(midpoint < float(bar['value']) < 100)
+                    self.assertNotIn('Drawing Opportunity Inspection', log.get('1.0', 'end'))
+                    finish_report.set()
                     deadline = time.monotonic() + 3
                     while time.monotonic() < deadline:
                         root.update(); time.sleep(0.01)
@@ -862,13 +1015,18 @@ class ViewingCopyGuiTests(unittest.TestCase):
                     log_content = log.get('1.0', 'end')
                     self.assertIn('Declared line widths: 0.5, 1.0, 2.5', log_content)
                     self.assertIn('Status: SUPPORTED DRAWING OPPORTUNITY', log_content)
+                    self.assertEqual(float(bar['value']), 100)
+                    self.assertTrue(inspect_btn.instate(['!disabled']))
                 finally:
+                    start_pages.set()
+                    finish_pages.set()
+                    finish_report.set()
                     root.tk.call(root.protocol('WM_DELETE_WINDOW'))
 
             with patch.object(tk.Tk, 'mainloop', smoke), \
                  patch('viewing_copy_gui.dependency_diagnostics', return_value=()), \
                  patch('tkinter.filedialog.askopenfilename', return_value=str(source)), \
-                 patch('experiment_manifest.analyze_drawing_opportunity', return_value=mock_report):
+                 patch('viewing_copy_gui.start_inspection', return_value=(worker,messages)):
                 main()
 
 

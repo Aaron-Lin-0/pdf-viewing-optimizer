@@ -9,6 +9,17 @@ Run the bundled [optimizer](scripts/optimize_pdf.py) locally on user-specified P
 
 ## Inputs and outputs
 
+The separate opt-in `--viewing-copy --viewing-profile bitmap --study-paper letter
+--study-dpi 300` creates experimental raster study copies. Use it only when the user
+explicitly accepts finite-resolution images and flattened visible layers. Paper is
+`letter` or `source`; DPI is 300/450/600. Add `--study-flatten-text` only when the
+user accepts losing text search, selection, copying and OCR in the study copy.
+Annotations, forms/links, hidden layers and positional bookmarks remain unsupported.
+Flat and nested Fit bookmarks, labels, attachments and metadata are retained. Reports establish
+saved-image integrity, not mathematical meaning or viewing speed. Human review
+remains necessary. Exact-mode preservation and benchmark descriptions below do
+not apply to bitmap mode; never use it as an automatic fallback.
+
 - Accept local paths, available PDF attachments, and local `file:///` URLs. Decode URL escapes such as `%20`; on Windows, a file URL's `System.Uri.LocalPath` gives the filesystem path. Quote paths containing spaces.
 - Process the files the user names, or the PDF files in a folder they explicitly select for batch processing. If the intended files are unclear, ask for the missing paths.
 - Use the user's requested output folder, or the current task's designated deliverables folder. Pass an explicit output path to the optimizer. Viewing copies use `NAME.viewing.pdf` plus `.json`/`.md` reports. Legacy default filenames are `NAME.optimized.pdf`; use a new numbered name if that path already exists, including collisions between inputs with the same basename.
@@ -35,6 +46,11 @@ Link each successful optimized copy and report its original/output sizes, percen
 Describe the check as identical rendering at 144 DPI in PDFium, not a guarantee for every renderer, zoom level, or interactive state. Do not promise faster Firefox scrolling: unique handwriting strokes remain, and speed must be measured separately.
 
 ## Viewing-copy mode
+
+With `--viewing-copy --viewing-profile quick`, adaptive Direct can verify a
+temporary current-revision snapshot for supported NeoPdf index warnings and
+incremental saves. Final preservation checks still use the original PDF. The
+original keeps its save history. The report records the snapshot proof and hashes.
 
 Use an explicit output path in the current deliverables folder and run one document
 at a time. Add `--viewing-copy` without other mode flags. `--parallel-candidates`

@@ -313,6 +313,23 @@ class QuickLosslessTests(unittest.TestCase):
 
 
 class DirectOptimizationTests(unittest.TestCase):
+    def test_construction_retains_original_decimal_operands(self):
+        from decimal import Decimal
+        from lossless_verify import _ExactFloat, strict_reader
+        from pdf_runtime import RunBudget
+        from quick_lossless import direct_candidate
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);source=root/'source.pdf'
+            value='100.1234567890123456789'
+            with PdfWriter() as writer:
+                page=writer.add_blank_page(100,100)
+                page['/MediaBox'][2]=_ExactFloat(value)
+                writer.write(source)
+            candidate,_=direct_candidate(source,root,qpdf_identity(),RunBudget(),
+                                          lambda name, operation:operation(),{})
+            with strict_parsing(),strict_reader(candidate) as reader:
+                self.assertEqual(reader.pages[0]['/MediaBox'][2].exact_decimal,Decimal(value))
+
     def setUp(self):
         from test_inline_handwriting import fixture
         self.temp=tempfile.TemporaryDirectory(dir=Path(__file__).parent);self.addCleanup(self.temp.cleanup)

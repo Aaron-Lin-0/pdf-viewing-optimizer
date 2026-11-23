@@ -142,7 +142,8 @@ class ComparisonSafetyTests(unittest.TestCase):
                 comparison.save_json(root/'slow.json', {})
 
     def test_interrupted_record(self):
-        with tempfile.TemporaryDirectory() as tmp, patch.object(comparison.time, 'sleep', side_effect=KeyboardInterrupt):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(comparison, 'time', wraps=comparison.time) as clock:
+            clock.sleep.side_effect = KeyboardInterrupt
             with self.assertRaises(KeyboardInterrupt):
                 comparison.run_process([sys.executable, '-c', 'import time;time.sleep(60)'], Path(tmp), 'interrupt')
             self.assertEqual(json.loads((Path(tmp)/'interrupt.json').read_text())['status'], 'interrupted')

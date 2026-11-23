@@ -6,7 +6,7 @@ import tempfile
 import unittest
 import json
 import shutil
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 sys.path[:0]=[str(Path(__file__).resolve().parents[1]),str(Path(__file__).resolve().parent)]
 from pypdf import PdfReader,PdfWriter
 from pypdf.generic import ArrayObject,DictionaryObject,NameObject,NumberObject,TextStringObject,DecodedStreamObject
@@ -222,6 +222,21 @@ class ViewingTests(unittest.TestCase):
         with patch('viewing_copy.subprocess.Popen',return_value=Child()):
             with self.assertRaisesRegex(ValueError,'missing result'):
                 verify_pdfjs('source.pdf','candidate.pdf',1,workers=1,node='node')
+
+    def test_pdfjs_screen_collects_pixel_rejections_and_still_raises_for_engine_errors(self):
+        from verification_worker import AppearanceMismatch
+        child = Mock()
+        child.returncode=0
+        mismatch={'page':1,'ok':False,'exact':False,'peak':1}
+        child.communicate.return_value=(json.dumps(mismatch), '')
+        with patch('viewing_copy.subprocess.Popen',return_value=child):
+            self.assertEqual(verify_pdfjs('source.pdf','candidate.pdf',1,workers=1,node='node',
+                                         collect_mismatches=True),[mismatch])
+            with self.assertRaises(AppearanceMismatch):
+                verify_pdfjs('source.pdf','candidate.pdf',1,workers=1,node='node')
+            child.communicate.return_value=(json.dumps({'page':1,'error':'decoder failed'}), '')
+            with self.assertRaisesRegex(ValueError,'decoder failed'):
+                verify_pdfjs('source.pdf','candidate.pdf',1,workers=1,node='node',collect_mismatches=True)
 
     def test_pdfjs_heap_failure_retries_every_page_in_fresh_process(self):
         class Child:
@@ -458,6 +473,12 @@ class ViewingTests(unittest.TestCase):
                  patch('pymupdf.open',side_effect=ValueError('packing unavailable')):
                 with contextlib.redirect_stdout(io.StringIO()):
                     optimize_viewing(source,first,checkpoint=checkpoint)
+                    final_stages=[row['stage'].split(' (',1)[0] for row in
+                                  json.loads(first.with_suffix('.json').read_text())['stages']
+                                  if row['stage'].startswith('final acceptance:')]
+                    self.assertEqual(final_stages,['final acceptance: PDF.js pages',
+                                                   'final acceptance: print and detail',
+                                                   'final acceptance: browser navigation'])
                     optimize_viewing(source,second,checkpoint=checkpoint)
                     with patch('viewing_copy.verify_pdfjs',side_effect=ValueError('heap limit')):
                         failed=Path(folder)/'failed.pdf'

@@ -208,6 +208,8 @@ def characterize_page(reader, page, page_number):
     escaped_names = set()
     active = set()
     cache = {}
+    checked_resources = {}
+    empty_resources = {}
     paint = hashlib.sha256()
     state = {'expanded': 0}
 
@@ -233,19 +235,22 @@ def characterize_page(reader, page, page_number):
             issue('Form nesting exceeds 64 levels')
             return
         try:
-            resources = resolve(resources or {})
+            resources = resolve(resources or empty_resources)
             key = identity(getattr(stream, 'indirect_reference', None), stream)
             stream_operations = operations(stream, key)
         except Exception as exc:
             issue(f'{scope} content unavailable: {type(exc).__name__}: {exc}')
             return
-        for resource_type in ('/XObject', '/ExtGState', '/Properties'):
-            try:
-                for name in resolve(resources.get(resource_type, {})):
-                    if unsafe_name(name):
-                        escaped_names.add(str(name))
-            except Exception as exc:
-                issue(f'{scope} {resource_type} unavailable: {type(exc).__name__}: {exc}')
+        resource_key = scope, id(resources)
+        if resource_key not in checked_resources:
+            checked_resources[resource_key] = resources
+            for resource_type in ('/XObject', '/ExtGState', '/Properties'):
+                try:
+                    for name in resolve(resources.get(resource_type, {})):
+                        if unsafe_name(name):
+                            escaped_names.add(str(name))
+                except Exception as exc:
+                    issue(f'{scope} {resource_type} unavailable: {type(exc).__name__}: {exc}')
         graphics_stack = []
         opacity = {} if opacity is None else opacity
         supported_transform = check_transform_support(ctm)[0]
@@ -532,6 +537,18 @@ def outline_inventory(reader):
     return {'count': count, 'maximum_depth': max_depth, 'resolved_destinations': destinations}
 
 
+def document_images(pages):
+    image_counts = Counter()
+    image_calls = 0
+    for page in pages:
+        for definition in page['images']['definitions']:
+            image_counts[definition['signature']] += 1
+            image_calls += definition['calls']
+    return {'calls': image_calls, 'unique_decoded_definitions': len(image_counts),
+            'repeated_definitions': sum(count > 1 for count in image_counts.values()),
+            'repeated_calls': max(0, image_calls - len(image_counts))}
+
+
 def document_inventory(reader, pages):
     root = reader.trailer['/Root']
     issues = []
@@ -581,12 +598,6 @@ def document_inventory(reader, pages):
     except Exception as exc:
         navigation = None
         navigation_status = f'failed: {type(exc).__name__}: {exc}'
-    image_counts = Counter()
-    image_calls = 0
-    for page in pages:
-        for definition in page['images']['definitions']:
-            image_counts[definition['signature']] += 1
-            image_calls += definition['calls']
     return {
         'coverage': 'partial' if issues or text['failed_pages'] else 'complete',
         'issues': issues, 'text': text, 'bookmarks': bookmarks, 'page_labels': labels,
@@ -598,23 +609,29 @@ def document_inventory(reader, pages):
         'actions': {'catalog_open_action': '/OpenAction' in root,
                     'annotation_actions': sum(page['annotations']['actions'] for page in pages)},
         'links': {'count': sum(len(page['annotations']['links']) for page in pages)},
-        'images': {'calls': image_calls, 'unique_decoded_definitions': len(image_counts),
-                   'repeated_definitions': sum(count > 1 for count in image_counts.values()),
-                   'repeated_calls': max(0, image_calls - len(image_counts))},
+        'images': document_images(pages),
         'navigation_fingerprint': navigation, 'navigation_status': navigation_status,
     }
 
 
-def characterize(path):
+def characterize(path, *, drawing_only=False, progress=None):
     path = Path(path)
     before = filehash(path)
     with reader_for(path) as reader:
         validate_input(reader)
-        pages = [characterize_page(reader, page, page_number)
-                 for page_number, page in enumerate(reader.pages, 1)]
-        document = document_inventory(reader, pages)
+        total = len(reader.pages)
+        if progress is not None:
+            progress(0, total)
+        pages = []
+        for page_number, page in enumerate(reader.pages, 1):
+            pages.append(characterize_page(reader, page, page_number))
+            if progress is not None:
+                progress(page_number, total)
+        document = None if drawing_only else document_inventory(reader, pages)
     if filehash(path) != before:
         raise ValueError('Source changed during characterization.')
+    if drawing_only:
+        return {'source_sha256': before, 'pages': pages, 'document': {'images': document_images(pages)}}
     complete = sum(page['coverage'] == 'complete' for page in pages)
     return {
         'schema': 2, 'source_sha256': before, 'bytes': path.stat().st_size,

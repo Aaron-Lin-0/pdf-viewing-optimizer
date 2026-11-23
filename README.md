@@ -6,18 +6,54 @@ Supports vector, bitmap/scanned and mixed PDFs. BOOX handwriting has dedicated o
 
 Original files and existing output/report files are never overwritten. No personal PDFs are included in this repository; tests generate their own fixtures.
 
+## Start here on Windows
+
+1. Download the Windows ZIP from [GitHub Releases](https://github.com/Aaron-Lin-0/pdf-viewing-optimizer/releases) and choose **Extract All**.
+2. Install Python 3.10 or newer and Node.js 22.13 or newer. Run **Setup Dependencies.cmd** in the extracted folder. Wait for **Setup complete**.
+3. Open **Create Viewing Copies.cmd**. Select **Bitmap study copy (experimental)** for supported notes you primarily read at normal zoom. Leave **Direct (recommended)** selected when you need searchable text, sharp zoom or editable annotations.
+4. Choose your files and select **Review and run…**. Check the planned destinations, then select **Start batch**.
+5. At the end, use **Open folder** to find a saved copy or **Open report** for a reports-only result. If a file did not produce a copy, keep using the original.
+
+| Mode | When to choose it |
+| --- | --- |
+| **Direct (recommended)** | Try to make a smaller copy while keeping searchable text and sharp handwriting. |
+| **Thorough optimization** | Spend longer comparing how quickly copies draw. Requires Firefox or Zen. |
+| **Bitmap study copy (experimental)** | Make a reading copy of supported notes. Start with US Letter at 300 DPI. Zoom and print detail are limited, and the copy can be larger. |
+
+## Experimental bitmap study copies
+
+Choose **Bitmap study copy (experimental)** in the GUI, then choose paper size
+and resolution and review the declared losses. Or run:
+
+```powershell
+.\.venv\Scripts\python.exe optimize_pdf.py input.pdf study.pdf --viewing-copy --viewing-profile bitmap --study-paper letter --study-dpi 300
+```
+
+US Letter fits every page to standard US paper. Choose **Original size**
+(`--study-paper source`) to keep the displayed page dimensions. Start at 300 DPI.
+Higher DPI can help with fine detail and can make larger files. If review flags a
+page as too large, choose US Letter or a lower DPI. Layer switching is lost.
+Compare equations and small marks with the original before using the copy. No meaning or speed guarantee
+is made. For a PDF with fonts or searchable text, explicitly select **Flatten text**
+in Bitmap settings or add `--study-flatten-text`. Visible text becomes pixels and
+the copy loses text search, selection, copying and OCR. Bitmap supports verified
+current-revision snapshots for eligible NeoPdf exports. Annotations, links, forms,
+hidden layers and positional bookmarks remain unsupported. Flat and nested
+whole-page bookmarks, labels, attachments and metadata are retained. See the [contract](docs/design.md).
+Exact Direct and Thorough modes keep their existing behavior.
+
 ## Documentation and main improvement plan
 
-**The main improvement plan is [adaptive optimizer selection](docs/roadmap.md).**
-It defines the next iteration and its ordered milestones. It is a roadmap, not a
-claim that automatic selection across external tools is already available.
+The [current work queue](docs/roadmap.md#current-work-queue) prioritizes Bitmap
+for reading and Direct for exact copies in the Windows beta. Thorough measures
+candidate rendering cost. Vector study advances when measurements identify a
+safe change with enough potential to clear its speed gate.
 
 | Document | Purpose |
 |---|---|
 | [v0.2.0 release notes](docs/release-v0.2.0.md) | Safer large-page verification, reviewed Windows workflow and upgrade notes |
-| [Main roadmap](docs/roadmap.md) | Primary future improvement plan and decision flow |
+| [Roadmap](docs/roadmap.md) | Current work queue, decision gates and milestone history |
 | [Batch workflow ADR](docs/adr-batch-workflow.md) | Implemented GUI/controller boundary and safety invariants |
-| [Contributor instructions](AGENTS.md) | Source map, preservation constraints and delivery rules |
 | [Design](docs/design.md) | Current production transformations and acceptance rules |
 | [Comparison guide](docs/comparison.md) | Existing research runner, setup, measurements and limitations |
 | [Testing](docs/testing.md) | Current verification commands and generated fixtures |
@@ -66,18 +102,19 @@ Independent all-page fidelity to BOOX tablet exports remains open.
 On Windows, open **Create Viewing Copies.cmd** and select one or more PDFs. After each
 picker, choose whether to add PDFs from another folder; canceling a later picker keeps
 the files already selected. Adjust the mode, optimizer, or applicable worker settings
-with the PDFs selected, then choose **Review batch**. Review each source-to-output
+with the PDFs selected, then choose **Review and run…**. Review each source-to-output
 mapping before starting, or choose **Back to settings** to make changes without
 selecting the PDFs again. Leave the window open while they are processed sequentially. Duplicate selections collapse
-to one job. The **Mode** selector defaults to **Direct optimization (no benchmarks)**:
+to one job. The **Mode** selector defaults to **Direct (recommended)**:
 exact supported handwriting inlining, safe deduplication, current-document cleanup
 and one lossless packing step. It retains useful transformations without a candidate
 tournament or rendering-speed benchmarks. A smaller copy must pass geometry,
 navigation, exact all-page PDFium/PDF.js and high-resolution/print/detail checks.
 Live annotations remain editable; unreachable editor/recovery data may be omitted
-from the separate viewing copy. Originals remain intact. Batch review shows
-preflight rejections before processing, including the Thorough option for PDFs
-with incremental revisions. Those rejections produce no report. Jobs that reach
+from the separate viewing copy. For supported NeoPdf exports, Direct verifies a
+temporary snapshot of the current revision before optimizing. Review discloses
+this step, and the original keeps its save history. Batch review shows other
+preflight rejections before processing. Those rejections produce no report. Jobs that reach
 verification write reports for unresolved checks, and verification failures count
 as failures in the batch summary.
 Choose **Thorough optimization** for the existing candidate comparison, rendering
@@ -109,6 +146,10 @@ running setup without that argument installs the full thorough dependencies.
 **Check setup** repeats that check. Keyboard shortcuts are Alt+M for mode, Alt+S for setup, Alt+O for the optimizer, Alt+P to choose PDFs, Alt+R to review the batch, Alt+I to inspect drawing opportunities, Alt+G to
 toggle parallel generation, Alt+T to stop after the current file, and Ctrl+L to focus the activity log. Long mappings are
 shown in a resizable, scrollable review window offset from the main window's current position.
+**Inspect PDF** reads drawing opportunities without creating a copy. It shows
+elapsed time and overall progress, with the current page shown in the status line.
+When inspection finishes, **Review inspected PDF** opens the copy review for that
+file with the inspection summary and the currently selected mode.
 In thorough mode, choose **Verification workers** before review (default: two, or one on a one-CPU
 system). The main window shows available RAM and an estimate. Review shows logical
 CPUs, total and available RAM, and the estimate of 4 GiB plus 0.5 GiB per worker. This is not a
@@ -122,8 +163,9 @@ page checks. The percentage is approximate and reaches 100% when the batch finis
 The completed-file count is exact. The status line shows the active filename and
 stage. The activity log follows new entries when you are at the bottom and
 stays put while you read or select earlier text.
-The final summary lists the saved PDF paths. **Open folder** opens the containing
-folder in Windows File Explorer.
+The final summary explains each file’s outcome. **Open folder** opens a saved PDF’s
+folder in Windows File Explorer. **Open report** opens the readable report for a
+reports-only result. **Copy path** lets you find either file manually.
 
 For the command line:
 
@@ -144,12 +186,14 @@ time still depends on document complexity and preservation checks; it does not
 measure or guarantee faster viewing. Native-browser interaction qualification is
 still pending in this environment; direct jobs do not launch a browser.
 
-Incremental revision histories, encryption/signatures, XFA, parser/tool warnings
+Adaptive Direct can prepare supported NeoPdf exports with incremental saves or the
+recognized index warning. Encryption, signatures, XFA, other parser/tool warnings
 and unresolved preservation prevent publication. Direct mode checks the current
-document; unreachable editor/recovery objects may be omitted. To retain all
+document. Unreachable editor/recovery objects may be omitted. To retain all
 unreferenced objects too, explicitly use `--viewing-optimizer qpdf` with the quick
 profile. That narrower compression-only lane uses strict graph/stream equivalence
-and no page rendering, so it may save substantially less space. Its input/output
+and no page rendering, so it may save substantially less space. It rejects
+incremental histories. Its input/output
 limit is 512 MiB, with bounded object/decoder work. Both lanes retain originals
 and produce reports only when preservation is unresolved or no smaller copy results.
 

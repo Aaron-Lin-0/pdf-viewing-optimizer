@@ -1,14 +1,80 @@
 # Design and acceptance rules
 
 **Scope: current production behavior.** This document defines the existing
-optimizer's transformations and publication gates. The
-[main improvement plan](roadmap.md) describes future adaptive tool selection;
-those proposals do not change these rules. The separate research runner and its
-native Firefox protocol are documented in [comparison.md](comparison.md).
+optimizer's transformations and publication gates. Development priorities and
+research decisions live in the [roadmap](roadmap.md#current-work-queue).
+The separate research runner and its native Firefox protocol are documented in
+[comparison.md](comparison.md).
+
+**Opt-in study-copy work:** on 2026-11-17 the user approved investigating
+bounded appearance changes, point reduction and raster copies for faster reading.
+Each study-copy profile has its own acceptance contract. Study-copy candidates
+must declare geometry, resolution, feature losses, quality coverage and actual
+performance evidence. Visual tolerance does not silently authorize loss of search, navigation, layers
+or protected interactive data. Raster output has finite zoom/print resolution
+and is not lossless preservation of the original drawing representation.
+
+## Experimental bitmap study contract (`bitmap-study-1`)
+
+The CLI profile `bitmap` and GUI **Bitmap study copy (experimental)** create
+finite-resolution images of visible pages. Letter (612 × 792 points) at 300 DPI
+is the initial preset; source-size paper and 450/600 DPI are explicit alternatives.
+Pages fit centrally without stretching or clipping. Source rotation is baked into
+the image, and physical page size accounts for the PDF's page unit. DPI applies
+after fitting, so a large tablet canvas does not silently
+produce a source-size 300-DPI bitmap when Letter was selected. Each page is capped
+at 40 million rendered pixels. Windows batch review checks the selected paper
+and DPI using the rendering geometry before offering to start a job. RGB is
+retained unless all channels are equal;
+images use lossless Flate transport after raster conversion. The raster pass
+limits the full document to 256 MiB of encoded images and 1 GiB of decoded
+image data. The saved-file verifier also enforces its 512 MiB file limit and
+checks image bytes incrementally.
+The existing reachability cleanup removes original drawing/resource graphs that
+the bitmap pages no longer reference. One qpdf packing pass removes storage gaps;
+all image, placement and retained-feature checks run on those final packed bytes.
+
+By default Bitmap accepts annotation-free, font-free PDFs. **Flatten text**
+(`--study-flatten-text`) explicitly permits rasterizing supported text. Visible
+text becomes pixels and the copy loses text search, selection, copying and OCR.
+Preflight resolves fonts selected by page drawing and graphics state. It supports
+Type 1, Multiple Master Type 1, TrueType and Type 0 fonts with a resolved CID font.
+Forms, links/comments, tagged content, named destinations/actions, positional
+bookmarks, hidden/alternate/automatic layers and optional-content membership
+expressions remain unsupported. Preflight rejects missing drawing resources and
+cycles before rasterization. Flat and nested Fit bookmarks targeting existing
+local pages are supported across exporters. Chained bookmark actions are declined.
+Bookmarks, labels, attachments,
+metadata and private navigation data are cloned and independently compared after
+normalizing the declared geometry and layer changes. All-visible layers flatten;
+layer switching and vector editing/zoom are explicitly lost. Unsupported features
+produce a rejection, without an output PDF. Existing strict input rejection,
+source-hash checks, budgets, exclusive publication and rollback apply.
+
+Bitmap can verify a temporary current-revision snapshot for supported NeoPdf
+index warnings and incremental saves using the same graph/stream proof as
+adaptive Direct. It separately supports the exact paired qpdf warnings for a malformed
+xref-stream terminator and its missing self-entry. A clean temporary snapshot
+copies the entire object region byte-for-byte, then adds the missing xref self-entry
+and terminator. Independent checks require identical object bytes, index bindings
+and trailer values; orphans therefore remain intact. Only unfiltered xref streams
+with the supported layout qualify. All other warnings remain blocking;
+signature and encryption rejection remains in force. The report records the
+original and snapshot hashes, warnings and proof. The original keeps its save history.
+
+Every saved image payload, dimensions and placement program are checked, together
+with qpdf syntax and retained feature signatures. This proves saved-image integrity,
+not mathematical meaning, multi-renderer equivalence or a viewing-speed improvement.
+Reports declare human review pending and performance unmeasured. Copies may be
+larger than the source. Interrupted jobs restart. Schema-4 batch records bind paper,
+DPI, text flattening, source hashes and code/tool identities before completed-result recovery.
+
+Exact profiles use their own policy versions and gates. Vector study and any
+strength control are conditional research in the [roadmap](roadmap.md#current-work-queue).
 
 ## Direct profile (CLI token: quick)
 
-The GUI and drag-and-drop launcher default to **Direct optimization (no benchmarks)**.
+The GUI and drag-and-drop launcher default to **Direct (recommended)**.
 Existing CLI/API callers retain thorough behavior unless they select
 `--viewing-profile quick` / `viewing_profile='quick'`. The objective is to retain
 useful transformations and storage savings without exhaustive comparisons or speed
@@ -23,18 +89,33 @@ images. Unreachable editor/recovery objects may be omitted from this separate
 viewing copy; the original remains intact. Reachable private data, interactive
 identities and navigation retain the established preservation checks.
 
+For NeoPdf exports that trigger the recognized cross-reference warning or have
+incremental saves, adaptive Direct can first make a temporary current-revision
+snapshot. Review discloses this step. Clean qpdf checks and an exact comparison
+of the current logical objects, reference identities and streams, including
+unreferenced payloads, are required before using the snapshot. Other parser or
+tool warnings, encryption, signature objects and fields, and XFA remain
+blocking. The original retains its revision history. Reports bind the source
+and snapshot hashes and record the preparation proof. Final geometry, navigation,
+rendering and size checks compare the viewing copy against the original input.
+
 The transformed intermediate is packed with qpdf 12.4.2, preserving existing stream
 encodings and unreferenced data in that intermediate. Strict graph/stream equivalence
 must prove packing preserves it. Failed or non-shrinking packing retains the
 transformed copy. This storage step does not create an optimizer tournament.
 
-Direct candidate construction uses one writer. A catalog/metadata/document-ID
-reachability walk removes unreachable graphs, including cycles, before and after
+Direct candidate construction uses one writer and the strict exact-decimal parser
+so saving numeric dictionary operands cannot round coordinates, rectangles,
+matrices or widths. The existing
+strict parser warning policy also applies during construction.
+
+A catalog/metadata/document-ID reachability walk removes unreachable graphs,
+including cycles, before and after
 deduplication. Saved unmerged and merged copies still receive the existing
 navigation/resource comparisons; a failed merge retains the unmerged copy.
 The selected saved bytes are copied exclusively instead of being parsed and
-serialized by a second writer. Input checks and all final preservation gates
-remain unchanged. Thorough candidates retain their existing rebuild path.
+serialized by a second writer. Thorough candidates retain their existing rebuild
+path and final preservation gates.
 
 Inlining discovery skips Forms with no child XObjects before decoding their
 content. Recognized pen Forms select the grouped or separate-segment grammar
@@ -48,8 +129,10 @@ High-resolution/print sampling uses first/middle/last pages; the detail check us
 crop selected from those pages. The direct high-resolution, print and detail
 comparisons share one owned source/candidate PDFium document pair; pages and
 bitmaps are released after each check and both documents close on failure.
-Verification uses at most two workers and releases
-PDFium workers before PDF.js verification. Publication also requires unchanged
+The all-page PDFium workers compare paired strips in memory for Direct's single
+candidate. Verification uses at most two workers and releases PDFium workers
+before PDF.js verification. PDF.js accepts equal pixel buffers immediately and
+uses the existing comparison for differences. Publication also requires unchanged
 source/candidate hashes and exclusive output/report creation with rollback.
 
 No rendering-speed benchmarks, candidate-selection timing or native browser launch
@@ -89,7 +172,7 @@ navigation, layers and attachments participate. Storage exceptions are enumerate
 xref/object-stream layout, permitted document-ID updates and proven lossless
 Flate/ASCII/PNG transport changes. Encoded JPEG/JPX/CCITT data remain exact.
 
-Both direct input preflight and this comparator decline encryption/signatures
+Compression-only input preflight and the default comparator decline encryption/signatures
 (including unreachable signature objects), XFA, incremental history, warnings and
 unaccounted trailing data. Strict comparison bounds include 512 MiB per file,
 500,000 objects, depth 256, 256 MiB per simple decoded stream, 64 MiB per changed
@@ -120,6 +203,11 @@ is blocked while a child or its terminal result is being handled; closing betwee
 jobs skips the remaining queue. The optimizer independently checks the confirmed
 source hash at startup and before publication. The GUI does not implement a separate
 transformation or acceptance path.
+
+After **Inspect PDF**, **Review inspected PDF** uses the same review and run path
+for that file and displays the drawing summary. The planning hash must match the
+completed inspection. The selected mode still determines eligibility, candidate
+selection and acceptance.
 
 The reviewed optimizer selector defaults to the repository's adaptive pipeline.
 It may restrict a run to the bundled qpdf Flate/object-stream candidate or the
@@ -168,9 +256,9 @@ publication; reducing concurrency alone does not resolve retained page caches.
 The GUI displays stage age and reports time and disk budget exhaustion as distinct
 terminal states.
 
-Before selection, the GUI checks the pinned Python packages, Node/PDF.js/canvas
-and bundled qpdf runtime. Thorough PDF browser requirements and optional BOOX
-converter capabilities are checked during review without blocking other input kinds. Blocking
+The GUI checks dependencies for the selected mode. Thorough PDF requirements
+remain visible when missing and are checked again during review. They do not
+block BOOX note conversion. Review checks the optional BOOX converter separately. Blocking
 diagnostics include a local corrective action and never bypass acceptance. Diagnostics
 and PDF planning run on background workers while all pickers, review dialogs and
 widget updates remain on the Tk thread. Settings are snapshotted before planning;
@@ -429,7 +517,7 @@ unified two-stage pipeline:
 
 ## Limits
 
-The optimizer does not promise maximum compression, universal renderer equivalence or faster scrolling. Unique handwriting still requires drawing work. Bitmap content is not resampled or converted to a lossy codec. Unknown content is preserved or rejected conservatively.
+The optimizer does not promise maximum compression, universal renderer equivalence or faster scrolling. Unique vector handwriting still requires drawing work. Exact profiles do not resample bitmap content or use lossy codecs. The opt-in bitmap contract above instead rasterizes visible pages at the declared resolution. Unknown content is preserved or rejected conservatively.
 
 Scripted and XFA forms are unsupported by browser acceptance. External URI/file targets are preserved structurally but are never opened. The tests do not cover every image codec, malformed export, browser extension, zoom or print setting. Windows/Zen is the tested platform; other platforms may require explicit runtime paths.
 

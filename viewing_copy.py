@@ -95,12 +95,13 @@ def verification_resources(requested=None):
 
 
 class VerificationSession:
-    def __init__(self, source, directory, workers, budget=None, revision_evidence=None):
-        from verification_worker import compare_page, render_source
+    def __init__(self, source, directory, workers, budget=None, revision_evidence=None, *, paired=False):
+        from verification_worker import compare_page, compare_paired_page, render_source
         self.source = Path(source).absolute();self.directory = filesystem_path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
         self.reader = reader_for(self.source);self.budget = budget
         self._render_source = render_source;self._compare_page = compare_page
+        self._compare_paired_page = compare_paired_page if paired else None
         self.revision_evidence = revision_evidence
         self.pool = ProcessPoolExecutor(max_workers=workers,
                                         mp_context=multiprocessing.get_context('spawn'))
@@ -129,22 +130,32 @@ class VerificationSession:
                 not allow_edges and scale == 2 and crop is None and not print_mode):
             reused = self.revision_evidence[1].intersection(pages)
             pages = [index for index in pages if index not in reused]
-        source_paths = [self._source_path(index, scale, crop, print_mode) for index in pages]
-        missing = [(index, path) for index, path in zip(pages, source_paths) if not path.exists()]
-        futures = [self.pool.submit(self._render_source,
-                   (str(self.source), index, str(path), scale, crop, print_mode))
-                   for index, path in missing]
         try:
-            for future in futures:
-                future.result(timeout=self.budget.timeout(300) if self.budget else 300)
-                self.stats['source_renders_created'] += 1
-                if self.budget:self.budget.check('source rendering reuse', (self.directory,))
-            self.stats['source_renders_reused'] += len(pages) - len(missing)
-            tasks = [(str(path), str(candidate), index, allow_edges, scale, crop, print_mode)
-                     for index, path in zip(pages, source_paths)]
-            results = [self.pool.submit(self._compare_page, task) for task in tasks]
-            ordered = [future.result(timeout=self.budget.timeout(300) if self.budget else 300)
-                       for future in results]
+            if self._compare_paired_page is not None:
+                # Direct compares one candidate; it can render both strips without saving PNGs.
+                results = [self.pool.submit(self._compare_paired_page,
+                           (str(self.source), str(candidate), index, allow_edges, scale, crop, print_mode))
+                           for index in pages]
+            else:
+                source_paths = [self._source_path(index, scale, crop, print_mode) for index in pages]
+                missing = [(index, path) for index, path in zip(pages, source_paths) if not path.exists()]
+                futures = [self.pool.submit(self._render_source,
+                           (str(self.source), index, str(path), scale, crop, print_mode))
+                           for index, path in missing]
+                for future in futures:
+                    future.result(timeout=self.budget.timeout(300) if self.budget else 300)
+                    self.stats['source_renders_created'] += 1
+                    if self.budget:self.budget.check('source rendering reuse', (self.directory,))
+                self.stats['source_renders_reused'] += len(pages) - len(missing)
+                results = [self.pool.submit(self._compare_page,
+                           (str(path), str(candidate), index, allow_edges, scale, crop, print_mode))
+                           for index, path in zip(pages, source_paths)]
+            ordered = []
+            for future in results:
+                ordered.append(future.result(timeout=self.budget.timeout(300) if self.budget else 300))
+                if self._compare_paired_page is not None:
+                    self.stats['source_renders_created'] += 1
+                    if self.budget:self.budget.check('paired page verification', (self.directory,))
             if len(ordered) != len(pages) or [row.get('page') for row in ordered] != [i + 1 for i in pages]:
                 raise ValueError('Verification worker returned missing or unordered page evidence.')
             if not reused:
@@ -205,11 +216,19 @@ def detail_crop(source,pages):
     return best[1],best[2]
 
 
-def verify_candidate(source,candidate,manifest,allow_edges=False,full=True,session=None):
+def verify_candidate(source,candidate,manifest,allow_edges=False,full=True,session=None,*,_source_reader=None):
+    if allow_edges and (manifest.get('ink_runs') or manifest.get('kind') == 'direct-static'):
+        raise ValueError('Static handwriting requires exact appearance checks.')
     before,after=(session.reader if session else reader_for(source)),reader_for(candidate)
     if before.is_encrypted or len(before.pages)!=len(after.pages):raise ValueError('Protection/page count changed.')
     excluded={int(k):v for k,v in manifest.get('converted',{}).items()}
-    if navigation_fingerprint(before,excluded)!=navigation_fingerprint(after):
+    run_source, run_output = {}, {}
+    if manifest.get('ink_runs'):
+        from annotation_ink import verify_ink_runs
+        from lossless_verify import strict_parsing, strict_reader
+        with strict_parsing(), (_source_reader or strict_reader)(source) as original, strict_reader(candidate) as saved:
+            run_source, run_output = verify_ink_runs(original, saved, manifest)
+    if navigation_fingerprint(before,run_source or excluded)!=navigation_fingerprint(after,run_output):
         raise ValueError('Navigation, retained annotations or catalog data changed; candidate rejected.')
     if manifest.get('consolidated'):verify_consolidated(after,manifest)
     else:verify_flattened(after,manifest.get('evidence',[]))
@@ -246,8 +265,13 @@ def verify_candidate(source,candidate,manifest,allow_edges=False,full=True,sessi
     missing=before.missing_optional_content
     if not session:del before
     del after;gc.collect()
-    return {'exact':exact,'pages':deltas,'normalized_missing_OC':missing,'full':full,
-            'checks':{'navigation':True,'ordered_geometry_and_resources':True,'pdfium_144_dpi':True}}
+    result = {'exact':exact,'pages':deltas,'normalized_missing_OC':missing,'full':full,
+              'checks':{'navigation':True,'ordered_geometry_and_resources':True,'pdfium_144_dpi':True}}
+    if manifest.get('kind') == 'direct-static':
+        result['checks']['source_bound_static_runs'] = True
+        result['static_ink'] = {'converted_strokes': manifest['count'], 'runs': len(manifest['ink_runs']),
+                                'retained_barriers': len(manifest['barriers'])}
+    return result
 
 
 def runtime_node():
@@ -357,11 +381,20 @@ def verify_pdfjs_page(source,candidate,page,allow_edges=False,budget=None,node=N
     if allow_edges:command.append('edges')
     child=_run(command,300,budget,f'PDF.js page {page} acceptance',capture_output=True,text=True,
                creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
-    if child.returncode:raise ValueError(f'PDF.js page {page} changed: '+child.stdout[-500:]+child.stderr[-500:])
+    if child.returncode:
+        rows=child.stdout.strip().splitlines()
+        try:row=json.loads(rows[-1]) if rows else {}
+        except ValueError:row={}
+        if (child.returncode==1 and isinstance(row,dict) and row.get('page')==page and
+                row.get('ok') is False and row.get('exact') is False and not row.get('error') and
+                not child.stderr.strip()):
+            raise verification_worker.AppearanceMismatch(f'PDF.js page {page} changed: '+rows[-1])
+        raise ValueError(f'PDF.js page {page} changed: '+child.stdout[-500:]+child.stderr[-500:])
     return json.loads(child.stdout.strip().splitlines()[-1])
 
 
-def verify_pdfjs(source,candidate,count,allow_edges=False,budget=None,node=None,workers=None,total_pages=None):
+def verify_pdfjs(source,candidate,count,allow_edges=False,budget=None,node=None,workers=None,total_pages=None,*,
+                 collect_mismatches=False):
     if isinstance(count, int):
         page_numbers = list(range(1, count + 1))
         display_total = total_pages or count
@@ -392,8 +425,10 @@ def verify_pdfjs(source,candidate,count,allow_edges=False,budget=None,node=None,
             if 'page' in row:rows.append(row)
         if len(rows)!=len(pages):raise ValueError('PDF.js verification worker returned a missing result.')
         for row in rows:
-            if row.get('error') or not row.get('ok'):
-                raise ValueError(f"PDF.js page {row.get('page')} changed: {row.get('error','appearance guard failed')}")
+            if row.get('error') or type(row.get('ok')) is not bool:
+                raise ValueError(f"PDF.js page {row.get('page')} failed: {row.get('error','invalid comparison result')}")
+            if not row['ok'] and not collect_mismatches:
+                raise verification_worker.AppearanceMismatch(f"PDF.js page {row['page']} changed: appearance guard failed")
         return rows
     try:
         for _group in groups:
@@ -421,7 +456,11 @@ def verify_pdfjs(source,candidate,count,allow_edges=False,budget=None,node=None,
             print('PDF.js worker exhausted memory; retrying all pages in fresh sequential processes.',flush=True)
             records=[]
             for page in page_numbers:
-                row=verify_pdfjs_page(source,candidate,page,allow_edges,budget,node)
+                try:row=verify_pdfjs_page(source,candidate,page,allow_edges,budget,node)
+                except verification_worker.AppearanceMismatch as mismatch:
+                    if not collect_mismatches:raise
+                    records.append({'page':page,'ok':False,'exact':False,'reason':str(mismatch)})
+                    continue
                 if row.get('page')!=page or row.get('error') or not row.get('ok'):
                     raise ValueError(f'PDF.js page {page} failed isolated acceptance.') from exc
                 records.append(row)
@@ -484,18 +523,83 @@ def _prune_unreachable(writer):
         if index+1 not in keep:writer._objects[index]=None
 
 
-def build_candidate(source,destination,kind):
+class NoVerifiedStaticInk(ValueError):
+    """The selective static candidate had no pages eligible for conversion."""
+
+    def __init__(self, message, screen=None):
+        super().__init__(message)
+        self.screen = screen
+
+
+def _static_page_mismatches(source, candidate, changed, budget):
+    rejected = {}
+    with verification_worker.page_comparisons(source,candidate) as compare:
+        for page in changed:
+            if budget:budget.check('static page screen',(candidate.parent,))
+            # Mirror the Direct high-resolution and print scales on changed pages.
+            try:
+                compare(page,allow_edges=False,scale=2)
+                compare(page,allow_edges=False,scale=4)
+                compare(page,allow_edges=False,scale=2,print_mode=True)
+            except verification_worker.AppearanceMismatch as mismatch:
+                rejected[page] = str(mismatch)
+    remaining = [page+1 for page in changed if page not in rejected]
+    from quick_lossless import VERIFICATION_CHUNK_SIZE
+    for start in range(0,len(remaining),VERIFICATION_CHUNK_SIZE):
+        rows = verify_pdfjs(source,candidate,remaining[start:start+VERIFICATION_CHUNK_SIZE],
+                            budget=budget,collect_mismatches=True)
+        rejected.update({row['page']-1:row.get('reason','PDF.js appearance changed.')
+                         for row in rows if not row['ok']})
+    return rejected
+
+
+def build_candidate(source,destination,kind,*,static_page_fallback=False,budget=None):
+    if static_page_fallback and kind != 'direct-static':
+        raise ValueError('Static page fallback requires the static ink recipe.')
     from handwriting import inline_handwriting,rewrite_handwriting,NoSupportedHandwriting
     reader=reader_for(source)
     writer=PdfWriter(clone_from=reader)
     original_pages=[dict(page) for page in writer.pages]
     manifest={'converted':{},'evidence':[],'count':0,'kind':kind}
+    run_source, run_output = {}, {}
+    if kind == 'direct-static':
+        from annotation_ink import compact_ink_runs, verify_ink_runs
+        manifest.update(compact_ink_runs(writer,reader))
+        run_source, run_output = verify_ink_runs(reader, writer, manifest)
+        if static_page_fallback:
+            changed = sorted(run_source)
+            if not changed:
+                writer.close();reader.close()
+                raise NoVerifiedStaticInk('No eligible static handwriting runs.')
+            try:
+                with temporary_directory(prefix='static-screen-',dir=Path(destination).parent) as directory:
+                    trial = Path(directory)/'trial.pdf'
+                    # Retain the original objects until a page's fallback is decided.
+                    with trial.open('xb') as stream:writer.write(stream)
+                    if budget:budget.check('static page screen storage',(Path(directory),))
+                    rejected = _static_page_mismatches(source,trial,changed,budget)
+            except BaseException:
+                writer.close();reader.close()
+                raise
+            for page in rejected:
+                writer.pages[page][NameObject('/Annots')] = original_pages[page]['/Annots']
+            manifest['ink_runs'] = [run for run in manifest['ink_runs'] if run['page'] not in rejected]
+            manifest['count'] = sum(len(run['source_positions']) for run in manifest['ink_runs'])
+            manifest['static_page_screen'] = {
+                'screened_pages': [page+1 for page in changed],
+                'restored': [{'page':page+1,'reason':reason} for page,reason in sorted(rejected.items())],
+            }
+            if not manifest['count']:
+                writer.close();reader.close()
+                raise NoVerifiedStaticInk(f'All {len(changed)} converted pages differed during the exact screen.',
+                                          manifest['static_page_screen'])
+            run_source, run_output = verify_ink_runs(reader,writer,manifest)
     if kind in {'annotations','consolidated','combined'}:
         manifest.update(flatten_ink(writer))
         if not manifest['count']:raise ValueError('No eligible leading BOOX ink annotations.')
         if kind in {'consolidated','combined'}:consolidate_ink(writer,manifest)
         if kind=='combined':inline_handwriting(writer)
-    elif kind in {'inline','batched','direct'}:
+    elif kind in {'inline','batched','direct','direct-static'}:
         if kind=='batched':
             from handwriting import batching_contexts
             contexts=batching_contexts(writer)
@@ -510,16 +614,20 @@ def build_candidate(source,destination,kind):
             except ValueError as exc:
                 raise ValueError(str(exc)+'; '+json.dumps(manifest['batching'],sort_keys=True)) from exc
             manifest['batching'].update(changed_forms=forms,segments=segments,stroke_calls=draws)
-        if kind in {'direct','batched'}:
+        if kind in {'direct','direct-static','batched'}:
             try:
-                forms,parents=inline_handwriting(writer)
+                if kind == 'direct-static':
+                    from handwriting import annotation_appearance_forms
+                    forms,parents=inline_handwriting(writer,excluded_forms=annotation_appearance_forms(writer))
+                else:
+                    forms,parents=inline_handwriting(writer)
                 manifest.update(inlined_form_calls=forms,inlined_containers=parents)
             except NoSupportedHandwriting:
                 manifest.update(inlined_form_calls=0,inlined_containers=0,
                                 inlining_skipped='No supported inlining containers; retain prior transformations, deduplication and cleanup.')
         else:inline_handwriting(writer)
-    baseline_navigation=navigation_fingerprint(reader,{int(k):v for k,v in manifest.get('converted',{}).items()})
-    if kind=='direct':_prune_unreachable(writer)
+    baseline_navigation=navigation_fingerprint(reader,run_source or {int(k):v for k,v in manifest.get('converted',{}).items()})
+    if kind in {'direct','direct-static'}:_prune_unreachable(writer)
     unmerged=Path(destination).with_suffix('.unmerged.pdf')
     writer.write(unmerged)
     if manifest.get('converted'):
@@ -543,7 +651,7 @@ def build_candidate(source,destination,kind):
     # Page snapshots retain their writer (and its source reader) through indirect references.
     original_pages.clear()
     writer.compress_identical_objects(remove_duplicates=True,remove_unreferenced=True)
-    if kind=='direct':_prune_unreachable(writer)
+    if kind in {'direct','direct-static'}:_prune_unreachable(writer)
     # Navigation verification rejects merges of independently interactive identities.
     first=Path(destination).with_suffix('.first.pdf')
     writer.write(first);writer.close();del writer,reader;gc.collect()
@@ -551,26 +659,28 @@ def build_candidate(source,destination,kind):
     merged_reader=unmerged_reader=None
     try:
         merged_reader=reader_for(first)
-        if navigation_fingerprint(merged_reader)!=baseline_navigation:raise ValueError('Protected navigation changed.')
+        if navigation_fingerprint(merged_reader,run_output)!=baseline_navigation:raise ValueError('Protected navigation changed.')
         unmerged_reader=reader_for(unmerged)
         for index in range(len(merged_reader.pages)):
             if page_signature(unmerged_reader,index)!=page_signature(merged_reader,index):raise ValueError('Deduplication altered drawing resources.')
         if manifest.get('consolidated'):verify_consolidated(merged_reader,manifest)
         else:verify_flattened(merged_reader,manifest.get('evidence',[]))
+        if manifest.get('ink_runs'):
+            verify_consolidated(merged_reader,{'consolidated':manifest['ink_runs']})
     except (ValueError,AttributeError,KeyError):
         selected=unmerged
         manifest['deduplication_skipped']='Merging altered protected navigation/identities.'
     finally:
         merged_reader=unmerged_reader=None
         gc.collect()
-    if kind=='direct':
+    if kind in {'direct','direct-static'}:
         with selected.open('rb') as stream,Path(destination).open('xb') as output:
             shutil.copyfileobj(stream,output)
     else:
         with selected.open('rb') as stream:
             rebuilt=PdfWriter(clone_from=reader_for(stream));rebuilt.write(destination);rebuilt.close()
         del rebuilt;gc.collect()
-    if navigation_fingerprint(reader_for(destination))!=baseline_navigation:
+    if navigation_fingerprint(reader_for(destination),run_output)!=baseline_navigation:
         raise ValueError('Deduplication changed protected navigation/identities; candidate rejected.')
     first.unlink()
     unmerged.unlink()
@@ -918,10 +1028,11 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
             report['candidates']=[{k:v for k,v in c.items() if k not in {'path','manifest'}} | {'benchmark_file':Path(c['path']).name,'converted_annotations':c['manifest'].get('count',0),'batching':c['manifest'].get('batching')} for c in valid]
             while chosen:
                 try:
-                    stage(f'final acceptance: {chosen["kind"]}',(Path(temporary),))
+                    stage(f'final acceptance: PDF.js pages ({chosen["kind"]})',(Path(temporary),))
                     acceptance={}
                     acceptance['pdfjs_all_pages']=verify_pdfjs(source,chosen['path'],count,not chosen['exact'],
                                                                budget,node,resources['effective_workers'])
+                    stage(f'final acceptance: print and detail ({chosen["kind"]})',(Path(temporary),))
                     for page in pages:
                         budget.check('high-resolution and print acceptance',(Path(temporary),))
                         page_delta(source,chosen['path'],page-1,not chosen['exact'],4)
@@ -932,7 +1043,7 @@ def optimize_viewing(source,destination,expected_source_sha256=None,checkpoint=N
                     delta=page_delta(source,chosen['path'],detail_page-1,not chosen['exact'],8,crop)
                     acceptance['detail_crop']={'page':detail_page,'crop':crop,'dpi':576,**delta}
                     from browser_check import check_browser
-                    budget.check('browser acceptance',(Path(temporary),))
+                    stage(f'final acceptance: browser navigation ({chosen["kind"]})',(Path(temporary),))
                     acceptance['browser']=check_browser(source,chosen['path'],pages,budget.timeout(1200),source_result=source_browser)
                     report.update(acceptance)
                     break

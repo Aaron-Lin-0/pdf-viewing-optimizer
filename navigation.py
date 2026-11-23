@@ -130,7 +130,8 @@ class Graph:
             return ('null',)
         if not isinstance(obj, (dict, list, tuple)):
             if isinstance(obj,(NumberObject,FloatObject)):
-                return ('number',format(Decimal(str(obj)).normalize(),'f'))
+                value = obj.exact_decimal if hasattr(obj, 'exact_decimal') else Decimal(str(obj))
+                return ('number', value.as_integer_ratio())
             if isinstance(obj, bytes):
                 return ('bytes', hashlib.sha256(obj).hexdigest())
             return (type(obj).__name__, str(obj))

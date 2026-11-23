@@ -1,17 +1,46 @@
-PDF optimizer
+PDF Viewing Optimizer
 
-Extract the ZIP and keep its scripts and launchers together. Originals and
-existing output/report files are never overwritten. Encrypted PDFs and PDFs
-with signatures or signature fields are rejected.
+Start here on Windows
 
-Supports vector, bitmap/scanned, and mixed pages. Image data is preserved without
-resampling or recompression to a lossy format. Drawing-call optimizations target
-recognized BOOX structures; other PDFs can benefit from verified object/storage
-compression, but a smaller file is not necessarily faster to draw.
+1. Download the Windows ZIP from GitHub Releases and choose Extract All.
+2. Install Python 3.10 or newer and Node.js 22.13 or newer. Run
+   Setup Dependencies.cmd in the extracted folder and wait for Setup complete.
+3. Open Create Viewing Copies.cmd. Select Bitmap study copy (experimental) for
+   supported notes you primarily read at normal zoom. Leave Direct (recommended)
+   selected when you need searchable text, sharp zoom or editable annotations.
+4. Choose files, then Review and run. Check the planned destinations, then select Start batch.
+5. Use Open folder for a saved copy or Open report for a reports-only result.
+   If no copy was saved for a file, keep using the original.
 
-Direct optimization (no benchmarks): default Windows and drag-and-drop mode
+Choose a mode
 
-Choose Direct optimization (no benchmarks) in Create Viewing Copies.cmd, or run:
+  Direct (recommended) makes a smaller copy when preservation checks pass.
+  Thorough optimization takes longer to compare how quickly copies draw.
+  It requires Firefox or Zen.
+  Bitmap study copy (experimental) turns supported handwriting or scanned pages
+  into images. Zoom and print detail are limited, and the copy can be larger.
+
+Original PDFs and existing results are protected from overwrites. Keep the
+extracted scripts and launchers together.
+
+Experimental bitmap study copies
+
+Start with US Letter and 300 DPI. Original size keeps the source page dimensions.
+Higher DPI shows finer detail and can make larger files. If review says a page is
+too large, choose US Letter or a lower DPI.
+
+Compare equations and small marks with the original before using the copy.
+For fonts or searchable text, explicitly select Flatten text in the copy or add
+--study-flatten-text. Visible text becomes pixels and the copy loses text search,
+selection, copying and OCR. Links, annotations, forms, hidden layers and positional
+bookmarks remain unsupported. Flat and nested whole-page bookmarks, labels,
+attachments and metadata are retained. Bitmap copies flatten visible layers.
+
+  python optimize_pdf.py input.pdf study.pdf --viewing-copy --viewing-profile bitmap --study-paper letter --study-dpi 300
+
+Direct (recommended): default Windows and drag-and-drop mode
+
+Choose Direct (recommended) in Create Viewing Copies.cmd, or run:
   python optimize_pdf.py "input.pdf" --viewing-copy --viewing-profile quick
 
 Runs one chain of exact supported handwriting inlining, safe deduplication,
@@ -20,6 +49,9 @@ without exhaustive optimizer comparisons or rendering-speed benchmarks. A smalle
 copy must pass geometry/navigation, exact all-page PDFium/PDF.js and
 high-resolution/print/detail checks. Live annotations remain editable. Unreachable
 editor/recovery objects may be omitted from the separate copy; originals stay intact.
+For supported NeoPdf exports with incremental saves or the recognized index
+warning, Direct verifies a temporary current-revision snapshot first. The original
+keeps its save history. Final checks compare the copy against the original PDF.
 Thirty seconds is aspirational, not an acceptance gate or reason to remove useful
 transformations. Processing time varies; faster viewing is not measured or promised.
 Unsupported/unresolved preservation produces reports only. No browser is launched;
@@ -40,9 +72,8 @@ policy/code/tool/renderer identities and source/output hashes. Profiles stay iso
 Thorough viewing copy (existing CLI/API default; measured rendering cost)
 
 After extracting the ZIP, open Setup Dependencies.cmd once. It creates a private
-.venv and installs the pinned Python and PDF.js packages. Python 3.10+, Node.js
-22.13+ and Firefox/Zen must already be installed; missing components are explained
-without changing any PDF. All launchers prefer the private environment afterward.
+.venv and installs the pinned Python and PDF.js packages. Python 3.10+ and Node.js 22.13+ must already be installed. Firefox or Zen is
+needed only for Thorough optimization. All launchers prefer the private environment afterward.
 In a Git checkout, Update PDF Viewing Optimizer.cmd performs a clean fast-forward
 pull and reruns setup. It stops when local changes exist. Extracted releases must be
 updated by installing a newer release into a separate folder.
@@ -57,7 +88,8 @@ and use the same preservation, timing and publication gates. Stop after current 
 skips queued files. Each run keeps its accepted copy, reports and checkpoint in one
 adjacent NAME.optimized-YYYY-MM-DD folder. Same-day repeats use -2 and higher rather
 than overwriting, so loose artifacts do not accumulate beside the original.
-Failures and no-improvement results do not stop later files.
+Failures and reports-only results do not stop later files. The final summary
+shows what happened to each file and how to find its copy or report.
 The reviewed source hash is rechecked at child startup and before publication.
 Interrupted jobs reuse only exact completed generation, preservation and timing
 stages from the checkpoint inside that run folder. Final browser acceptance and publication
@@ -70,6 +102,8 @@ Alt+O optimizer, Alt+P choose PDFs, Alt+I inspect drawing opportunities, Alt+G p
 available in a resizable, scrollable review window.
 The progress bar advances by completed reviewed files; the status line shows the
 active file and stage without inventing a percentage for variable-length checks.
+Inspect PDF shows elapsed time, overall progress and the current page. It does not create a copy.
+Select Review inspected PDF when it finishes to review a copy for that file in the selected mode.
 Choose 1 through the detected logical CPU count for verification before review.
 The default is two (or one on a one-CPU system). Startup and review show total and
 available RAM plus a conservative 4 GiB + 0.5 GiB/worker planning estimate. Workers
@@ -172,10 +206,11 @@ Dependencies (Python 3.10+, Node.js 22.13+, PDF.js 6.4.299)
   npm ci
 
 Legacy non-packing modes do not need PyMuPDF/Node/browser. Thorough viewing-copy
-mode needs all dependencies and installed Zen/Firefox; direct mode needs the
-subset listed above. Set PDF_PYTHON to select the launcher's Python interpreter. Otherwise it tries
-the current user's bundled Codex runtime, then Python on PATH. Install the
-dependencies in the interpreter you choose.
+mode needs all dependencies and installed Zen/Firefox. Direct mode needs the
+subset listed above. Create Viewing Copies uses the private environment built by
+Setup Dependencies. Set PDF_PYTHON to select another installed interpreter with
+the required packages. Legacy drag-and-drop launchers can also try the bundled
+Codex runtime or Python on PATH.
 Use PDF_NODE, PDF_NODE_MODULES or PDF_BROWSER to select other installed runtimes.
 The Windows package includes qpdf 12.4.2 and uses it for a lossless
 Flate/object-stream candidate. Set PDF_QPDF to select another qpdf executable.

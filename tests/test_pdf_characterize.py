@@ -2,6 +2,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from pypdf import PdfWriter
 from pypdf.generic import (ArrayObject, DecodedStreamObject, DictionaryObject,
@@ -9,7 +10,8 @@ from pypdf.generic import (ArrayObject, DecodedStreamObject, DictionaryObject,
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT/'tools')]
-from pdf_characterize import characterize
+from experiment_manifest import analyze_drawing_opportunity
+from pdf_characterize import characterize, unsafe_name
 
 
 def stream(writer, data):
@@ -38,10 +40,10 @@ class CharacterizeTests(unittest.TestCase):
             form = DecodedStreamObject()
             form.set_data(b'0 0 m 10 10 l S /Im Do')
             form.update({NameObject('/Type'): NameObject('/XObject'), NameObject('/Subtype'): NameObject('/Form'),
-                         NameObject('/BBox'): ArrayObject([NumberObject(0), NumberObject(0), NumberObject(10), NumberObject(10)]),
-                         NameObject('/Resources'): DictionaryObject({NameObject('/XObject'): DictionaryObject({NameObject('/Im'): image_ref})})})
+                         NameObject('/BBox'): ArrayObject([NumberObject(0), NumberObject(0), NumberObject(10), NumberObject(10)])})
             form_ref = writer._add_object(form)
-            mixed[NameObject('/Resources')] = DictionaryObject({NameObject('/XObject'): DictionaryObject({NameObject('/F'): form_ref})})
+            mixed[NameObject('/Resources')] = DictionaryObject({NameObject('/XObject'): DictionaryObject({
+                NameObject('/F'): form_ref, NameObject('/Im'): image_ref})})
             mixed[NameObject('/Contents')] = stream(writer, b'q 1 0 0 1 0 0 cm /F Do /F Do Q')
             mixed[NameObject('/Annots')] = ArrayObject([writer._add_object(DictionaryObject({
                 NameObject('/Subtype'): NameObject('/Text'),
@@ -60,7 +62,15 @@ class CharacterizeTests(unittest.TestCase):
             cyclic[NameObject('/Contents')] = stream(writer, b'/Cycle Do')
             writer.write(source)
 
-            result = characterize(source)
+            with patch('pdf_characterize.unsafe_name', wraps=unsafe_name) as names_checked:
+                result = characterize(source)
+            self.assertEqual([str(args[0]) for args, _ in names_checked.call_args_list].count('/Im'), 4)
+
+            events = []
+            with patch('pdf_characterize.document_inventory', side_effect=AssertionError('Unneeded document inventory')):
+                drawing = analyze_drawing_opportunity(source, progress=lambda done, total: events.append((done, total)))
+            self.assertEqual(drawing, analyze_drawing_opportunity(result))
+            self.assertEqual(events, [(0, 3), (1, 3), (2, 3), (3, 3)])
 
             self.assertEqual(result['schema'], 2)
             self.assertEqual({key: result['coverage'][key] for key in

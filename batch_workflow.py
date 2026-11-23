@@ -25,7 +25,8 @@ OPTIMIZER_LABELS = {
     'pymupdf': 'PyMuPDF — structural packing only',
 }
 NOTE_WIDTH_LABELS={'upstream':'Default pen widths','fixed':'Fixed width','scale':'Scale','density-scaled':'Experimental density scaling'}
-PROFILE_LABELS = {'quick':'Direct optimization (no benchmarks)', 'thorough':'Thorough optimization'}
+PROFILE_LABELS = {'quick':'Direct (recommended)', 'thorough':'Thorough optimization', 'bitmap':'Bitmap study copy (experimental)'}
+PAPER_LABELS = {'letter': 'US Letter', 'source': 'Original size'}
 RECOVERABLE_STATUSES = {'ready','running','timeout','budget exhausted'}
 
 
@@ -88,7 +89,8 @@ def dependency_diagnostics(profile='thorough'):
         try:actual=importlib.metadata.version(name);ok=actual==expected
         except importlib.metadata.PackageNotFoundError:actual='missing';ok=False
         rows.append({'name':name,'ok':ok,'optional':False,'detail':actual,
-                     'action':None if ok else ('Run Setup Dependencies.cmd --quick.' if profile=='quick' else 'Run Setup Dependencies.cmd.')})
+                     'thorough_only': name == 'PyMuPDF',
+                     'action':None if ok else 'Run Setup Dependencies.cmd.'})
     try:
         from viewing_copy import runtime_node
         node=runtime_node()
@@ -105,7 +107,7 @@ def dependency_diagnostics(profile='thorough'):
                      'action':'Run Setup Dependencies.cmd after installing Node.js 22.13 or newer.'})
     if profile=='thorough':
         browser=Path(os.environ.get('PDF_BROWSER') or r'C:\Program Files\Mozilla Firefox\firefox.exe')
-        rows.append({'name':'Firefox/Zen','ok':browser.is_file(),'optional':False,
+        rows.append({'name':'Firefox/Zen','ok':browser.is_file(),'optional':False,'thorough_only':True,
                      'detail':str(browser),'action':None if browser.is_file() else
                      'Install Firefox, or set PDF_BROWSER to Firefox or Zen executable.'})
     try:
@@ -209,9 +211,11 @@ def _save_job(job):
     if not job.output:return
     root=_checkpoint_root(job);root.mkdir(parents=True,exist_ok=True);record=root/'job.json'
     temporary=record.with_name(f'.job.{os.getpid()}.tmp')
-    temporary.write_text(json.dumps({'schema':3 if job.input_kind=='note' else (2 if job.profile=='quick' else 1),'source':str(job.source),'output':str(job.output),
+    temporary.write_text(json.dumps({'schema':3 if job.input_kind=='note' else (4 if job.profile=='bitmap' else (2 if job.profile=='quick' else 1)),'source':str(job.source),'output':str(job.output),
                                      'source_sha256':job.source_sha256,'status':job.status,
                                      'optimizer':job.optimizer,
+                                     'study_paper':job.study_paper,'study_dpi':job.study_dpi,
+                                     'study_flatten_text':job.study_flatten_text,
                                      'profile':job.profile, 'input_kind':job.input_kind,
                                      'conversion_contract':'boox-gui-1' if job.input_kind=='note' else None,
                                      'note_options':asdict(job.note_options) if job.note_options else None,
@@ -269,7 +273,8 @@ def _last_stage(job):
     return 'the current stage'
 
 
-def _recover_job(source,source_hash,optimizer,profile='thorough'):
+def _recover_job(source,source_hash,optimizer,profile='thorough',study_paper='letter',study_dpi=300,*,
+                 current_revision=False,study_flatten_text=False):
     prefix=source.stem+'.optimized-'
     roots=[path/(source.stem+'.optimized.checkpoint') for path in source.parent.iterdir()
            if path.is_dir() and not path.is_symlink() and path.parent.resolve()==source.parent.resolve()
@@ -284,10 +289,15 @@ def _recover_job(source,source_hash,optimizer,profile='thorough'):
         try:
             data=json.loads((folder/'job.json').read_text(encoding='utf-8'))
             output=Path(data['output']).absolute()
-            job=Job(source,output,source_hash,data['status'],data.get('error'),data.get('optimizer','adaptive'),data.get('profile','thorough'))
+            job=Job(source,output,source_hash,data['status'],data.get('error'),data.get('optimizer','adaptive'),
+                    data.get('profile','thorough'),current_revision=current_revision)
+            if profile=='bitmap':
+                job=replace(job,study_paper=data.get('study_paper'),study_dpi=data.get('study_dpi'),
+                            study_flatten_text=data.get('study_flatten_text',False))
+                if (job.study_paper,job.study_dpi,job.study_flatten_text)!=(study_paper,study_dpi,study_flatten_text):continue
             legacy=output.parent==source.parent
             grouped=output.parent.parent==source.parent and output.parent.name.startswith(prefix)
-            if (data.get('schema')!=(2 if profile=='quick' else 1) or Path(data['source']).absolute()!=source or
+            if (data.get('schema')!=(4 if profile=='bitmap' else (2 if profile=='quick' else 1)) or Path(data['source']).absolute()!=source or
                     data.get('source_sha256')!=source_hash or not (legacy or grouped) or
                     output.with_suffix('.checkpoint')!=folder.absolute() or job.status not in RECOVERABLE_STATUSES or
                     job.optimizer!=optimizer or job.profile!=profile):
@@ -346,15 +356,26 @@ class Job:
     note_options: NoteOptions | None = None
     renderer: Path | None = None
     renderer_sha256: str | None = None
+    study_paper: str = 'letter'
+    study_dpi: int = 300
+    current_revision: bool = False
+    study_flatten_text: bool = False
 
     @property
     def targets(self):
         return _targets(self.output) if self.output else ()
 
 
-def plan_batch(sources,optimizer='adaptive',profile='thorough',progress=None,*,note_options=None,renderer=None):
+def plan_batch(sources,optimizer='adaptive',profile='thorough',progress=None,*,note_options=None,renderer=None,
+               study_paper='letter',study_dpi=300,study_flatten_text=False):
     if optimizer not in OPTIMIZER_LABELS:raise ValueError('Unknown PDF optimizer.')
     if profile not in PROFILE_LABELS:raise ValueError('Unknown viewing profile.')
+    if profile=='bitmap':
+        from bitmap_study import settings
+        settings(study_paper,study_dpi,study_flatten_text)
+        if optimizer!='adaptive':raise ValueError('Bitmap study mode uses the built-in raster pass.')
+    elif study_flatten_text:
+        raise ValueError('Flatten text requires the bitmap profile.')
     if profile=='quick':
         if optimizer=='pymupdf':raise ValueError('Direct mode supports adaptive transformations or qpdf.')
     jobs, seen, reserved = [], set(), set()
@@ -365,7 +386,8 @@ def plan_batch(sources,optimizer='adaptive',profile='thorough',progress=None,*,n
         if key in seen:
             continue
         seen.add(key)
-        job = Job(source, None, None, "planned",optimizer=optimizer,profile=profile)
+        job = Job(source, None, None, "planned",optimizer=optimizer,profile=profile,study_paper=study_paper,
+                  study_dpi=study_dpi,study_flatten_text=study_flatten_text)
         try:
             if not source.is_file():
                 raise ValueError("Input must be a PDF file.")
@@ -375,18 +397,30 @@ def plan_batch(sources,optimizer='adaptive',profile='thorough',progress=None,*,n
                 jobs.append(recovered)
                 continue
             source_hash = filehash(source)
-            if profile=='quick':
+            if profile=='bitmap':
+                from bitmap_study import preflight
+                info=preflight(source, paper=study_paper, dpi=study_dpi, flatten_text=study_flatten_text)
+                job=replace(job,current_revision=info['current_revision'])
+            elif profile=='quick' and optimizer=='adaptive':
+                from tools.normalize_boox import validate_direct_input
+                _,current_revision=validate_direct_input(source)
+                job=replace(job,current_revision=current_revision)
+            elif profile=='quick':
                 from lossless_verify import validate_quick_input
                 validate_quick_input(source)
             else:validate_input(reader_for(source))
-            recovered = _recover_job(source,source_hash,optimizer,profile)
+            recovered = _recover_job(source,source_hash,optimizer,profile,study_paper,study_dpi,
+                                     current_revision=job.current_revision,study_flatten_text=study_flatten_text)
             if recovered is None:
                 output = adjacent_output(source, reserved, profile)
                 recovered = replace(job, output=output, source_sha256=source_hash, status="ready")
             reserved.update(map(_path_key, recovered.targets))
             jobs.append(recovered)
         except Exception as exc:
-            jobs.append(replace(job, status="rejected", error=str(exc), input_kind="note" if source.suffix.lower()==".note" else "pdf"))
+            message = str(exc)
+            if message == 'Unaccounted data after the final PDF marker.':
+                message = 'This PDF looks incomplete. Try exporting it again from the app that created it.\n' + message
+            jobs.append(replace(job, status="rejected", error=message, input_kind="note" if source.suffix.lower()==".note" else "pdf"))
     return tuple(jobs)
 
 
@@ -403,7 +437,8 @@ def confirmation_text(jobs, verification_workers=None, resources=None, parallel_
                       f"Pen widths: {NOTE_WIDTH_LABELS[opts.mode]}{(' '+opts.width) if opts.mode=='fixed' else (' '+str(opts.scale) if opts.mode=='scale' else '')}; bookmarks: {'keep' if opts.keep_bookmarks else 'omit'}; {'convert and Direct optimize' if opts.optimize else 'convert only'}")
             text += f'\n{job.source.name}\n  Source: {job.source}\n  Output: {job.output}\n  Settings: {settings}\n  Converter: {job.renderer}\n  Status: {job.status} {job.error or chr(32)}\n'
         return text + '\nBOOX conversion is experimental. Brush rendering may differ from the tablet. Custom widths change appearance. Originals are retained.'
-    quick=bool(jobs and jobs[0].profile=='quick')
+    bitmap=bool(jobs and jobs[0].profile=='bitmap')
+    quick=bool(jobs and jobs[0].profile in ('quick','bitmap'))
     if not quick:
         from viewing_copy import default_verification_workers
         verification_workers=default_verification_workers() if verification_workers is None else verification_workers
@@ -414,11 +449,18 @@ def confirmation_text(jobs, verification_workers=None, resources=None, parallel_
     if recovered:counts.append(f'{recovered} recovered')
     if rejected:counts.append(f'{rejected} rejected')
     lines = ['  ·  '.join(counts), '', 'Run settings']
-    if jobs:lines.extend((f"Mode: {PROFILE_LABELS[jobs[0].profile]}",f"Optimizer: {OPTIMIZER_LABELS[jobs[0].optimizer]}"))
-    if quick:
-        lines.extend((('Exact inlining, safe deduplication, cleanup and compression.' if jobs[0].optimizer=='adaptive' else 'Compression only; unreferenced objects retained.'),
-                      'Direct checks preservation without measuring viewing speed.',
-                      'Live annotations stay editable. The adaptive optimizer may remove unused editor or recovery data.'))
+    if jobs:
+        lines.append(f"Mode: {PROFILE_LABELS[jobs[0].profile]}")
+        if not quick or jobs[0].optimizer != 'adaptive':
+            lines.append(f"Optimizer: {OPTIMIZER_LABELS[jobs[0].optimizer]}")
+    if bitmap:
+        from bitmap_study import study_losses
+        lines.extend((f'Paper size: {PAPER_LABELS[jobs[0].study_paper]} at {jobs[0].study_dpi} DPI',
+                      study_losses(jobs[0].study_flatten_text)))
+    elif quick:
+        lines.append('Direct saves a smaller copy if it passes preservation checks. Keep using the original when no copy is saved.')
+        lines.append('Live annotations stay editable. The adaptive optimizer may remove unused editor or recovery data.'
+                     if jobs[0].optimizer == 'adaptive' else 'Compression only. Unreferenced objects are retained.')
     else:
         worker_line, _, resource_details = resource_summary(verification_workers,resources).partition('\n')
         lines.extend((worker_line,'Candidate generation: '+(
@@ -427,7 +469,9 @@ def confirmation_text(jobs, verification_workers=None, resources=None, parallel_
     for job in jobs:
         lines.extend((job.source.name, f'  Source: {job.source}'))
         if job.status == "ready":
-            lines.append(f"  Save copy to: {job.output}")
+            lines.append(f"  Planned copy location: {job.output}")
+            if job.current_revision:
+                lines.append('  A snapshot of the current revision will be verified first. The original keeps its save history.')
         elif job.status in {'optimized','no improvement','failed'}:
             detail = f" — {job.error}" if job.error else ""
             lines.append(f"  Recovered: {job.status}{detail}")
@@ -450,6 +494,9 @@ def run_optimizer(job, emit, started, verification_workers=None, parallel_candid
                "--checkpoint", str(job.output.with_suffix('.checkpoint')),
                "--time-budget-seconds", str(DEFAULT_TIME_BUDGET_SECONDS),
                "--disk-budget-bytes", str(DEFAULT_DISK_BUDGET_BYTES)]
+    if job.profile=='bitmap':
+        command.extend(('--study-paper',job.study_paper,'--study-dpi',str(job.study_dpi)))
+        if job.study_flatten_text:command.append('--study-flatten-text')
     if job.input_kind == 'note':
         opts = job.note_options
         command = [sys.executable, str(ROOT/'note_to_pdf.py'), str(job.source), str(job.output),
@@ -479,7 +526,8 @@ def run_optimizer(job, emit, started, verification_workers=None, parallel_candid
         error=JobTimeout if returncode==2 else JobBudgetExceeded
         raise error((last_error or 'Conversion resource limit reached') + '. The original is unchanged; select again to restart.')
     if returncode==2:
-        recovery=('Quick mode restarts its single pass when selected again.' if job.profile=='quick' else
+        recovery=('Bitmap study mode restarts its raster pass when selected again.' if job.profile=='bitmap' else
+                  'Quick mode restarts its single pass when selected again.' if job.profile=='quick' else
                   'Completed checks were saved. Select it again to resume.')
         raise JobTimeout(f'This PDF exceeded the six-hour limit during {_last_stage(job)}. The original is unchanged. '+recovery)
     if returncode==3:raise JobBudgetExceeded(f'This PDF exceeded the 10-GiB working-data limit during {_last_stage(job)}. Nothing unchecked was published. Use a drive with more free space or raise the CLI limit.')
@@ -533,6 +581,11 @@ def validate_result(job,recovering=False):
         raise RuntimeError("source changed after review")
     if report.get('profile','thorough')!=job.profile:
         raise RuntimeError('optimizer report profile does not match the reviewed profile')
+    if job.profile=='bitmap':
+        from bitmap_study import acceptance_context, settings
+        if (report.get('acceptance_context') != acceptance_context(settings(job.study_paper,job.study_dpi,job.study_flatten_text)) or
+                not report.get('verification',{}).get('complete')):
+            raise RuntimeError('Study-copy settings, code/tool context or verification changed.')
     if job.profile=='quick':
         from quick_lossless import acceptance_context
         from pdf_runtime import qpdf_identity
@@ -543,6 +596,13 @@ def validate_result(job,recovering=False):
         if status=='optimized' and (not report.get('verification',{}).get('complete') or
                                    'acceptance_context' not in report):
             raise RuntimeError('quick report lacks completed lossless verification')
+    if status=='optimized' and job.current_revision:
+        from tools.normalize_boox import CURRENT_REVISION_POLICY
+        preparation=report.get('source_preparation') or {}
+        if (preparation.get('policy')!=CURRENT_REVISION_POLICY or
+            preparation.get('source_sha256')!=job.source_sha256 or
+            not preparation.get('preservation',{}).get('complete')):
+            raise RuntimeError('Optimizer report lacks verified current-revision preparation')
     if status == "optimized":
         if Path(report.get("output", "")).absolute() != output or not output.is_file():
             raise RuntimeError("optimizer report output does not match the reviewed output")
@@ -556,6 +616,9 @@ def validate_result(job,recovering=False):
     if job.profile == 'quick' and status == 'no improvement' and classification in (
             'verification failed', 'unsupported verification'):
         return 'failed', f"{classification.capitalize()}: {report.get('reason') or 'See the report for details.'}"
+    if status == 'no improvement':
+        reason = report.get('reason')
+        return status, reason if isinstance(reason, str) else None
     return status, None
 
 

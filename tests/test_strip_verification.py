@@ -10,7 +10,7 @@ from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, NameObject
 
 import verification_worker as worker
-from viewing_copy import detail_crop, visual_delta
+from viewing_copy import VerificationSession, detail_crop, verify_pdfjs_page, visual_delta
 
 
 def make_pdf(path, color='1 0 0', size=200):
@@ -122,6 +122,21 @@ class StripVerificationTests(unittest.TestCase):
             make_pdf(larger, size=201)
             with self.assertRaisesRegex(ValueError, 'dimensions changed'):
                 worker.page_delta(source, larger, 0)
+
+    def test_direct_pair_compares_without_pngs_and_rejects_changed_pixels(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            source, changed = (Path(folder) / name for name in ('a.pdf', 'b.pdf'))
+            make_pdf(source)
+            make_pdf(changed, color='0 1 0')
+            with VerificationSession(source, Path(folder) / 'evidence', 1, paired=True) as session:
+                self.assertEqual(session.compare(source, [0]), [{'page': 1, 'exact': True, 'peak': 0, 'mean': 0}])
+                self.assertFalse(list(session.directory.iterdir()))
+                with self.assertRaises(worker.AppearanceMismatch):
+                    session.compare(changed, [0])
+                self.assertIsNone(session.pool)
+            self.assertTrue(verify_pdfjs_page(source, source, 1)['exact'])
+            with self.assertRaises(worker.AppearanceMismatch):
+                verify_pdfjs_page(source, changed, 1)
 
 
 if __name__ == '__main__':

@@ -96,10 +96,10 @@ def filehash(path):
     return digest.hexdigest()
 
 
-def analyze_drawing_opportunity(source_or_characterization):
+def analyze_drawing_opportunity(source_or_characterization, *, progress=None):
     """Inventory drawing mechanisms and isolate first supported subset per P16-B."""
     if isinstance(source_or_characterization, (str, Path)):
-        char = characterize(Path(source_or_characterization))
+        char = characterize(Path(source_or_characterization), drawing_only=True, progress=progress)
     else:
         char = source_or_characterization
 
@@ -278,6 +278,7 @@ def analyze_drawing_opportunity(source_or_characterization):
             explanation = 'Document drawing geometry is already minimal or outside supported subset.'
 
     return {
+        'source_sha256': char.get('source_sha256'),
         'inventory': {
             'multi_vertex_stroked_paths': total_multi_vertex,
             'two_point_segments': total_two_point,

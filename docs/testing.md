@@ -1,7 +1,7 @@
 # Testing
 
-This is the current verification guide. Planned adaptive-selection milestones
-and their exit criteria live in the [main improvement plan](roadmap.md).
+This is the current verification guide. Development priorities and milestone
+exit criteria live in the [roadmap](roadmap.md#current-work-queue).
 Comparison-specific dependencies, calibration and native-viewer smoke coverage
 are documented in [comparison.md](comparison.md#validation).
 
@@ -17,6 +17,61 @@ python -m unittest discover -s tests -p 'test_*.py'
 `ruff.toml` limits linting to definite errors and likely bugs; it does not enforce a code style.
 
 The unit/regression suite covers geometry, navigation mutations, annotation conversion, shared resources, transparency, malformed references, output collisions, interrupted writes, signatures, dependency failures, memory ownership and candidate selection. One test decodes a JPEG2000 image and checks its colored pixels, preventing two blank renderings from passing as equivalent.
+
+`test_bitmap_study.py` separately covers the opt-in bitmap contract: fitted/rotated
+pages, fractional physical page sizes, image payloads, retained attachments and
+local bookmarks, rejected bookmark chains, search, annotations, encryption and
+signature fields, source identity, output collisions, interrupted publication,
+per-page and cumulative image limits, reported progress and recovery settings.
+The CLI regression requires qpdf-clean input with a missing XObject on the page
+and in a nested Form to fail before publication. Exact compatibility runners do not qualify this lossy mode.
+Generated malformed-xref controls require a complete graph proof before repair;
+unrecognized warnings and failed graph proofs cannot publish. A Letter/300-DPI
+control checks tiny dots, minus/fraction bars, superscripts and loops, with a
+deliberately deleted-dot counterpart that must differ.
+Human small-mark review and matched-scale viewing measurements remain separate
+local evidence; image checks cannot certify handwritten mathematical meaning.
+
+## Bitmap study copy release acceptance
+
+Complete the hardening checks in the [current work queue](roadmap.md#current-work-queue)
+before qualifying the isolated bitmap package. Run the release checks against the
+proposed shipping source. The [bitmap contract](design.md#experimental-bitmap-study-contract-bitmap-study-1)
+defines the supported subset. For the native Windows pass, extract to a short
+path and launch `Create Viewing Copies.cmd`. Use two fresh supported generated
+PDFs and one with an annotation that preflight must reject.
+
+1. Review **Source** paper at **450 DPI**. Check the paths, settings, declared
+   feature losses and rejected input. Cancel and confirm zero output artifacts.
+2. Review again and run. Confirm the settings stay locked during planning and
+   processing and the two supported jobs finish sequentially. Check each PDF,
+   JSON and Markdown set, declared paper dimensions, DPI and source/output hashes.
+3. Repeat with **Letter** at **300 DPI** and verify the previous outputs remain
+   intact. Keep the source revisions and local evidence under ignored
+   `audit-output/`.
+4. Review the saved equation-sheet pair at study and print scale, including
+   decimals, signs, superscripts and fraction bars. Run the all-page and detail
+   checks on an independently authorized supported holdout. If claiming a viewing
+   gain for the release build, time that build at matched content scale.
+5. Run CI on the isolated shipping changes and verify the package and extracted
+   runtime against the same source. Record deferred native or holdout checks as
+   pending until completed.
+
+For **Flatten text**, confirm that a font-bearing generated PDF is rejected with
+the box clear and that review discloses loss of search, selection, copying and
+OCR when checked. Verify glyph pixels at the requested resolution, absent output
+text and unchanged source hashes. Check that flat and nested whole-page bookmarks
+retain their hierarchy and page targets on PDFs from different exporters.
+Unresolved fonts, positional bookmarks and active annotations must still fail review.
+
+## General batch and release checks
+
+The first-run smoke launches the Windows package with Python but without its
+packages, and expects setup instructions. After setup, switch to Thorough with
+an unavailable browser and verify the setup status and Direct fallback. Review
+an oversized Original size / 600 DPI bitmap and confirm the dialog offers only
+Back to settings when every job is blocked. Run a Direct batch that produces
+a PDF and a reports-only result. Check both filenames, reasons and location actions.
 
 The Windows batch tests additionally cover duplicate/reordered selections, complete
 output-set collisions, preflight and launch rejection, source mutation, output races,
@@ -51,6 +106,21 @@ For progress, assert that a reviewed two-file batch begins at 0/2, advances the 
 on stage and verification events, and advances the exact count to 1/2 after the
 first terminal result (including failure or skip). The approximate bar reaches
 100% and the count reaches 2/2 after the second terminal result.
+
+For **Inspect PDF**, verify that opening the file animates the bar and that a
+multi-page scan advances the overall percentage with the current page and elapsed
+time shown separately. The bar reaches 100% when the report appears. Check that
+the report matches the drawing summary from full characterization and that the
+source and its folder contents remain intact. For a large line-width inventory,
+check that the log shows a short preview with the full distinct count and that
+the report completes. Close the window during an
+inspection and confirm its worker exits and the source stays intact. For
+Thorough, verify that final acceptance identifies the PDF.js pages, print and
+detail, and browser navigation checks as they start.
+
+Select **Review inspected PDF** and confirm that review shows the inspection
+summary and only the inspected file. Back to settings should leave pending batch
+selections intact. A changed source requires a fresh inspection to use its report.
 
 Checkpoint tests run the same generated source twice through one explicit checkpoint
 and assert that completed generation, preservation and timing do not execute again.
@@ -114,6 +184,10 @@ errors prevent publication and thirty seconds is not a gate. Direct dependency
 tests require renderer probes but no browser or PyMuPDF. The explicit qpdf-only
 lane still runs without renderers. The GUI defaults to Direct optimization,
 disables thorough-only controls and rechecks setup when changing mode.
+The NeoPdf regression verifies review disclosure, strict compression-only
+rejection, current-revision graph proof, all-page checks against the original,
+and recovery bound to the preparation proof. Unfamiliar warnings and signatures
+block processing, and the source hash stays unchanged.
 The Direct revision regression replaces the source at its original path,
 inserts a page, and edits another page. Only the shifted unchanged page reuses
 its 144-DPI PDFium comparison. Altering prior reports disables reuse, and every
@@ -147,6 +221,27 @@ python optimize_pdf.py audit-output/matrix.pdf audit-output/matrix.viewing.pdf -
 ```
 
 A reports-only **no improvement** outcome is valid. Never force publication when the checks reject all candidates.
+
+Selective static-ink research tests use a generated multi-page file with
+passing groups, a PDFium rejection and a PDF.js rejection. They reopen the
+assembled copy to verify the restored annotation arrays, retained group order
+and rendered equality. Additional tests cover all-page rejection, renderer
+errors and trial-file cleanup. The research runner and final gate are in the
+[Direct plan](quick-lossless-plan.md#existing-boox-pdf-storage-qualification-p19).
+
+`test_vector_study_placement.py` checks the separate research placement bound
+using an exact rational calculation over all four transformed child Form corners.
+The generated operands cover rotation, shear, off-origin fractional coordinates,
+page units and bounds that collapse in binary32. The verifier measures movement
+in physical PDF points. Appearance, clips, paint order and retained content still
+need their own checks on the saved candidate.
+
+Bounded static-ink research also tests a generated fractional placement through
+the saved and packed candidate. The test keeps a selected stroke native and checks
+that it and the image and missing-appearance barriers split the remaining runs.
+A changed outer clip fails the source-derived envelope check. The exact verifier
+rejects the bounded manifest. Whole-document appearance and timing are separate
+research checks described in the [roadmap](roadmap.md#vector-study-research-protocol).
 
 ## Planned approximate-handwriting procedure
 

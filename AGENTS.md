@@ -4,12 +4,11 @@
 
 This repository creates verified viewing copies of vector, bitmap/scanned and mixed PDFs. Reducing rendering work is the priority; file size is secondary. Read `docs/design.md` before changing PDF transformations or acceptance rules. `docs/validation.md` records measured results and limits, not promises for every PDF.
 
-**Main improvement plan: [docs/roadmap.md](docs/roadmap.md).** Start future
-improvement work there and maintain its ordered milestones. It is the primary
-roadmap for adaptive optimizer selection; the old comparison handoff is historical
-requirements context, not an active task list. Planned features are not current
-behavior: `docs/design.md` still defines production acceptance, and
-`docs/comparison.md` describes the existing research runner.
+Start general improvement work at the [current work queue](docs/roadmap.md#current-work-queue).
+Follow its order and decision gates. Update that queue when verified evidence or
+a user decision changes priorities. The numbered milestones record detailed plans
+and history. [Design](docs/design.md) defines production acceptance, and the
+[comparison guide](docs/comparison.md) defines the separate research runner.
 
 Private assessment snapshots and run progress belong under ignored `audit-output/`.
 Read a run's actual status, completed records and hashes before making claims;
@@ -32,6 +31,22 @@ Maintain the implementation in the repository root:
 
 Do not edit generated copies in `dist/` or an installed skill as an independent implementation. Keep personal PDFs, local reports, credentials and machine-specific paths out of commits. The private corpus is not included in this checkout.
 
+## Generality across PDF inputs
+
+All maintained changes must apply generally to PDFs. Base transformation,
+verification, recovery and fallback decisions on the input's structure, declared
+profile and explicit settings. A recipe may support a documented subset. Keep
+content intact or reject the candidate when eligibility or preservation cannot be
+proved.
+
+Keep individual test PDFs, fixed page numbers, crop coordinates, stroke IDs and
+document-specific thresholds out of maintained decision logic. A source hash can
+bind verification and recovery to the reviewed file. It cannot select a special
+transformation for that file. Keep one-off probes under ignored `audit-output/`.
+Use test cases to reproduce failures and verify a general fix. Where practical,
+exercise varied page layouts, mixed eligible and ineligible content, and safe
+fallbacks with generated fixtures.
+
 ## Development environment
 
 Use Python 3.10+ and Node.js 22.13+. Windows with Zen is the tested platform. From the repository root, create `.venv`, install `requirements-dev.txt`, and run `npm ci`; see `README.md` for commands. Use `.venv/Scripts/python.exe` on Windows or `.venv/bin/python` on POSIX, rather than changing global Python packages.
@@ -41,7 +56,7 @@ The Node dependencies belong in the root `node_modules/`. The Windows release in
 ## Preservation requirements
 
 - Never overwrite originals or existing outputs/reports. Keep encrypted/signed-input rejection, exclusive publication and temporary-file cleanup intact.
-- Preserve handwriting coordinates, widths, curves, dots, loops, order, transforms, clipping and layers. No stroke simplification or rasterization in viewing-copy mode.
+- Exact viewing profiles preserve handwriting coordinates, widths, curves, dots, loops, order, transforms, clipping and layers. Exclude stroke simplification and rasterization from those profiles. The experimental study profile requires explicit opt-in to its documented losses.
 - Retain visible text, OCR/search text, image data, bookmarks/table of contents, link targets and hit areas, page labels, attachments and protected interactive data.
 - OCR removal remains a separate explicit option. Annotation conversion must pass the eligibility and ordered-prefix safeguards; converted handwriting loses annotation editability only in the viewing copy.
 - Copy shared resources before modifying them. Unsupported or unresolved content must not silently lose data.

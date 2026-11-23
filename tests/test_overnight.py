@@ -268,13 +268,15 @@ class OvernightLifecycleTests(unittest.TestCase):
 
 
 class BooxPreprocessingTests(unittest.TestCase):
-    def incremental(self, root, producer='NeoPdf'):
+    def incremental(self, root, producer='NeoPdf', *, seed=None):
         import io
         import re
         from pypdf.generic import DictionaryObject, TextStringObject
         from test_quick_lossless import rich_fixture
-        seed, source = root/'seed.pdf', root/'incremental.pdf'
-        rich_fixture(seed)
+        source = root/'incremental.pdf'
+        if seed is None:
+            seed = root/'seed.pdf'
+            rich_fixture(seed)
         data = seed.read_bytes()
         previous = int(re.search(rb'startxref\s+(\d+)\s+%%EOF\s*$', data)[1])
         with reader_for(seed) as reader:

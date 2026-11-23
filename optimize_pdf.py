@@ -67,11 +67,20 @@ def verify_pages(original, candidate):
 def optimize(source, destination, compact_structure=False, fast_handwriting=False, remove_invisible_text=False,
              inline_handwriting=False, viewing_copy=False, expected_source_sha256=None,
              checkpoint=None,time_budget_seconds=None,disk_budget_bytes=None,verification_workers=None,
-             parallel_candidates=False,viewing_optimizer='adaptive',viewing_profile='thorough'):
-    if viewing_profile not in {'quick','thorough'}:raise ValueError('Unknown viewing profile.')
+             parallel_candidates=False,viewing_optimizer='adaptive',viewing_profile='thorough', study_paper='letter', study_dpi=300,
+             study_flatten_text=False):
+    if viewing_profile not in {'quick','thorough','bitmap'}:raise ValueError('Unknown viewing profile.')
+    if (not viewing_copy or viewing_profile != 'bitmap') and (study_paper != 'letter' or study_dpi != 300 or study_flatten_text):
+        raise ValueError('Study settings require the bitmap profile.')
     if viewing_copy:
         if any((compact_structure, fast_handwriting, remove_invisible_text, inline_handwriting)):
             raise ValueError('Viewing-copy mode selects its own passes; run other modes separately.')
+        if viewing_profile=='bitmap':
+            if viewing_optimizer != 'adaptive' or parallel_candidates or verification_workers is not None:
+                raise ValueError('Bitmap study mode uses a single raster pass without optimizer or worker selection.')
+            from bitmap_study import optimize_bitmap
+            return optimize_bitmap(source,destination,expected_source_sha256,checkpoint,time_budget_seconds,disk_budget_bytes,
+                                   paper=study_paper,dpi=study_dpi,flatten_text=study_flatten_text)
         if viewing_profile=='quick':
             if viewing_optimizer not in {'adaptive','qpdf'} or parallel_candidates or verification_workers is not None:
                 raise ValueError('Quick mode uses one adaptive transformation chain or qpdf only, without verification workers or parallel candidates.')
@@ -194,7 +203,7 @@ def main():
     modes.add_argument('--inline-handwriting', action='store_true',
                        help='Consolidate supported BOOX handwriting Forms, preserving drawing bytes and clipping.')
     modes.add_argument('--viewing-copy', action='store_true',
-                       help='Create a viewing copy using the selected quick or thorough profile.')
+                       help='Create a viewing copy using the selected exact or experimental bitmap profile.')
     parser.add_argument('--expected-source-sha256',
                         help='Fail without publication unless the viewing-copy input matches this SHA256.')
     parser.add_argument('--checkpoint',type=Path,
@@ -209,24 +218,31 @@ def main():
                         help='Generate independent built-in viewing-copy candidates concurrently; uses more RAM and disk bandwidth.')
     parser.add_argument('--viewing-optimizer',choices=('adaptive','qpdf','pymupdf'),default='adaptive',
                         help='Viewing-copy engine (default: repository adaptive optimizer).')
-    parser.add_argument('--viewing-profile',choices=('quick','thorough'),default='thorough',
-                        help='Quick: exact transformations without optimizer comparisons/rendering benchmarks; thorough: measured candidate selection.')
+    parser.add_argument('--viewing-profile',choices=('quick','thorough','bitmap'),default='thorough',
+                        help='Quick: exact transformations without optimizer comparisons/rendering benchmarks; thorough: measured candidate selection; bitmap: experimental finite-resolution study copy.')
+    parser.add_argument('--study-paper', choices=('letter','source'), default='letter', help='Bitmap paper size; Letter fits the entire page without stretching.')
+    parser.add_argument('--study-dpi', type=int, choices=(300,450,600), default=300, help='Bitmap resolution at the selected paper size.')
+    parser.add_argument('--study-flatten-text', action='store_true',
+                        help='Bitmap only. Rasterize visible text and discard text search, selection and OCR from the copy.')
     args = parser.parse_args()
     suffix = '.viewing.pdf' if args.viewing_copy else ('.inlined.pdf' if args.inline_handwriting else ('.no-ocr.pdf' if args.remove_invisible_text else '.optimized.pdf'))
     created_run_folder=None
-    if args.output is None and args.viewing_copy:
-        from batch_workflow import adjacent_output
-        while True:
-            destination=adjacent_output(args.input)
-            try:
-                destination.parent.mkdir()
-                created_run_folder=destination.parent
-                break
-            except FileExistsError:
-                pass
-    else:
-        destination = args.output or args.input.with_name(args.input.stem + suffix)
     try:
+        if args.output is None and args.viewing_copy:
+            from batch_workflow import adjacent_output
+            source_parent = args.input.absolute().parent
+            while True:
+                destination = adjacent_output(args.input, profile=args.viewing_profile)
+                if destination.parent == source_parent:
+                    break
+                try:
+                    destination.parent.mkdir()
+                except FileExistsError:
+                    continue
+                created_run_folder = destination.parent
+                break
+        else:
+            destination = args.output or args.input.with_name(args.input.stem + suffix)
         optimize(args.input, destination, compact_structure=args.compact_structure,
                  fast_handwriting=args.fast_handwriting,
                  remove_invisible_text=args.remove_invisible_text,
@@ -234,7 +250,8 @@ def main():
                  expected_source_sha256=args.expected_source_sha256,checkpoint=args.checkpoint,
                  time_budget_seconds=args.time_budget_seconds,disk_budget_bytes=args.disk_budget_bytes,
                  verification_workers=args.verification_workers,parallel_candidates=args.parallel_candidates,
-                 viewing_optimizer=args.viewing_optimizer,viewing_profile=args.viewing_profile)
+                 viewing_optimizer=args.viewing_optimizer,viewing_profile=args.viewing_profile,study_paper=args.study_paper,
+                 study_dpi=args.study_dpi,study_flatten_text=args.study_flatten_text)
     except Exception as exc:
         if created_run_folder is not None:
             try:created_run_folder.rmdir()

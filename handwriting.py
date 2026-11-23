@@ -60,10 +60,41 @@ def _inline_leaf(form):
     return body, clip, states.raw_get('/GS')
 
 
-def inline_handwriting(writer):
+def annotation_appearance_forms(writer):
+    """Protect AP Form call graphs without walking unrelated fonts and pen states."""
+    pending = [ref.get_object().raw_get('/AP') for page in writer.pages
+               for ref in (page['/Annots'] if '/Annots' in page else []) if '/AP' in ref.get_object()]
+    seen, forms, visits = set(), set(), 0
+    while pending:
+        visits += 1
+        if visits > MAX_PROTECTION_VISITS:
+            raise ValueError('Annotation appearance inventory exceeded its reference/value visit bound.')
+        value = pending.pop()
+        if isinstance(value, IndirectObject):value = value.get_object()
+        if isinstance(value, IndirectObject):
+            raise ValueError('Annotation appearance inventory cannot resolve a reference.')
+        if not isinstance(value, (dict,list)) or id(value) in seen:continue
+        seen.add(id(value))
+        if len(seen) > MAX_PROTECTED_RESOURCE_NODES:
+            raise ValueError('Annotation appearance inventory exceeded its structural-node bound.')
+        if isinstance(value, StreamObject):
+            if value.get('/Subtype') != '/Form':continue
+            forms.add(id(value))
+            resources = value.get('/Resources', DictionaryObject()).get_object()
+            xobjects = resources.get('/XObject', DictionaryObject()).get_object()
+            pending.extend(xobjects.values())
+        else:
+            # /AP may contain a state dictionary before reaching a Form stream.
+            pending.extend(value.values() if isinstance(value,dict) else value)
+    return forms
+
+
+def inline_handwriting(writer, *, excluded_forms=()):
     forms = parents = 0
     cache = {}
     for parent in list(writer._objects):
+        if id(parent) in excluded_forms:
+            continue
         if not isinstance(parent, StreamObject) or parent.get('/Subtype') != '/Form' or '/Group' in parent:
             continue
         # pypdf can rewrite encoded streams in place only with a single Flate filter.
@@ -85,6 +116,9 @@ def inline_handwriting(writer):
                 leaves.append(None)
                 continue
             form = form.get_object()
+            if id(form) in excluded_forms:
+                leaves.append(None)
+                continue
             if id(form) not in cache:
                 cache[id(form)] = _inline_leaf(form)
             leaves.append(cache[id(form)])
@@ -353,7 +387,7 @@ def batching_contexts(writer):
                 walk(value,child,defaults,{'annotation appearance'},set())
             elif isinstance(value,dict):
                 for item in value.values():appearance(item,seen)
-        for ref in page.get('/Annots',[]):
+        for ref in (page['/Annots'] if '/Annots' in page else []):
             annot=ref.get_object()
             if '/AP' in annot:appearance(annot['/AP'],set())
     return reasons

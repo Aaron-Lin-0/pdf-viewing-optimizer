@@ -23,6 +23,9 @@ const number=Number(pageNumber),width=Number(widthArg);
 if(mode!=='compare-worker'&&(!Number.isInteger(number)||number<1||!Number.isInteger(width)||width<1))throw new Error('Invalid benchmark page/width.');
 const compareSnapshots=(a,b,page,allow)=>{
   if(a.width!==b.width||a.height!==b.height)throw new Error('PDF.js dimensions changed.');
+  const before=Buffer.from(a.data.buffer,a.data.byteOffset,a.data.byteLength);
+  const after=Buffer.from(b.data.buffer,b.data.byteOffset,b.data.byteLength);
+  if(before.equals(after))return {page,width:a.width,height:a.height,ok:true,exact:true,peak:0,mean:0,outsideEdgeBand:0};
   let peak=0,sum=0,outside=0;const ink=new Uint8Array(a.width*a.height);
   for(let i=0;i<ink.length;i++)ink[i]=Math.round(.299*a.data[i*4]+.587*a.data[i*4+1]+.114*a.data[i*4+2])<250?1:0;
   for(let i=0;i<ink.length;i++){

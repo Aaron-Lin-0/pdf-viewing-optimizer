@@ -113,7 +113,7 @@ class MixedGuiTests(unittest.TestCase):
                     self.assertTrue(panel.winfo_manager())
                     modes=next(w for w in widgets if isinstance(w,ttk.Combobox) and NOTE_WIDTH_LABELS['fixed'] in w['values'])
                     modes.set(NOTE_WIDTH_LABELS['fixed']);root.update()
-                    review=next(w for w in widgets if isinstance(w,ttk.Button) and str(w['text']).startswith('Review batch'))
+                    review=next(w for w in widgets if isinstance(w,ttk.Button) and str(w['text']).startswith('Review and run'))
                     review.invoke()
                     deadline=time.monotonic()+4
                     while not reviewed.called and time.monotonic()<deadline:root.update();time.sleep(.01)

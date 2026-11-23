@@ -53,6 +53,10 @@ def render_rows(page, rows, height, scale=2, crop=None, print_mode=False):
     return image
 
 
+class AppearanceMismatch(ValueError):
+    """Rendering completed, but the pixel comparison rejected the page."""
+
+
 class DeltaAccumulator:
     """Combine strip differences into the whole-page appearance guard."""
 
@@ -86,9 +90,9 @@ class DeltaAccumulator:
         if not self.peak:
             return {'exact': True, 'peak': 0, 'mean': 0}
         if not self.allow_edges or self.peak > 96 or mean > 1.5:
-            raise ValueError(f'Appearance changed beyond guard: peak={self.peak}, mean={mean:.6f}.')
+            raise AppearanceMismatch(f'Appearance changed beyond guard: peak={self.peak}, mean={mean:.6f}.')
         if self.outside:
-            raise ValueError('Pixel changes extend beyond the one-pixel ink-edge band.')
+            raise AppearanceMismatch('Pixel changes extend beyond the one-pixel ink-edge band.')
         return {'exact': False, 'peak': self.peak, 'mean': mean}
 
 
@@ -192,3 +196,10 @@ def compare_page(task):
         return {'page': index + 1, **delta.result()}
     finally:
         page.close()
+
+
+def compare_paired_page(task):
+    source, candidate, index, allow_edges, scale, crop, print_mode = task
+    before = _document(source, persistent=True)
+    after = _document(candidate)
+    return {'page': index + 1, **_page_delta(before, after, index, allow_edges, scale, crop, print_mode)}

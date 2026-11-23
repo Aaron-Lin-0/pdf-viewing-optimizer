@@ -1,126 +1,320 @@
-# Main improvement plan: adaptive optimizer selection
+# Roadmap for verified PDF viewing copies
 
-**Status: active, primary roadmap. Adopted 2026-10-18.** Start future improvement
-work here. This is the maintained plan for the next iteration; it supersedes the
-old comparison handoff as a work queue. Update this file when priorities change
-instead of creating a competing plan.
+Make PDFs easier to read while preserving the content required by the selected
+profile. Reduce rendering work where evidence shows a gain. Measure storage
+savings separately.
 
-The goal is to select a small set of PDF optimizers from the source's actual
-structure and the user's objective, then verify which results are useful.
-**File characteristics select candidates; preservation and measurements select
-outputs.** Expected benefits are hypotheses until measured.
+- **Direct** is the default Windows workflow for verified exact viewing copies.
+  It preserves supported content in a single optimization chain without timing
+  routine jobs. See the [Direct plan](quick-lossless-plan.md).
+- **Thorough** compares candidates and measures their rendering cost before
+  selecting an output. Actual input structure guides candidate selection.
+  See the [production acceptance rules](design.md).
+- **Study copies** require explicit opt-in to their declared appearance and
+  feature tradeoffs. The experimental bitmap profile fits eligible PDFs with
+  finite-resolution pages. Vector study is research for cases where zoom detail
+  or searchable text matters. See the [bitmap contract](design.md#experimental-bitmap-study-contract-bitmap-study-1).
 
-This document describes completed and planned work. Current production behavior and acceptance
-rules remain in [design.md](design.md). The existing exhaustive comparison runner
-is documented in [comparison.md](comparison.md). The companion classifier/planner
-does not replace the production acceptance path; production exact checkpoint reuse
-and batch restart recovery are implemented as described under P11.
+## Current work queue
 
-## Current foundation and immediate priority
+Follow this order for general improvement work. Record any blocked check and
+continue with independent work in queue order. Update this section when evidence
+or a user decision changes the next action. The numbered milestones below hold
+the implementation plans and history. The [design](design.md) governs
+production acceptance, and the [comparison guide](comparison.md) governs the
+separate research runner.
 
-**Next action (2026-11-04): continue P13/P14 through code and automated validation;
-Computer Use is excluded by user instruction. Native P13 qualification is deferred
-and P14 real-document holdout acceptance remains open. Scoped batching and source
-browser viability are implemented and generated-fixture qualified below.
-P15 is release-qualified.** Preserve the existing milestone numbers and
-completed history.
-The objective remains smaller, efficiently rendered copies without sacrificing
-required content; these repairs make preservation and selection evidence reliable.
+1. **Qualify the Windows beta.** Bitmap is the first choice for supported PDFs
+   primarily read at normal zoom. Direct is the default when fidelity and
+   interactive features must survive. Exercise setup, review, cancel, run and
+   opening results from the exact package. Aim for a verified, usable copy on at
+   least 90% of a representative sample of intended workloads, using one result
+   per document and reporting safe refusals and no-benefit outcomes separately.
+   Generated fixtures provide regression evidence. Record the actual sample and
+   outcome counts before making a coverage claim.
+2. **Qualify bitmap savings and reading quality.** The generated
+   hardening regressions cover missing drawing resources, compact Windows output
+   paths, cumulative image limits and completed-page progress. Include the opt-in
+   text rasterization path and preservation of whole-page bookmark hierarchies in
+   qualification. Qualify first-run
+   setup, mode guidance, early size feedback and per-file result actions. Verify
+   the release package bytes and extracted runtime, complete native Windows
+   acceptance, review small marks at study and print scale, check an independently
+   authorized supported holdout, and run fresh CI against the shipping source.
+   Measure standalone rendering and native viewer speed at matched content
+   scale on that build. See the
+   [release checklist](testing.md#bitmap-study-copy-release-acceptance).
+3. **Advance the Direct speedup in the same beta.** Qualify paired PDFium strips
+   and the PDF.js equality shortcut with complete exact jobs and the separate
+   browser checks. Compare wall time and memory on approved dense inputs. Use the
+   [performance plan](#performance-plan) to keep processing and viewing metrics
+   separate and the [processing experiments](#direct-processing) for follow-ups.
+4. **Park vector study.** The appearance-screened Form-call and inline treatments
+   missed the 10% standalone cold CPU gate against Direct. Inlining reduced
+   preparation CPU but retained the same drawing-operator count as the Form-call
+   treatment, and the saved drawing times showed little additional gain. Resume
+   grouping, point reduction, curve fitting or a strength slider only when new
+   evidence identifies a safely removable cost with a plausible gain. Use the
+   [research protocol](#vector-study-research-protocol) when work advances.
+5. **Keep deferred tracks in the backlog.** P13 native qualification and P14's
+   real-document holdout remain open. [P18](#p18-boox-note-to-vector-pdf-pipeline)
+   still needs independent all-page tablet fidelity checks. [P19](#p19-exact-boox-pdf-compaction)
+   advances only on its own exact preservation and added storage savings gates.
+   [P17](#p17-notes-to-latex-study-copy-research) remains separate transcription
+   research.
 
-**Next queued initiative: [P16 — approximate handwriting research](#p16-approximate-handwriting-research-and-conditional-product-option).**
-The user has requested a procedure for testing bounded point reduction and curve
-optimization while protecting small writing. P16-A repairs the legacy transparency
-gap before experimental rewriting; P16-B through P16-E establish eligibility,
-quality checks and measured benefit. Curve fitting and a public option are
-conditional follow-ups. Existing P13/P14 qualification remains open as recorded;
-this plan neither completes it nor changes current exact-mode acceptance.
+Record detailed evidence, source identities and run progress under ignored
+`audit-output/`. Check completed records, artifact hashes and applicable
+acceptance results before advancing a milestone. An earlier package or a
+generated fixture can support a decision within its tested scope. Keep real-PDF
+work and timings sequential.
 
-**Additional research option: [P17 — notes to LaTeX study copies](#p17-notes-to-latex-study-copy-research).**
-Investigate the local `pdf-text-extractor` companion as an ingestion/UI starting
-point for editable `.tex` plus a compiled PDF. This is content transcription and
-retypesetting, with its own review contract; it cannot qualify as an exact viewing
-copy or a P16 geometry-preserving treatment. P17 research may proceed independently
-of P16, without displacing the current direct-mode and P13/P14 qualification work.
+### Performance plan
 
-**Active input track: [P18 — BOOX `.note` to vector PDF](#p18-boox-note-to-vector-pdf-pipeline).**
-A pinned, narrowly patched Rust fork of `boox-notes-renderer` provides strict,
-decimation-free vector conversion behind the `note_to_pdf.py` adapter. Multi-page
-whole-notebook lossless verification against the converter's vector output (`ME 505.note`,
-91 pages) bounds verification memory with 30-page PDF.js appearance chunks, and Stage 2 Direct
-optimization achieves 73–75% size reductions on dense handwriting while preserving the
-converter's stream without regression. This verifies optimizer stream preservation, not
-equivalence to the BOOX tablet's hardware rasterizer. Tablet export comparison (`ME 505.pdf`)
-was an empirical sample across 7 representative pages without an all-page gate. The tablet
-export contains 60,575 vector stamp annotations with vector appearance streams
-(`/Annots` -> `/Stamp` -> `/AP` -> `/N`), not raster handwriting (the 91 embedded page
-images occupy only ~698 KB combined and serve as background templates); its 440 MB size
-stems from per-stroke annotation dictionary and stream overhead, making structural optimization
-(flattening annotations, resource deduplication, stream packing) a viable target.
-An independent all-page tablet fidelity acceptance gate remains open. The separate
-conversion contract is finalized in [design.md](design.md#boox-note-conversion-contract-milestone-p18).
-P18 does not relax PDF acceptance rules.
+Seven completed historical Direct jobs took 39–185 seconds. In the six longer
+jobs, all-page PDF.js and the PDFium high-resolution, print and detail stage
+together accounted for 61–75% of elapsed time. A two-page bitmap study trial
+reduced standalone PDF.js cold-render CPU from 2.750 to 0.204 seconds at matched
+content scale. That result covers one supported input and leaves native viewer
+speed and general coverage open. Use the historical evidence to choose where to
+measure first, then establish a fresh baseline on the current build.
 
-**Current priority (corrected 2026-11-02): direct viewing copies.** Keep useful
-transformations and comparable storage savings while removing exhaustive optimizer
-comparisons and rendering-speed benchmarks from routine jobs. Thirty seconds on a
-short document is aspirational, not a required benchmark or reason to discard
-inlining, deduplication or cleanup. Follow [quick-lossless-plan.md](quick-lossless-plan.md)
-before speculative adaptive selection. The default direct chain retains those
-transformations, packs once and verifies preservation. The earlier compression-only
-lane remains an explicit qpdf option. [design.md](design.md) defines both profiles;
-thorough gates remain unchanged. Fresh generated matrix and interaction fixtures
-pass the native-browser harness, and P15's native two-file GUI/release checks are
-complete.
+#### Baseline and targets
 
-**Independent research: repeated Direct passes.** Use the
-[repeated-pass benchmark](comparison.md#repeated-direct-pass-benchmark) to
-measure whether a published Direct copy exposes additional savings or changes
-rendering cost. A second pass needs repeatable gains and preservation evidence
-against the original before it warrants investigation. If a transformation
-accounts for the gain, test whether it can run in the first pass.
+1. Start with generated short, dense-vector, scanned and mixed controls. Add an
+   explicitly authorized example of the slow workflow and reserve an independent
+   untuned holdout. Freeze source/output hashes, code and tool identities, machine,
+   viewer settings and representative pages before comparing. Sample the first,
+   densest and representative lighter pages. Use at least three alternating,
+   fresh-process runs, extending to five for noisy or close results. Run the
+   optimizer and viewer measurements sequentially, with an idle machine.
+2. Time **Inspect PDF** separately, from file selection to the drawing report.
+   Distinguish opening and input checks from the page scan, including time to the
+   first page count. Compare process counts when page scanning dominates
+   opening and validation. Include startup, repeated parsing and total memory.
+   Measure **copy creation** from batch review through the
+   final usable result. Record review, job startup, transformation, each
+   verifier, publication and total job time. Distinguish a verified copy from
+   a reports-only result.
+   In a disposable native viewer profile, time opening to the first visible
+   page, moving through dense pages, cached revisits and actual 100% and 200%
+   redraws. Use request-to-visible time for page turns and record prefetched
+   draws separately. Freeze the slow operation as the primary viewing metric.
+   Record standalone cold-render CPU, preparation, memory and bytes separately.
+   Preserve raw samples, ranges and the slowest pages. See the
+   [native timing protocol](comparison.md#read-the-evidence).
+3. Set initial improvement targets of **25% less median end-to-end Direct job
+   time** on the dense workload and **30% and 100 ms less median native latency**
+   on the selected slow viewing operation. Compare Direct against the unchanged
+   Direct build. Compare a viewing treatment with the original and with the best
+   accepted exact copy when available. Use the existing sampled latency
+   no-regression limit of the greater of 10% or 50 ms and retain the applicable
+   cold CPU and preservation gates. Keep the short-PDF 30-second aspiration.
+   These targets guide development and leave [production acceptance](design.md)
+   in force.
 
-**Processing-cost follow-up:** the Direct construction path now replaces its
-final parse/rebuild with explicit reachability cleanup and an exclusive copy
-of the checked saved candidate. Inlining avoids redundant grammar scans and
-decoding Forms without child XObjects. See [the Direct plan](quick-lossless-plan.md#next-speed-work).
-This does not change recipe selection, preservation thresholds or P13/P14's
-outstanding qualification work. Private timing evidence stays under ignored
-`audit-output/`.
+#### Inspection speed
 
-The maintained implementation already includes:
+Two-page chunks scheduled across persistent readers reduced median inspection
+time on a generated 24-page vector document from 2.67 seconds with one process
+to 1.70 with two and 1.13 with four. On a generated 12-page annotation-heavy
+notebook, fixed page groups took 2.01 seconds with one process, 2.73 with two
+and 2.51 with four. All runs on a given input produced the same drawing report.
 
-- Production viewing-copy generation and its existing preservation/performance
-  gates, plus the legacy CLI/Python modes.
-- A separate fixed-profile comparison runner with independent function/appearance
-  checks, native Firefox measurements, visual evidence and reports.
-- Comparison progress logs and heartbeats, real canvas/detail zoom completion
-  tracking, and append-only per-operation records. Those research-run records do
-  not provide automatic resume.
-- Separate PDF-function and source-image-region findings, alongside descriptive
-  missing/added ink, displacement, thickness and topology measurements.
+Keep one inspection worker by default. Qualify chunk scheduling on longer PDFs
+whose page scan dominates startup and validation. Use one reader per worker,
+validate the source once, and recheck its hash after all pages. Restore page
+order and verify complete coverage before reporting success. Measure total
+memory and test worker failure and cancellation before enabling parallel scans.
 
-**P12 is complete.** The Windows workflow now has keyboard-complete review and
-controls, startup dependency diagnostics, clean setup/package verification and a
-human-visible two-fixture acceptance run. Future work should begin with new measured
-evidence rather than extending this delivery plan speculatively.
-The architectural boundary is recorded in
-[ADR-001](adr-batch-workflow.md); this roadmap remains the ordered work queue.
+#### Viewing speed
 
-Run progress belongs in ignored `audit-output/`, not in this roadmap. Consult the
-relevant run's completed records, final status, hashes and report for current
-facts; do not infer completion from an older chat or partial assessment. Keep
-private files, paths, screenshots and detailed comparison reports out of commits.
-Do not change the running implementation during an active comparison.
+Start with the existing Letter 300 DPI bitmap preset on a supported, slow input.
+Compare at matched content scale and inspect every page on the holdout, including
+small marks at study and print scale. Check zoom, navigation and saved image
+integrity under the bitmap contract. Record which slow inputs were eligible and
+why the others were declined. If a frequently encountered unsupported feature
+blocks the users' slowest documents, investigate one narrowly scoped treatment
+after identifying the actual rendering cost. Require a separate opt-in contract
+and proof for retained features before any eligibility change. Resume vector
+work only after a profile identifies removable work with a plausible gain.
+
+#### Direct processing
+
+1. Split PDF.js timings into document loads, draws, pixel comparison, cleanup and
+   process restarts. Test a byte-equality fast path for identical pixel buffers
+   if comparison is material, with the current comparator handling differences.
+   Test bounded worker or chunk adjustments only if repeated loading, cleanup
+   or memory recovery dominates. Measure memory and retry cost with dense pages.
+2. Split PDFium timings by display, print and detail settings. Measure repeated
+   drawing across strips and, for Direct's single candidate, the temporary PNG
+   write/read round trip. Test in-memory paired comparisons or a whole-page
+   render under a measured memory cap only where the profile justifies it.
+   If independent print and detail renders dominate, compare one, two and four
+   workers against the same workload. Preserve strip fallback and
+   pixel-for-pixel equivalence at each setting.
+3. Land the smallest change that moves total time and passes the generated
+   regression matrix, current all-page and detail checks, and the holdout.
+   Verify exact page coverage, mismatch rejection, cancellation, cleanup, memory
+   bounds and exclusive publication. Reprofile after each accepted change.
+   Investigate transformation, packing or review only when the new breakdown
+   makes one of them a priority. Keep routine jobs free of viewer benchmarks.
+
+### Vector study research protocol
+
+Use this protocol after the [current queue](#current-work-queue) identifies a
+specific cost worth pursuing. Use the annotation-heavy notebook and verified
+Direct control already selected for the trials. Use dense, middle-ranked and
+light pages to screen feasibility. Keep the first page as a regression for the
+known placement discrepancy. Vector study must preserve required search and
+navigation. The bitmap contract covers a separate input subset.
+
+Use the document-independent `--selective-pages` research recipe for exact
+selection. It derives groups from each input and restores a failed page before
+packing. [Direct qualification](quick-lossless-plan.md#existing-boox-pdf-storage-qualification-p19)
+documents the exact checks and verified fallback. Use the earlier dense-page
+experiments as regression cases. Any bounded-appearance treatment still needs a
+general transformation and independent qualification.
+
+The first bounded-appearance follow-up uses a single retry. Attribute failing
+pixels to conservative original stroke bounds, keep every possible contributor
+as an individual annotation, and group the remaining consecutive spans. Leave
+the page in its original form if the reassembled candidate fails. Freeze the
+rule before evaluating untouched pages selected from the input by eligible stroke
+count. Use dense, middle-ranked and light pages. A pass on a page used to locate
+the failures demonstrates repair feasibility. It does not qualify the selector.
+
+Before building a full bounded-appearance candidate, use the independent check
+in `tools/vector_study_placement.py` on the saved placement operands and measure
+eligibility across the input. The research bound is at most 1/1024 of a pixel at
+576 DPI, expressed in physical PDF points. Keep source paths, clips, drawing
+order and retained content under their own structural checks. A geometric pass
+only qualifies a placement for rendering tests. It cannot replace the frozen
+appearance screen, protected-detail review or speed measurements.
+
+Build the structurally verified research candidate with
+`tools/vector_study_candidate.py`. It uses a distinct placement manifest, keeps
+native annotations at the explicit fallback positions, and verifies the packed
+file's saved operands, clips, drawing and retained navigation. Run a document
+screen against the original. Screen converted pages first, attribute failing
+pixels where possible, then allow one rebuilt candidate. Check the selected
+artifact on every page and include detail and layer checks on changed pages.
+Use Direct while research verification or performance evidence is open.
+
+The bounded-inline recipe may inline independently eligible source Form bodies.
+Verify the literal path, pen state, original clip, layer, order and the same
+bounded placement. Both grouping variants use the same appearance and timing gates.
+
+1. **Freeze inputs and scope.** Verify the source, normalized snapshot, accepted
+   Direct control and existing failed-exact Form-call candidate against their saved
+   hashes and code/tool identities. Reuse the completed control. Before rendering,
+   select a few dense pages and representative protected marks, and record the
+   quality and performance rules in a fresh ignored run directory. An earlier
+   exact failure remains recorded under its original policy.
+2. **Validate the study-copy quality gate on generated fixtures.** Reuse P16
+   [small-writing controls](#p16-c--calibrate-preservation-of-small-writing-before-simplifying-it)
+   and the static-ink structural proof. Use aligned local ink comparisons to accept
+   bounded edge changes and reject missing dots, thin image bars, changed clips,
+   reordered overlap, altered opacity, hidden-layer changes and lost links or OCR.
+   Calibrate and freeze the tolerances before judging the notebook. A whole-page
+   average cannot substitute for checks of the changed runs and smallest marks.
+3. **Screen the existing vector candidate before rebuilding.** Reuse the Form-call
+   candidate when its hashes and matching verifier evidence are available. Compare
+   the selected pages against the original, using PDFium and PDF.js, print mode
+   and detail crops. Independently check original path bodies, placement, clip,
+   compositing, layer membership, paint order and retained annotation positions.
+   Investigate differences outside the approved ink edges. Keep the accepted
+   Direct result if these screens fail. Sampled pages establish feasibility only.
+4. **Change the recipe only if the screen identifies a fixable gap.** Reuse
+   `annotation_ink.py` and the saved-run verifier. Group eligible consecutive
+   opaque appearances in place, preserving unsafe annotations as barriers. Move
+   eligible leading ink into page content only where the existing prefix proof
+   applies. Preserve image-backed marks and missing-appearance stamps in their
+   original positions. Use zero point removal. Preserve layer membership in the
+   first treatment. Evaluate an explicit freeze-visible-layers variant separately
+   only if active layer handling is shown to matter and visibility can be proved.
+5. **Qualify the benefit.** Once the screen passes, run whole-document structural,
+   appearance and detail checks under the frozen study policy. Review the changed
+   writing and protected marks. Compare against the accepted Direct control at
+   matched content scale. Preregister first visible page readiness for this
+   annotation-heavy workload, with cold drawing, cached revisits and detail redraw
+   as separate measurements. Use the P16-E starting gates of at least 10% lower
+   cold CPU and a first-visible gain of at least 10% and 50 ms, with its sampled
+   no-regression limits. Record size separately. If either quality or performance
+   fails, retain Direct and record the reason. Reserve full native timing for a
+   candidate that clears the cheaper structural, quality and standalone screens.
+6. **Integrate after qualification.** Define a distinct opt-in vector study
+   contract and recipe in `design.md`. Disclose loss of individual stroke editing
+   for converted ink at review. Bind the choice, source, normalization evidence,
+   output, renderer and policy to reports and recovery. Then wire the CLI, batch
+   review, GUI, help and package. Require an independent holdout for general
+   release qualification. Leave the slider for a later treatment whose range has
+   passed calibration.
+
+## P19: exact BOOX PDF compaction
+
+Qualify a PDF-only baseline before adding static annotation compaction; `.note`
+exports are optional references. The initial storage target is 110 MB for the
+selected notebook, never an acceptance override. Current production behavior
+remains defined by [design.md](design.md).
+
+1. Inventory unique streams, annotations (including image appearances), fonts,
+   OCR, metadata and unreachable objects, distinguishing encoded bytes from
+   estimated object overhead. Bind original/snapshot/output hashes and tool/code
+   identities in ignored private evidence. Qualify normalization and existing
+   Direct against the original first. Adaptive Direct uses the verified
+   current-revision normalizer for supported NeoPdf index warnings and
+   incremental saves. It preserves the original history, requires a full graph
+   and stream proof for the temporary snapshot, and compares the final copy
+   against the original. The separate index-warning-only helper still rejects
+   incremental history. Independent real-document holdout and general release
+   qualification remain open.
+2. Only if needed, compact consecutive eligible opaque annotation runs at their
+   original array positions. Retain missing-appearance stamps, image annotations,
+   highlights, comments and protected objects as ordering barriers. Reuse existing
+   eligibility, placement, clipping, layers and original Form calls. Flatten only
+   under the existing leading-prefix safeguards. Prove resources unreachable before
+   removal. Require at least 10% additional storage reduction over normalized Direct
+   before introducing this treatment into the product.
+3. Extend saved-file manifest checks for explicitly proved run containers; verify
+   every original body, state, placement, clip, layer, order and retained annotation
+   identity independently. Add negative controls for dots, image fraction bars,
+   overlap, clips, layers, OCR, links and shared resources. Require exact all-page
+   PDFium/PDF.js plus high-resolution, print and detail checks. Qualify the selected
+   notebook; another explicitly selected real-document holdout is required for
+   general release qualification.
+4. Expose only the qualified path. If compaction is needed, add default-off
+   `static_ink=False` through API/CLI and a GUI option explaining loss of individual
+   stroke editing in the copy. Restrict it to Direct/adaptive PDF inputs, with a
+   distinct acceptance/recovery identity and counts/reasons/coverage in reports.
+   Preserve existing modes. Normalization alone meeting the goal takes precedence
+   over building this extra treatment.
+5. Align Direct plan, preservation contract, GUI help and packaging; run focused
+   and full regressions, generated interaction checks, package-byte verification
+   and fresh GitHub CI before release. No rasterization, point reduction, rounding,
+   brush reconstruction, OCR removal or image downsampling is included.
+
+This is an ordered implementation plan, not a qualification claim. Private run
+status and source paths remain under ignored `audit-output/`.
+
+The internal `direct-static` research recipe and
+`tools/qualify_static_ink.py` implement the generated-fixture stage of P19.
+They retain annotation-array barriers and reconstruct saved run programs from
+original appearances, with controls for altered clips, dots/images, OCR, links,
+layers, pen states and protected references. The runner qualifies ordinary Direct
+first, then measures extra static-run savings against the same original. This
+does not expose the conditional public option or complete real-document acceptance.
+The second real-document holdout is deferred at the user's request; general-release
+qualification remains open. See the [Direct plan](quick-lossless-plan.md#existing-boox-pdf-storage-qualification-p19).
 
 ## Fresh-agent handoff for P16/P17
 
-An agent can start these tracks without the preceding chat. Read `AGENTS.md`,
-this roadmap's current-priority paragraph and relevant P16/P17 phases, then
-[design.md](design.md), [testing.md](testing.md), and
+Start with [the current queue](#current-work-queue) and the requested milestone.
+Read [design.md](design.md), [testing.md](testing.md), and
 [comparison.md](comparison.md#read-the-evidence) before changing transformations
-or collecting research measurements. P16/P17 are plans, not shipped capabilities.
-P16-A's legacy opacity repair remains required until its stated exit is proved;
-P17's source inspection and compiler probes did not run recognition or compile notes.
+or collecting research measurements. For P16, check the recorded opacity and
+small-writing controls before resuming. For P17, the source inspection and
+compiler probes establish setup feasibility only.
 
 ### Locate inputs and establish the current checkout
 
@@ -150,8 +344,8 @@ P17's source inspection and compiler probes did not run recognition or compile n
 
 | Request being continued | First deliverable | Stop/advance condition |
 | --- | --- | --- |
-| Existing optimizer/direct-mode work | Follow the current P13/P14 priority and inspect their actual outstanding evidence | Do not replace these tasks with a new feature just because P16/P17 appear later in the roadmap |
-| Approximate coordinate/point-reduction work | P16-A: reconstruct the inherited-mask case, add a failing regression, repair the shared eligibility boundary | Focused and full tests pass and the altered transparent result cannot publish; then begin P16-B/C before the simplifier |
+| Existing optimizer and Direct work | Start from the [current queue](#current-work-queue) and the [Direct plan](quick-lossless-plan.md) | Use the relevant milestone exit criteria for explicitly requested P13/P14 work |
+| Approximate coordinate or point reduction | Apply the vector decision in the [current queue](#current-work-queue), then check the relevant P16 controls | Advance only with a measurable target and the required opacity, quality and speed evidence |
 | Notes-to-LaTeX research | P17-A/B: inspect the companion, write the transcription contract, and qualify one recognition backend on generated/reference cases | Preserve source coverage and distinguish recognizer output from a compiling skeleton; a known-source TeX smoke under P17-D may be developed independently |
 | BOOX `.note` conversion | P18-A through P18-E: strict vector fork, bounded archive preflight, note_to_pdf adapter, Direct optimization, and reference qualification | P18-A through P18-C complete; P18-D in progress (sampled comparison complete; independent all-page fidelity acceptance gate remains open); separate conversion contract documented in design.md |
 | Public experimental option | Implement the relevant qualified research treatment first | P16-G or P17-F is conditional; no new public mode or automatic default is needed to start research |
@@ -1484,8 +1678,9 @@ Do not run other heavy checks alongside browser measurements.
 
 ## Ordered delivery checklist
 
-All items below are planned/open until their exit evidence is recorded here.
-Suggested module names above do not imply implemented APIs.
+This checklist records milestone status and exit criteria. Follow the
+[current work queue](#current-work-queue) for priority. An open item closes
+when its required evidence is recorded.
 
 - [x] **P0 — Review complete comparison evidence (completed 2026-10-21).** Repeated per-operation results,
   independent functions/appearance and local width review; timeouts and unfinished

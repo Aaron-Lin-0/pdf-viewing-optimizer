@@ -48,7 +48,7 @@ if errorlevel 1 goto :failed
 :complete
 echo.
 echo Setup complete. Open Create Viewing Copies.cmd to begin.
-if /i not "%~1"=="--quick" if not exist "C:\Program Files\Zen Browser\zen.exe" echo Note: Install Zen or Firefox and set PDF_BROWSER if the browser check cannot find it.
+if /i not "%~1"=="--quick" if not defined PDF_BROWSER if not exist "C:\Program Files\Mozilla Firefox\firefox.exe" echo Thorough needs Firefox. To use Zen instead, set PDF_BROWSER to its executable. Direct and Bitmap study are ready without a browser.
 pause
 exit /b 0
 

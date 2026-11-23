@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import time
 
-from lossless_verify import POLICY_VERSION, UnsupportedPDF, validate_quick_input, verify_lossless
+from lossless_verify import POLICY_VERSION, UnsupportedPDF, strict_parsing, validate_quick_input, verify_lossless
 from pdf_runtime import (temporary_directory, RunBudget, TimeBudgetExceeded, DiskBudgetExceeded, filehash,
                          qpdf_identity, build_qpdf_candidate, check_qpdf, _run)
 
@@ -20,7 +20,7 @@ def acceptance_context(identity,optimizer='qpdf',budget=None):
     names=['quick_lossless.py','lossless_verify.py','pdf_runtime.py','navigation.py']
     if optimizer=='adaptive':
         names+=['viewing_copy.py','handwriting.py','annotation_ink.py','geometry.py',
-                'verification_worker.py','pdfjs_benchmark.mjs','tools/revision_pages.py','package-lock.json']
+                'verification_worker.py','pdfjs_benchmark.mjs','tools/revision_pages.py','tools/normalize_boox.py','package-lock.json']
     for name in names:
         digest.update(name.encode())
         path=root/name
@@ -46,14 +46,22 @@ def acceptance_context(identity,optimizer='qpdf',budget=None):
     return context
 
 
-def direct_candidate(source,working,identity,budget,stage,report):
+def direct_candidate(source,working,identity,budget,stage,report,*,static_ink=False,static_page_fallback=False):
     """One transformation chain; packing is a storage step, not a competitor."""
     from viewing_copy import build_candidate
     transformed=working/'direct.pdf'
-    manifest=stage('exact inlining, deduplication and cleanup',lambda:build_candidate(source,transformed,'direct'))
+    def generate():
+        with strict_parsing():
+            if static_page_fallback:
+                return build_candidate(source,transformed,'direct-static' if static_ink else 'direct',
+                                       static_page_fallback=True,budget=budget)
+            return build_candidate(source,transformed,'direct-static' if static_ink else 'direct')
+    manifest=stage('static handwriting, exact inlining, deduplication and cleanup' if static_ink
+                   else 'exact inlining, deduplication and cleanup',generate)
     packed=working/'direct-packed.pdf';selected=transformed
     report['transformations']=manifest
     report['pipeline']=['exact supported inlining','safe deduplication','unreferenced-object cleanup','qpdf packing']
+    if static_ink:report['pipeline'].insert(0,'consecutive static handwriting runs')
     try:
         stage('pack transformed copy',lambda:build_qpdf_candidate(transformed,packed,budget,identity,strict=True))
         if packed.stat().st_size<transformed.stat().st_size:
@@ -96,7 +104,7 @@ def verify_pdfjs_chunked(source, candidate, pages, allow_edges=False, budget=Non
     )
 
 
-def verify_direct(source,candidate,manifest,budget,working,stage,report):
+def verify_direct(source,candidate,manifest,budget,working,stage,report,*,_source_reader=None):
     from viewing_copy import (verify_candidate,detail_crop,
                               VerificationSession,default_verification_workers)
     from verification_worker import page_comparisons
@@ -113,12 +121,13 @@ def verify_direct(source,candidate,manifest,budget,working,stage,report):
             evidence,reused={},set()
             report['revision_reuse_skipped']=str(exc)
         session=VerificationSession(source,working/'source-evidence',workers,budget,
-                                    revision_evidence=(Path(candidate).absolute(),reused))
+                                    revision_evidence=(Path(candidate).absolute(),reused),paired=True)
         if evidence:
             report['revision_evidence']=evidence
         if reused:
             print(f'Reused exact 144-DPI comparisons for {len(reused)} unchanged page(s).',flush=True)
-        try:return verify_candidate(source,candidate,manifest,allow_edges=False,full=True,session=session)
+        try:return verify_candidate(source,candidate,manifest,allow_edges=False,full=True,session=session,
+                                    _source_reader=_source_reader)
         finally:session.close(force=True)
     proof=stage('verify preserved content on every page',preserve)
     if not proof['exact']:raise ValueError('Direct optimization requires identical tested pixels.')
@@ -138,7 +147,7 @@ def verify_direct(source,candidate,manifest,budget,working,stage,report):
                     'detail':compare(page-1,allow_edges=False,scale=8,crop=crop)}
     report['high_resolution_and_print']=stage('high-resolution and print verification',details)
     report['visual_checks']='passed: all-page PDFium/PDF.js and high-resolution/print/detail checks'
-    proof.update(complete=True,policy='direct-viewing-2',rendering_performance='not measured',
+    proof.update(complete=True,policy=report.get('acceptance_context',{}).get('policy','direct-viewing-2'),rendering_performance='not measured',
                  browser_checks='not run',visual_checks=report['visual_checks'])
     return proof
 
@@ -158,6 +167,10 @@ def report_text(report):
             else 'Verification: strict document graph, reference identities and stream bytes.'),
            'Unsupported or unresolved preservation prevents publication.','']
     lines.extend(f"- {row['stage']}: {row['wall_seconds']:.3f}s ({row['outcome']})" for row in report['stages'])
+    if report.get('source_preparation'):
+        preparation=report['source_preparation']
+        lines.extend(('', 'Verified current-revision snapshot. The original retains its save history.',
+                      f"Snapshot SHA256: {preparation['output_sha256']}"))
     if report.get('revision_evidence'):
         pages=report['revision_evidence']['pdfium_pages_reused']
         lines.append(f"Prior exact 144-DPI page comparisons reused: {len(pages)}.")
@@ -216,7 +229,12 @@ def optimize_quick(source,destination,expected_source_sha256=None,checkpoint=Non
                 report['stages'].append({'stage':name,'wall_seconds':time.monotonic()-started,'outcome':outcome})
         identity=None;candidate_hash=None
         try:
-            report['pages']=stage('quick input checks',lambda:validate_quick_input(source))
+            normalize_source=False
+            if optimizer=='adaptive':
+                from tools.normalize_boox import normalize, validate_direct_input
+                report['pages'],normalize_source=stage('quick input checks',lambda:validate_direct_input(source))
+            else:
+                report['pages']=stage('quick input checks',lambda:validate_quick_input(source))
             identity=stage('qpdf preflight',lambda:qpdf_identity(budget))
             if identity[1]!='qpdf version 12.4.2':
                 raise UnsupportedPDF('Quick mode is qualified with qpdf 12.4.2; restore the bundled runtime.')
@@ -225,7 +243,14 @@ def optimize_quick(source,destination,expected_source_sha256=None,checkpoint=Non
             report['acceptance_context']=stage('renderer and policy context',lambda:acceptance_context(identity,optimizer,budget))
             manifest=None
             if optimizer=='adaptive':
-                candidate,manifest=direct_candidate(source,working,identity,budget,stage,report)
+                build_source=source
+                if normalize_source:
+                    build_source=working/'current.pdf'
+                    preparation=stage('verify current-revision snapshot',lambda:
+                        normalize(source,build_source,identity=identity,budget=budget,expected_source_sha256=source_hash))
+                    preparation.pop('path')
+                    report['source_preparation']=preparation
+                candidate,manifest=direct_candidate(build_source,working,identity,budget,stage,report)
             else:stage('quick compression',lambda:build_qpdf_candidate(source,candidate,budget,identity,strict=True))
             check()
             report['candidate_bytes']=candidate.stat().st_size
